@@ -32,6 +32,8 @@ npm test         # Vitest 单元测试
 
 第01批地形美术已接入：泥土、岩石、洞穴背景使用提供的 PNG，四向洞壁叠图跟随挖掘 / 撤销刷新；64px图块按32px显示。运行素材与原包说明位于 `src/assets/art/terrain/`，加载入口为 `src/render/terrainTextures.ts`。验收记录和生产版实景截图见 [地形美术接入验收](docs/acceptance/terrain-v1/README.md)。
 
+能源核心机身已替换为透明 PNG，保留原有三态状态灯和启动 / 点灯演出。素材、规格和生成提示词位于 `src/assets/art/landmarks/`；验证结果及截图见 [能源核心美术验收](docs/acceptance/energy-core-v1/README.md)。
+
 ```
 src/
   core/              纯逻辑（无 DOM / PixiJS 依赖，可单测）

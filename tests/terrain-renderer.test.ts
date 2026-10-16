@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Container, Sprite, Texture, TextureSource, type Graphics } from 'pixi.js'
+import { Container, Sprite, Text, Texture, TextureSource, type Graphics } from 'pixi.js'
 import { dig } from '../src/core/dig'
 import { createDigHistory } from '../src/core/history'
-import { createInitialWorld, SURFACE_Y, TILE, TILE_SIZE } from '../src/core/world'
+import { collectCrystal, repairCore } from '../src/core/interact'
+import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE } from '../src/core/world'
 import { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrainTextures'
+import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -25,6 +27,10 @@ vi.mock('../src/render/terrainTextures', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/terrainTextures')>(),
   loadTerrainTextures: vi.fn(),
 }))
+vi.mock('../src/render/energyCoreTexture', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/energyCoreTexture')>(),
+  loadEnergyCoreTexture: vi.fn(),
+}))
 
 function texture(size = 64): Texture {
   return new Texture({ source: new TextureSource({ width: size, height: size }) })
@@ -42,10 +48,13 @@ interface TerrainProbe {
   tileSprites: { base: Sprite; edges: Sprite[] }[][]
   terrainLayer: Container
   hover: Graphics
+  landmarkLayer: Container
+  glowLayer: Container
+  machineGlow: Graphics
   updateTerrainCell(x: number, y: number): void
 }
 
-describe('第一批 PNG 地形渲染', () => {
+describe('PNG 世界渲染（地形与能源核心）', () => {
   let renderer: PixiWorldRenderer
   let view: TerrainProbe
   let art: TerrainTextures
@@ -55,6 +64,9 @@ describe('第一批 PNG 地形渲染', () => {
     vi.stubGlobal('window', { devicePixelRatio: 1 })
     art = textures()
     vi.mocked(loadTerrainTextures).mockResolvedValue(art)
+    vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({
+      source: new TextureSource({ width: 1536, height: 1024 }),
+    }))
     renderer = await PixiWorldRenderer.create({ appendChild: vi.fn() } as unknown as HTMLElement)
     view = renderer as unknown as TerrainProbe
     world = createInitialWorld()
@@ -162,5 +174,29 @@ describe('第一批 PNG 地形渲染', () => {
     renderer.refreshTerrain([{ x: 0, y: world.height - 1 }])
     expect(update).toHaveBeenCalledTimes(3)
     expect(view.terrainLayer.children).toEqual(sprites)
+  })
+
+  it('能源核心三态复用同一PNG、保持比例与槽心对齐，渲染不改变任务和存档数据', () => {
+    const bodyTexture = view.landmarkLayer.children.find((child) => child instanceof Sprite)!.texture
+    const assertCore = (label: string, innerColor: number) => {
+      const snapshot = JSON.stringify(world)
+      renderer.refresh()
+      const body = view.landmarkLayer.children.find((child) => child instanceof Sprite)!
+      expect(body.texture).toBe(bodyTexture)
+      expect(body.width).toBe(128)
+      expect(body.height).toBeCloseTo(128 * 1024 / 1536)
+      expect(body.scale.x).toBe(body.scale.y)
+      expect([body.anchor.x, body.anchor.y]).toEqual([0.5, 0.46])
+      expect([body.x, body.y]).toEqual([(LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE])
+      expect(view.glowLayer.children.some((child) => child instanceof Text && child.text === label)).toBe(true)
+      expect(view.machineGlow.context.fillStyle.color).toBe(innerColor)
+      expect(JSON.stringify(world)).toBe(snapshot)
+    }
+    assertCore('能源核心 · 待修复', 0x33474f)
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    expect(collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y).ok).toBe(true)
+    assertCore('能源核心 · 等待能源石', 0xfff0d0)
+    expect(repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y).ok).toBe(true)
+    assertCore('能源核心 · 运行中', 0xeafff2)
   })
 })

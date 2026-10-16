@@ -12,6 +12,7 @@ import {
   type WorldState,
 } from '../core/world'
 import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from './terrainTextures'
+import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTexture } from './energyCoreTexture'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -31,12 +32,8 @@ const COLORS = {
   skyTop: 0x46586a,
   skyBottom: 0x83808b,
   wood: 0xc7a173,
-  machine: 0x4a6265,
-  machineInner: 0x273b48,
   machineCore: 0x5d6f78,
   machineCoreInner: 0x33474f,
-  machineOn: 0x4f7a68,
-  machineOnInner: 0x2e4f46,
   coreReady: 0xffc978,
   coreReadyInner: 0xfff0d0,
   coreOn: 0x8eebc1,
@@ -191,7 +188,7 @@ export class PixiWorldRenderer {
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
-    const textures = await loadTerrainTextures()
+    const [textures, energyCoreTexture] = await Promise.all([loadTerrainTextures(), loadEnergyCoreTexture()])
     const app = new Application()
     await app.init({
       background: COLORS.caveDeep,
@@ -202,12 +199,13 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures)
+    return new PixiWorldRenderer(app, textures, energyCoreTexture)
   }
 
   private constructor(
     private readonly app: Application,
     private readonly textures: TerrainTextures,
+    private readonly energyCoreTexture: Texture,
   ) {
     this.viewport = { width: app.screen.width, height: app.screen.height }
     // 地形：底色 → 洞穴背景 → 瓦片与边缘
@@ -789,25 +787,26 @@ export class PixiWorldRenderer {
     const ready = world.progress.crystalCollected && !repaired
     const generatorX = (LANDMARKS.generator.x + 0.5) * T
     const generatorY = (LANDMARKS.generator.y + 0.5) * T
-    const machine = new Graphics()
-    machine.roundRect(generatorX - 52, generatorY - 34, 104, 68, 12).fill(repaired ? COLORS.machineOn : COLORS.machine)
-    machine.roundRect(generatorX - 44, generatorY - 25, 88, 50, 8).fill(repaired ? COLORS.machineOnInner : COLORS.machineInner)
+    const machine = new Sprite(this.energyCoreTexture)
+    machine.anchor.copyFrom(ENERGY_CORE_SOCKET_ANCHOR)
+    machine.position.set(generatorX, generatorY)
+    machine.scale.set(ENERGY_CORE_DISPLAY_WIDTH / this.energyCoreTexture.width)
     this.landmarkLayer.addChild(machine)
 
     // 能源核心：状态灯与标签（发光层，穿透黑暗；alpha 由 updateMachineGlow 控制）
     const machineGlow = new Graphics()
     if (repaired) {
       machineGlow.circle(generatorX, generatorY, 40).fill({ color: COLORS.coreOn, alpha: 0.22 })
-      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.coreOn)
-      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.coreOnInner)
+      machineGlow.circle(generatorX, generatorY, 15).fill(COLORS.coreOn)
+      machineGlow.circle(generatorX, generatorY, 8).fill(COLORS.coreOnInner)
     } else if (ready) {
       // 手上有能源石：核心透出暖橘色呼吸光，明确"来点我"
       machineGlow.circle(generatorX, generatorY, 44).fill({ color: COLORS.warmGlow, alpha: 0.16 })
-      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.coreReady)
-      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.coreReadyInner)
+      machineGlow.circle(generatorX, generatorY, 15).fill(COLORS.coreReady)
+      machineGlow.circle(generatorX, generatorY, 8).fill(COLORS.coreReadyInner)
     } else {
-      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.machineCore)
-      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.machineCoreInner)
+      machineGlow.circle(generatorX, generatorY, 15).fill(COLORS.machineCore)
+      machineGlow.circle(generatorX, generatorY, 8).fill(COLORS.machineCoreInner)
     }
     this.machineGlow = machineGlow
     this.glowLayer.addChild(machineGlow)
