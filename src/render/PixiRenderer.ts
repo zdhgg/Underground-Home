@@ -1,5 +1,17 @@
-import { Application, Container, Graphics, Text, type Ticker } from 'pixi.js'
-import { LANDMARKS, SURFACE_Y, TILE, TILE_SIZE, isInside, type Cell, type WorldState } from '../core/world'
+import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite, type Ticker } from 'pixi.js'
+import {
+  LANDMARKS,
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  SURFACE_Y,
+  TILE,
+  TILE_SIZE,
+  isInside,
+  type Cell,
+  type TileType,
+  type WorldState,
+} from '../core/world'
+import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from './terrainTextures'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -13,19 +25,11 @@ import {
   type Viewport,
 } from './camera'
 
-/** 渲染调色板（延续 v0.4 的暖色岩层 + 冷色天空） */
+/** 渲染调色板（程序化部分：天空、风暴、机器、发光体等） */
 const COLORS = {
   caveDeep: 0x22313a,
   skyTop: 0x46586a,
   skyBottom: 0x83808b,
-  soil: 0x9a7355,
-  soilLight: 0xb18b62,
-  soilDark: 0x7e604b,
-  rock: 0x454e5a,
-  rockLight: 0x515b68,
-  rockCrack: 0x717d8c,
-  caveEdge: 0xb2a189,
-  grass: 0x58715c,
   wood: 0xc7a173,
   machine: 0x4a6265,
   machineInner: 0x273b48,
@@ -105,6 +109,30 @@ interface CameraTween {
   duration: number
 }
 
+/** 每格瓦片的精灵：1 张基础贴图 + 4 张方向边缘叠图 */
+interface TileCellSprites {
+  base: Sprite
+  /** [top, right, bottom, left] */
+  edges: [Sprite, Sprite, Sprite, Sprite]
+}
+
+/** 四向叠图只依赖四邻：挖掘 / 撤销刷新自身与四邻，共 5 格。 */
+const NEIGHBORHOOD: ReadonlyArray<{ dx: number; dy: number }> = [
+  { dx: 0, dy: 0 },
+  { dx: 1, dy: 0 },
+  { dx: -1, dy: 0 },
+  { dx: 0, dy: 1 },
+  { dx: 0, dy: -1 },
+]
+
+/** 边缘叠图方向（对应实心块的哪一侧是空洞） */
+const EDGE_DIRECTIONS: ReadonlyArray<{ direction: EdgeDirection; dx: number; dy: number }> = [
+  { direction: 'top', dx: 0, dy: -1 },
+  { direction: 'right', dx: 1, dy: 0 },
+  { direction: 'bottom', dx: 0, dy: 1 },
+  { direction: 'left', dx: -1, dy: 0 },
+]
+
 function hash(x: number, y: number): number {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
   return n - Math.floor(n)
@@ -124,7 +152,9 @@ function easeInOutCubic(k: number): number {
  */
 export class PixiWorldRenderer {
   private readonly worldLayer = new Container()
-  private readonly terrain = new Graphics()
+  /** 地形层：底色 + 洞穴背景 + 瓦片精灵池（最底层） */
+  private readonly terrainLayer = new Container()
+  private readonly backdrop = new Graphics()
   private readonly wind = new Graphics()
   private readonly landmarkLayer = new Container()
   private readonly glowLayer = new Container()
@@ -142,6 +172,8 @@ export class PixiWorldRenderer {
   private particles: Particle[] = []
   private rings: Ring[] = []
   private highlight: HighlightSpec | null = null
+  /** 瓦片精灵池：[y][x]，y < SURFACE_Y 为 null */
+  private tileSprites: (TileCellSprites | null)[][] = []
 
   private world: WorldState | null = null
   private hoverCell: Cell | null = null
@@ -158,6 +190,8 @@ export class PixiWorldRenderer {
   private celebrationTime = 0
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
+    // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
+    const textures = await loadTerrainTextures()
     const app = new Application()
     await app.init({
       background: COLORS.caveDeep,
@@ -168,14 +202,22 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app)
+    return new PixiWorldRenderer(app, textures)
   }
 
-  private constructor(private readonly app: Application) {
+  private constructor(
+    private readonly app: Application,
+    private readonly textures: TerrainTextures,
+  ) {
     this.viewport = { width: app.screen.width, height: app.screen.height }
+    // 地形：底色 → 洞穴背景 → 瓦片与边缘
+    this.buildBackdrop()
+    this.terrainLayer.addChild(this.backdrop)
+    this.buildCaveBackground()
+    this.buildTerrainPool()
     // 顺序即光照逻辑：结构在黑暗之下，发光物与标签在黑暗之上
     this.worldLayer.addChild(
-      this.terrain,
+      this.terrainLayer,
       this.wind,
       this.landmarkLayer,
       this.friendsLayer,
@@ -202,11 +244,39 @@ export class PixiWorldRenderer {
     this.refresh()
   }
 
-  /** 世界数据变化后刷新画面（挖掘 / 互动 / 撤销后调用） */
+  /** 世界数据变化后刷新画面（收集 / 修复 / 载入后调用） */
   refresh(): void {
-    this.rebuildTerrain()
+    this.refreshTerrain()
     this.rebuildLandmarks()
     this.rebuildFriends()
+  }
+
+  /**
+   * 刷新地形贴图与边缘。
+   * 不传 cells = 全图刷新（载入 / 新世界）；传 cells = 只刷新这些格子及其四邻（挖掘 / 撤销）。
+   */
+  refreshTerrain(cells?: Cell[]): void {
+    const world = this.world
+    if (!world) return
+    if (!cells) {
+      for (let y = SURFACE_Y; y < world.height; y++) {
+        for (let x = 0; x < world.width; x++) this.updateTerrainCell(x, y)
+      }
+      this.redrawHover()
+      return
+    }
+    const seen = new Set<number>()
+    for (const cell of cells) {
+      for (const { dx, dy } of NEIGHBORHOOD) {
+        const x = cell.x + dx
+        const y = cell.y + dy
+        if (x < 0 || x >= world.width || y < 0 || y >= world.height) continue
+        const key = y * world.width + x
+        if (seen.has(key)) continue
+        seen.add(key)
+        this.updateTerrainCell(x, y)
+      }
+    }
     this.redrawHover()
   }
 
@@ -587,71 +657,110 @@ export class PixiWorldRenderer {
     this.rings = this.rings.filter((r) => r.age < r.life)
   }
 
-  // ---------- 内部：静态绘制 ----------
+  // ---------- 内部：地形（第一批素材） ----------
 
-  private rebuildTerrain(): void {
-    const g = this.terrain
+  /** 全图底色 + 天空色带（静态绘制一次） */
+  private buildBackdrop(): void {
+    const g = this.backdrop
     g.clear()
-    const world = this.world
-    if (!world) return
-    const T = TILE_SIZE
-
-    // 洞窟底色铺满整张地图
     g.rect(0, 0, WORLD_PIXEL_WIDTH, WORLD_PIXEL_HEIGHT).fill(COLORS.caveDeep)
-
-    // 地表风暴天空：两层色带
-    const skyHalf = (SURFACE_Y * T) / 2
+    const skyHalf = (SURFACE_Y * TILE_SIZE) / 2
     g.rect(0, 0, WORLD_PIXEL_WIDTH, skyHalf).fill(COLORS.skyTop)
     g.rect(0, skyHalf, WORLD_PIXEL_WIDTH, skyHalf).fill(COLORS.skyBottom)
+  }
 
-    const isSolid = (x: number, y: number): boolean => {
-      if (x < 0 || x >= world.width || y < SURFACE_Y || y >= world.height) return false
-      return world.tiles[y][x] !== TILE.EMPTY
-    }
+  /** 洞穴背景：平铺贴图，位于挖空区域之后 */
+  private buildCaveBackground(): void {
+    const bg = new TilingSprite({
+      texture: this.textures.caveBg,
+      width: WORLD_PIXEL_WIDTH,
+      height: WORLD_PIXEL_HEIGHT - SURFACE_Y * TILE_SIZE,
+    })
+    bg.position.set(0, SURFACE_Y * TILE_SIZE)
+    this.terrainLayer.addChild(bg)
+  }
 
-    // 地层瓦片
-    for (let y = SURFACE_Y; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        const tile = world.tiles[y][x]
-        if (tile === TILE.EMPTY) continue
-        const px = x * T
-        const py = y * T
-        const n = hash(x, y)
-        if (tile === TILE.ROCK) {
-          g.rect(px, py, T, T).fill((x + y) % 3 === 0 ? COLORS.rockLight : COLORS.rock)
-          g.moveTo(px + 5 + n * 5, py + 9)
-            .lineTo(px + 16, py + 13 + n * 4)
-            .lineTo(px + 20 + n * 3, py + 25)
-            .stroke({ width: 1.2, color: COLORS.rockCrack, alpha: 0.55 })
-        } else {
-          g.rect(px, py, T, T).fill(COLORS.soil)
-          g.circle(px + 9 + n * 13, py + 10 + n * 12, 4 + n * 3).fill({
-            color: n > 0.5 ? COLORS.soilLight : COLORS.soilDark,
-            alpha: 0.65,
-          })
+  /** 一次性建好瓦片精灵池：每格 = 1 张基础贴图 + 4 张方向边缘叠图 */
+  private buildTerrainPool(): void {
+    for (let y = 0; y < MAP_HEIGHT; y++) {
+      const row: (TileCellSprites | null)[] = []
+      for (let x = 0; x < MAP_WIDTH; x++) {
+        if (y < SURFACE_Y) {
+          row.push(null)
+          continue
         }
+        const base = this.makeTileSprite(x, y)
+        const edges: [Sprite, Sprite, Sprite, Sprite] = [
+          this.makeTileSprite(x, y),
+          this.makeTileSprite(x, y),
+          this.makeTileSprite(x, y),
+          this.makeTileSprite(x, y),
+        ]
+        this.terrainLayer.addChild(base, ...edges)
+        row.push({ base, edges })
       }
+      this.tileSprites.push(row)
+    }
+  }
+
+  private makeTileSprite(x: number, y: number): Sprite {
+    const sprite = new Sprite(Texture.EMPTY)
+    sprite.position.set(x * TILE_SIZE, y * TILE_SIZE)
+    // width/height 会记住目标尺寸；setSize 在 Texture.EMPTY 换成 PNG 后只保留缩放。
+    sprite.width = TILE_SIZE
+    sprite.height = TILE_SIZE
+    sprite.visible = false
+    return sprite
+  }
+
+  /** 依据世界数据更新一格：基础贴图（确定性变体）+ 四向边缘叠图 */
+  private updateTerrainCell(x: number, y: number): void {
+    const world = this.world
+    if (!world || y < SURFACE_Y || y >= world.height || x < 0 || x >= world.width) return
+    const cell = this.tileSprites[y]?.[x]
+    if (!cell) return
+
+    const tile = world.tiles[y][x]
+    if (tile === TILE.EMPTY) {
+      cell.base.visible = false
+      for (const edge of cell.edges) edge.visible = false
+      return
     }
 
-    // 岩壁轮廓：洞窟与实体相邻的边描一道浅色线
-    for (let y = SURFACE_Y; y < world.height; y++) {
-      for (let x = 0; x < world.width; x++) {
-        if (world.tiles[y][x] !== TILE.EMPTY) continue
-        const px = x * T
-        const py = y * T
-        if (isSolid(x, y - 1)) g.moveTo(px, py).lineTo(px + T, py)
-        if (isSolid(x - 1, y)) g.moveTo(px, py).lineTo(px, py + T)
-        if (isSolid(x + 1, y)) g.moveTo(px + T, py).lineTo(px + T, py + T)
-        if (isSolid(x, y + 1)) g.moveTo(px, py + T).lineTo(px + T, py + T)
-      }
-    }
-    g.stroke({ width: 2.5, color: COLORS.caveEdge, alpha: 0.35 })
+    cell.base.visible = true
+    const baseTexture = this.pickVariant(tile, x, y)
+    if (cell.base.texture !== baseTexture) cell.base.texture = baseTexture
 
-    // 地表草皮盖（竖井开口处自然留出缺口）
-    for (let x = 0; x < world.width; x++) {
-      const tile = world.tiles[SURFACE_Y][x]
-      if (tile !== TILE.EMPTY) g.rect(x * T, SURFACE_Y * T, T, 5).fill(COLORS.grass)
+    const edgeTextures = tile === TILE.SOIL ? this.textures.soilEdges : this.textures.rockEdges
+    for (let i = 0; i < EDGE_DIRECTIONS.length; i++) {
+      const { direction, dx, dy } = EDGE_DIRECTIONS[i]
+      const sprite = cell.edges[i]
+      const surfaceTop = direction === 'top' && y === SURFACE_Y
+      if (!surfaceTop && !this.isOpenForEdge(x + dx, y + dy)) {
+        sprite.visible = false
+        continue
+      }
+      // 地表行朝向天空的顶边使用草边（天空一侧不画洞壁）
+      const texture = surfaceTop ? this.textures.surfaceGrass : edgeTextures[direction]
+      if (sprite.texture !== texture) sprite.texture = texture
+      sprite.visible = true
     }
+  }
+
+  /** 洞壁判定：目标格是空洞才算（地图外与天空都不算） */
+  private isOpenForEdge(x: number, y: number): boolean {
+    const world = this.world
+    if (!world) return false
+    if (x < 0 || x >= world.width || y < 0 || y >= world.height) return false
+    if (y < SURFACE_Y) return false
+    return world.tiles[y][x] === TILE.EMPTY
+  }
+
+  /** 依据 (x, y) 确定性挑选填充变体（素材包约定：不引入状态） */
+  private pickVariant(tile: TileType, x: number, y: number): Texture {
+    const variants = tile === TILE.SOIL ? this.textures.soil : this.textures.rock
+    const index = Math.min(variants.length - 1, Math.floor(hash(x, y) * variants.length))
+    return variants[index]
   }
 
   private rebuildLandmarks(): void {

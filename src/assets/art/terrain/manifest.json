@@ -1,0 +1,71 @@
+{
+  "project": "Underground Home / 地下小家园",
+  "pack_version": "terrain-v1.0",
+  "logical_tile_px": 32,
+  "image_tile_px": 64,
+  "display_scale": 0.5,
+  "filter": "linear",
+  "assets": {
+    "soil": [
+      "soil.png",
+      "soil-variant-01.png",
+      "soil-variant-02.png"
+    ],
+    "rock": [
+      "rock.png",
+      "rock-variant-01.png",
+      "rock-variant-02.png"
+    ],
+    "cave_background": "cave-bg.png",
+    "soil_edges": [
+      "edges/soil-top.png",
+      "edges/soil-right.png",
+      "edges/soil-bottom.png",
+      "edges/soil-left.png"
+    ],
+    "rock_edges": [
+      "edges/rock-top.png",
+      "edges/rock-right.png",
+      "edges/rock-bottom.png",
+      "edges/rock-left.png"
+    ],
+    "surface_grass": "edges/surface-grass-top.png"
+  },
+  "usage": {
+    "edge_semantics": "Overlay each edge PNG ON the solid tile, if corresponding neighbor is empty; not on empty tile.",
+    "tile_anchor": "top-left",
+    "cave_bg": "repeatable 512x512 opaque texture, behind dug-out air regions",
+    "random_variants": "Choose deterministically from x,y hash, no state changes",
+    "performance": "Not a complete 16-mask tileset; separate edge overlays can be combined for the first integration."
+  },
+  "texture_repeat_seam_check_rgb_mean": {
+    "soil.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "soil-variant-01.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "soil-variant-02.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "rock.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "rock-variant-01.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "rock-variant-02.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    },
+    "cave-bg.png": {
+      "left_right_mean_error": 0.0,
+      "top_bottom_mean_error": 0.0
+    }
+  }
+}

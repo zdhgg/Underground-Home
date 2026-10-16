@@ -216,11 +216,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       return
     }
     history.record(cell.x, cell.y)
-    renderer.refresh()
+    const revealedNow = missionSummary(world).done > beforeDone
+    // 能源石露出来时需要重建地标；普通挖掘只刷新本格与四邻的边缘
+    if (revealedNow) renderer.refresh()
+    else renderer.refreshTerrain([cell])
     renderer.playDigEffect(cell)
     scheduleSave()
     pushProgress()
-    if (missionSummary(world).done > beforeDone) {
+    if (revealedNow) {
       hooks.onMessage('💎 能源石露出来了！')
     }
   }
@@ -258,7 +261,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         hooks.onMessage('还没有可以撤销的操作')
         return
       }
-      renderer.refresh()
+      // 撤销只影响瓦片：增量刷新本格与邻域边缘
+      renderer.refreshTerrain([restored])
       renderer.playDigEffect(restored)
       scheduleSave()
       pushProgress()
