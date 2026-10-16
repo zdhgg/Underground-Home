@@ -1,0 +1,18 @@
+# 依赖与构建产物
+node_modules/
+dist/
+coverage/
+
+# 编辑器与系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志与临时文件
+*.log
+npm-debug.log*
+*.local
+
+# AI 工作区数据（不进版本库）
+.workbuddy/

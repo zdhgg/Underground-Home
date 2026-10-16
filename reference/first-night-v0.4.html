@@ -1,0 +1,214 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>地下小家园 · 第一夜 v0.4</title><style>
+:root{--ink:#334742;--muted:#78887e;--green:#3c8e72;--cream:#fffaf1;--line:#e4e6d9;--shadow:0 12px 28px #213d3030}*{box-sizing:border-box}body{margin:0;background:#e8ede4;color:var(--ink);font-family:ui-rounded,"PingFang SC","Microsoft Yahei",system-ui,sans-serif}button{font:inherit;cursor:pointer;border:0;touch-action:manipulation}button:focus-visible{outline:3px solid #64bfa5;outline-offset:2px}.app{height:100dvh;min-height:570px;display:flex;flex-direction:column;gap:10px;padding:11px;max-width:1750px;margin:auto}.top{display:flex;align-items:center;justify-content:space-between;background:#fffdf7;border-radius:18px;padding:11px 17px;box-shadow:0 5px 20px #35534112;gap:12px}.brand{display:flex;align-items:center;gap:10px}.logo{font-size:31px;background:#e4f1d8;border-radius:13px;padding:7px}.brand h1{font-size:19px;margin:0}.brand small{color:var(--muted);font-size:11px}.chip{border-radius:999px;background:#eef5e9;padding:9px 13px;white-space:nowrap;font-size:12px;font-weight:750}.top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.layout{min-height:0;flex:1;display:grid;grid-template-columns:315px minmax(0,1fr);gap:10px}.left{background:#fffdf7;border-radius:19px;padding:17px;display:flex;flex-direction:column;gap:12px;box-shadow:0 5px 20px #3553410c;overflow:auto}.eyebrow{font-size:11px;font-weight:900;letter-spacing:1px;color:#779c79}.left h2{font-size:23px;line-height:1.35;margin:0;color:#3c6154}.desc{font-size:13px;color:#65796f;line-height:1.7;margin:0}.speech{background:#f1f4e5;border:1px solid #e1e9d4;border-radius:17px;padding:13px;display:flex;gap:10px;align-items:flex-start}.face{width:45px;height:45px;background:#d5e8c9;border-radius:50%;display:grid;place-items:center;font-size:29px;flex:none}.speech-text{font-size:13px;line-height:1.75;color:#536b58}.speech-text strong{display:block;color:#3d7253;margin-bottom:3px;font-size:12px}.primary{background:#458e70;color:white;border-radius:14px;padding:14px 12px;font-size:15px;font-weight:800;box-shadow:0 5px 0 #2d735b;transition:transform .1s}.primary:hover{background:#377a5f}.primary:active{transform:translateY(3px);box-shadow:0 2px 0 #2d735b}.secondary{background:#f1f5e9;border:1px solid #dce4d4;color:#567365;padding:9px 12px;border-radius:12px;font-size:12px;font-weight:800}.quick{display:flex;gap:8px;flex-wrap:wrap}.storylist{border-top:1px solid var(--line);padding-top:12px;display:grid;gap:9px}.storyitem{display:flex;align-items:center;gap:10px;font-size:12px;color:#7c867d}.storyitem.done{color:#3a8b69;font-weight:800}.storyitem.current{color:#365f4a;font-weight:900}.number{background:#eff1e7;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;font-size:12px;flex:none}.storyitem.done .number{background:#d6eddd}.small-note{color:#829084;font-size:11px;line-height:1.5}.side-bottom{margin-top:auto;display:flex;flex-wrap:wrap;gap:7px}.world-wrap{position:relative;overflow:hidden;background:#243b42;border:1px solid #adbdac;border-radius:20px;box-shadow:var(--shadow);min-height:440px}canvas{display:block;width:100%;height:100%;touch-action:none;cursor:crosshair}.cloud{position:absolute;top:12px;left:14px;background:#172d35b8;color:#fff9e9;border-radius:13px;padding:8px 12px;font-size:12px;pointer-events:none;max-width:66%;z-index:2}.cloud strong{display:block;font-size:12px}.cloud span{font-size:11px;color:#f6e5c7}.zoom{position:absolute;top:12px;right:12px;display:flex;gap:6px;z-index:2}.zoom button{font-size:19px;width:36px;height:36px;border-radius:10px;color:#486050;background:#fffcf2e8;box-shadow:0 3px 9px #192e3533}.toolbar{position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:#fffdf3ef;border:1px solid #ffffffaa;border-radius:18px;padding:7px;display:flex;align-items:center;gap:6px;z-index:3;max-width:96%;box-shadow:0 6px 24px #061e2b55}.tool{min-width:68px;border-radius:12px;background:#eef2e8;padding:7px 9px;display:grid;justify-items:center;gap:2px;color:#577266}.tool .emoji{font-size:22px;line-height:1.1}.tool small{font-size:11px;font-weight:800;white-space:nowrap}.tool.selected{background:#cceada;outline:2px solid #4d9c79;color:#295f49}.tool.locked{opacity:.45}.status{position:absolute;bottom:92px;left:15px;background:#fffcf2e9;padding:9px 12px;border-radius:12px;font-size:12px;font-weight:750;color:#4e6759;max-width:65%;pointer-events:none;z-index:2}.toast{position:absolute;top:65px;left:50%;transform:translate(-50%,-12px);opacity:0;transition:.22s;pointer-events:none;background:#244a40ee;color:#fff9e9;padding:11px 18px;border-radius:14px;text-align:center;font-size:13px;font-weight:800;max-width:80%;z-index:8;box-shadow:0 8px 30px #16372d66}.toast.show{opacity:1;transform:translate(-50%,0)}.shade{position:absolute;inset:0;background:#101e2bb8;display:none;align-items:center;justify-content:center;z-index:7;padding:16px}.shade.show{display:flex}.win{max-width:420px;width:100%;background:#fffaf0;border:3px solid #fae8af;border-radius:24px;padding:25px 22px;text-align:center;box-shadow:0 16px 70px #0b1c2f88}.win .big{font-size:51px}.win h2{color:#468266;margin:7px 0 10px;font-size:25px}.win p{font-size:13px;line-height:1.8;color:#6b786b}.win .rewards{display:flex;gap:7px;justify-content:center;flex-wrap:wrap;margin:12px 0 19px}.win .rewards span{background:#e9f4de;border-radius:99px;padding:6px 9px;font-size:11px}.fileimport{display:none}@media(max-width:850px){.layout{grid-template-columns:270px minmax(0,1fr)}.left{padding:13px}.left h2{font-size:19px}.speech-text{font-size:12px}.tool{min-width:57px;padding:7px 6px}}@media(max-width:690px){.app{height:auto;min-height:100dvh;padding:7px;gap:7px}.top{padding:8px 10px}.brand h1{font-size:15px}.brand small{font-size:10px}.logo{font-size:21px;padding:5px}.chip{font-size:10px;padding:6px 8px}.layout{display:flex;flex-direction:column;gap:7px}.left{order:0;gap:7px;padding:12px}.left h2{font-size:19px}.left .desc{display:none}.left .speech{padding:8px}.left .speech-text{font-size:12px}.left .face{width:34px;height:34px;font-size:22px}.left .storylist{display:none}.left .small-note{display:none}.left .side-bottom{display:none}.primary{padding:11px;font-size:13px}.world-wrap{order:1;height:63dvh;min-height:370px}.cloud{font-size:10px;max-width:65%}.toolbar{bottom:9px;gap:4px;padding:6px}.tool{min-width:57px}.tool .emoji{font-size:19px}.tool small{font-size:10px}.status{bottom:78px;max-width:70%;font-size:10px}}
+
+/* v0.3 儿童点击体验：清晰的大按钮和宽松的触控区域 */
+.primary{min-height:50px}.secondary{min-height:42px}.tool{min-width:76px;min-height:63px;padding:9px 10px}.tool .emoji{font-size:25px}.tool small{font-size:12px}.zoom button{width:44px;height:44px;font-size:22px}.status{bottom:98px;font-size:13px;max-width:78%}.cloud{max-width:62%}button{user-select:none;-webkit-user-select:none}canvas{user-select:none;-webkit-user-select:none}
+@media(max-width:850px){.tool{min-width:68px;min-height:60px}.status{bottom:98px}}
+@media(max-width:690px){.tool{min-width:60px;min-height:56px;padding:7px}.toolbar{max-width:98%;overflow-x:auto}.tool .emoji{font-size:22px}.tool small{font-size:11px}.status{bottom:89px}.world-wrap{height:66dvh}.primary{min-height:44px}}
+.geolegend{position:absolute;left:15px;bottom:153px;background:#fffaf1e8;border:1px solid #e9d8b9;border-radius:10px;padding:7px 10px;font-size:11px;color:#526052;font-weight:800;z-index:2;pointer-events:none}@media(max-width:690px){.geolegend{bottom:138px;left:8px;font-size:10px;padding:6px;max-width:76%}}
+</style></head><body>
+<div class="app"><header class="top"><div class="brand"><span class="logo">🏔️</span><div><h1>地下小家园 <small>· 第一夜 v0.4</small></h1><small>把黑暗的避难所，变成温暖的家</small></div></div><div class="top-actions"><span class="chip" id="progressChip">🌙 第一夜 · 0/4</span><button class="secondary" id="resetBtn" title="重新体验第一夜">↻ 重来</button></div></header>
+<div class="layout"><aside class="left"><div class="eyebrow" id="chapter">第一章 · 风暴下的家园</div><h2 id="headline">沿着松软泥土寻找能源石</h2><p class="desc" id="description">外面正刮着大风。小伙伴们躲进旧避难所，可这里又黑又冷……</p><div class="speech"><div class="face">🐹</div><div class="speech-text"><strong>小鼹鼠 阿土</strong><span id="dialog">“你看到左边那块发光的石头了吗？也许它能帮我们点亮灯！”</span></div></div><button class="primary" id="guideBtn">✨ 带我找蓝色泥土</button><div class="quick"><button class="secondary" id="freeBtn">🧱 我要自由搭建</button><button class="secondary" id="hintBtn">💡 给我一点提示</button></div><div class="storylist" id="storylist"><div class="storyitem" id="list0"><span class="number">①</span><span>让避难所重新亮起来</span></div><div class="storyitem" id="list1"><span class="number">②</span><span>建一间温暖的睡眠舱</span></div><div class="storyitem" id="list2"><span class="number">③</span><span>找到清澈的地下泉水</span></div><div class="storyitem" id="list3"><span class="number">④</span><span>种出第一份地下蔬菜</span></div></div><div class="small-note">轻点棕色泥土，只挖一小块；拖动可以移动地图。灰色坚硬岩石现在挖不动，今后升级工具再探索。建房时点击房间中央，挖错可撤销。</div><div class="side-bottom"><button class="secondary" id="undoBtn">↶ 撤销</button><button class="secondary" id="saveBtn">💾 保存</button><button class="secondary" id="exportBtn">⬇ 备份家园</button><button class="secondary" id="importBtn">⬆ 导入</button><input id="importFile" type="file" accept="application/json,.json" class="fileimport"></div></aside>
+<main class="world-wrap" id="worldWrap"><canvas id="world"></canvas><div class="cloud"><strong id="sceneTitle">🌪️ 地表：风暴进行中</strong><span id="sceneSubtitle">地下避难所 · 待恢复供电</span></div><div class="zoom"><button id="zoomIn" aria-label="放大">＋</button><button id="zoomOut" aria-label="缩小">−</button><button id="centerBtn" aria-label="回到家园">⌂</button></div><div class="toast" id="toast"></div><div class="geolegend">🟫 泥土可挖　🪨 灰色岩石暂不可挖</div><div class="status" id="status">⛏️ 先挖开蓝色发光岩壁</div><div class="toolbar" id="toolbar"></div><div class="shade" id="celebration"><div class="win"><div class="big">🌟🏡🌟</div><h2>第一夜，成功啦！</h2><p>你挖通了岩壁、找到了能源石和泉水，还亲手种出了第一份蔬菜。地下家园从黑暗变得温暖明亮！</p><div class="rewards"><span>💡 点亮家园</span><span>🛏️ 温暖睡眠</span><span>🌱 第一座温室</span></div><button class="primary" id="keepBtn">在松软泥土中继续建设 →</button></div></div></main></div></div>
+<script>
+(()=>{'use strict';
+const W=44,H=29,T=32,SURFACE=4, SAVE='underground-first-night-v04',c=document.getElementById('world'),ctx=c.getContext('2d');const el=id=>document.getElementById(id);
+let state=null,tool='dig',modeFree=false,hover=null,drag=null,camera={x:0,y:0,z:1},cw=100,ch=100,dpr=1,anim=0,last=0,toastTimer=0,saves=[],pendingSave=0,activeTouches=new Map(),lastPulse=null;
+const roomDefs={sleep:{name:'睡眠舱',emoji:'🛏️',w:5,h:3},farm:{name:'地下温室',emoji:'🌱',w:6,h:3},garden:{name:'小花园',emoji:'🌼',w:4,h:3}};
+const TARGET={crystal:{x:14,y:9},generator:{x:21,y:9},sleep:{x:9,y:8,w:5,h:3},spring:{x:31,y:15},farm:{x:27,y:8,w:6,h:3}};
+const ENERGY_PATH=[[14,9],[13,9],[12,9]];
+const WATER_PATH=[[26,11],[26,12],[26,13],[27,13],[28,13],[29,13],[30,13],[30,14],[30,15]];
+const targetRoom={sleep:{x:9,y:8,w:5,h:3},farm:{x:27,y:8,w:6,h:3}};
+const goals=[
+{head:'沿着松软泥土寻找能源石',desc:'地表风暴还在继续，地下的灯快灭了。松软的泥土后面有一束神奇的蓝光。',say:'“先挖开这几块亮亮的泥土，好像有什么在等着我们！”',btn:'✨ 带我找蓝色泥土',tip:'点按发光的棕色泥土，每次挖一格；拖动地图不会误挖。',status:'⛏️ 挖开蓝光旁的泥土（0/3）'},
+{head:'发现第一颗能源石',desc:'一条小通道出现了！蓝色能源石就在眼前。',say:'“找到了！快点一下发光的能源石，把它带回去吧。”',btn:'💎 去拿能源石',tip:'点一下蓝色水晶，收好我们的能源石。',status:'💎 点击蓝色能源石'},
+{head:'让能源核心重新运转',desc:'有了能源石，旧避难所的灯光就有希望了。',say:'“把能源石放进圆圆的机器里，整个家园就会亮起来！”',btn:'💡 去修好能源核心',tip:'点一下避难所中央发着微光的大机器。',status:'💡 点击能源核心，点亮地下家园'},
+{head:'给小伙伴挖一间睡眠舱',desc:'灯亮起来了！可大家还挤在旧大厅里。我们来开辟一个温暖的角落吧。',say:'“左边有一块适合挖房间的岩壁。连续点击或者拖着挖，开出一片空间！”',btn:'🛏️ 带我去看睡眠区',tip:'点击黄色虚线中的松软泥土，逐步挖出睡眠空间。灰色岩石挖不动。',status:'⛏️ 给睡眠舱挖出 5×3 的空间'},
+{head:'在岩洞里安放睡眠舱',desc:'岩石终于变成一间小房间！现在可以把床铺和暖灯放进来了。',say:'“点一下虚线房间中间，把睡眠舱放进去吧。你也可以换个合适的位置！”',btn:'🛏️ 帮我放好睡眠舱',tip:'已经选好睡眠舱：点击挖好的空地中央放置。',status:'🛏️ 点击空地，放置睡眠舱'},
+{head:'沿着水声往下探索',desc:'小伙伴有床睡了，可储备的水正在减少。更深的岩层传来滴答滴答的声音。',say:'“听！泉水就在右下方。沿着发亮的石块往下挖一条路吧！”',btn:'💧 带我寻找流水声',tip:'跟着右下角亮点，点击挖掘泥土。灰色岩石现在挖不动。',status:'⛏️ 挖通寻找泉水的路（0/9）'},
+{head:'找到清澈的地下泉水',desc:'岩石后面真的有一汪地下泉！泉水可以帮助我们种植蔬菜。',say:'“哇！蓝蓝的泉水！快点一下泉水，接上我们的小小取水站。”',btn:'💧 去看看地下泉水',tip:'点击蓝色的地下水源，接上取水站。',status:'💧 点击泉水，启用取水站'},
+{head:'在地下开辟种植空间',desc:'现在有水了，我们可以在地下岩层里种出自己的食物！',say:'“右边这片岩壁很适合做温室。点几次挖出空地，或者自己找喜欢的位置。”',btn:'🌱 带我去看温室区',tip:'逐步挖开黄色虚线里的 6×3 泥土区域。',status:'⛏️ 为水培温室挖出 6×3 的空间'},
+{head:'亲手建造地下水培温室',desc:'温室的空间准备好了！能看见小朋友们亲自建设的岩洞花园了。',say:'“选好温室后，点一下空地中央。灯光和种植盘就会装上！”',btn:'🌱 帮我安放温室',tip:'已经选好温室：点击空地中央放置。',status:'🌱 点击空地，放置地下温室'},
+{head:'给小苗浇第一遍水',desc:'种植盘已经搭好了，接下来得让泉水真正帮助植物生长。',say:'“温室里有几株小苗！轻轻点一下温室，给它们浇水吧。”',btn:'💦 带我去照顾小苗',tip:'点击已经建好的温室，完成第一次浇水。',status:'💦 点击温室，给小苗浇水'},
+{head:'看着小苗慢慢长大',desc:'泉水流进种植盘，小叶子正在一点点长出来。还可以继续挖土和装饰家园。',say:'“小苗长得好快！成熟时会冒出小胡萝卜，再点一下温室就能收获。”',btn:'👀 带我去看看蔬菜',tip:'观察温室长大；变成熟后点击温室完成采收。',status:'🌱 植物成长中……'},
+{head:'第一夜，我们做到了！',desc:'灯亮了，伙伴有床睡，地下泉水滋养着绿色农场。风暴的第一夜，我们守护住了家园。',say:'“真棒！我们把黑暗的岩洞，变成了有灯光、清水和植物的家！”',btn:'🏡 欣赏我的地下家园',tip:'可以继续在棕色泥土中自由挖掘。灰色坚硬岩石要等以后升级小钻机才能开凿。',status:'🏡 第一夜完成！可在松软泥土区继续建设'}];
+
+function fresh(){
+ // 地层类型：0=已挖掘空间，1=松软泥土，2=坚硬岩石。
+ // 第一夜只有几个被坚硬岩层包围的可探索口袋，避免误挖整个地下世界。
+ let tiles=Array.from({length:H},(_,y)=>Array.from({length:W},()=>y<SURFACE?0:2));
+ const soften=(x,y,w,h)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)if(i>=0&&i<W&&j>=SURFACE&&j<H)tiles[j][i]=1};
+ const carve=(x,y,w,h)=>{for(let j=y;j<y+h;j++)for(let i=x;i<x+w;i++)if(i>=0&&i<W&&j>=SURFACE&&j<H)tiles[j][i]=0};
+ // 建设区左：睡眠舱与初期探索；建设区右：温室与地下泉水。
+ soften(8,7,9,6);soften(26,7,9,10);soften(14,12,4,4);
+ // 保留几个不规则软土边缘，给第一夜结束后的自由搭建留一些探索空间。
+ soften(9,13,5,2);soften(32,17,3,2);soften(25,12,2,4);
+ carve(17,7,9,5);carve(21,4,2,4);carve(15,9,2,1);
+ return{v:4,tiles,stage:0,lit:false,crystal:false,spring:false,rooms:[],ladder:[{x:21,y:4},{x:21,y:5},{x:21,y:6}],harvest:0,watered:false,completed:false,extraDig:0,time:0};
+}
+function valid(s){return !!(s&&s.v===4&&Array.isArray(s.tiles)&&s.tiles.length===H&&s.tiles.every(row=>Array.isArray(row)&&row.length===W)&&Array.isArray(s.rooms)&&Number.isInteger(s.stage)&&s.stage>=0&&s.stage<=11)}
+function save(silent=false){try{localStorage.setItem(SAVE,JSON.stringify(state));if(!silent)notify('💾 家园保存好了！')}catch(e){if(!silent)notify('⚠️ 保存失败：可以尝试“备份家园”')}}
+function saveSoon(){clearTimeout(pendingSave);pendingSave=setTimeout(()=>save(true),400)}
+function snapshot(){saves.push(JSON.stringify(state));if(saves.length>30)saves.shift()}
+function undo(){if(!saves.length)return notify('还没有可以撤销的操作');try{state=JSON.parse(saves.pop());refresh();saveSoon();notify('↶ 已撤销上一步')}catch{notify('这一步无法撤销')}}
+function notify(str){el('toast').textContent=str;el('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el('toast').classList.remove('show'),2400)}
+function clamp(n,a,b){return Math.max(a,Math.min(b,n))}
+function resize(){let r=c.getBoundingClientRect();cw=Math.max(10,r.width);ch=Math.max(10,r.height);dpr=Math.min(window.devicePixelRatio||1,2);c.width=Math.floor(cw*dpr);c.height=Math.floor(ch*dpr)}
+function center(x=21,y=10,smooth=false){let tx=x*T-(cw/camera.z)/2,ty=y*T-(ch/camera.z)/2;if(smooth){camera.x+=(tx-camera.x)*.9;camera.y+=(ty-camera.y)*.9}else{camera.x=tx;camera.y=ty}boundCamera()}
+function boundCamera(){const pad=160;camera.x=clamp(camera.x,-pad,(W*T)-(cw/camera.z)+pad);camera.y=clamp(camera.y,-pad,(H*T)-(ch/camera.z)+pad)}
+function zoom(delta){camera.z=clamp(camera.z+delta,.65,2.3);boundCamera()}
+function toWorld(e){const r=c.getBoundingClientRect();const sx=e.clientX-r.left,sy=e.clientY-r.top;const wx=(sx/camera.z)+camera.x,wy=(sy/camera.z)+camera.y;return{x:Math.floor(wx/T),y:Math.floor(wy/T),sx,sy}}
+function hasAir(x,y){return y>=SURFACE&&y<H&&x>=0&&x<W&&state.tiles[y][x]===0}
+function digArea(x,y,w=1,h=1){let changed=false;for(let j=Math.max(SURFACE,y);j<Math.min(H,y+h);j++)for(let i=Math.max(0,x);i<Math.min(W,x+w);i++){if(state.tiles[j][i]===1){state.tiles[j][i]=0;changed=true;state.extraDig++}}return changed}
+function canPlace(type,x,y){const d=roomDefs[type];if(!d||y<SURFACE||x<0||x+d.w>W||y+d.h>H)return false;for(let yy=y;yy<y+d.h;yy++)for(let xx=x;xx<x+d.w;xx++)if(!hasAir(xx,yy)||state.rooms.some(r=>{const q=roomDefs[r.type];return xx>=r.x&&xx<r.x+q.w&&yy>=r.y&&yy<r.y+q.h}))return false;return true}
+function setStage(stage){if(stage<=state.stage)return;state.stage=stage;
+ if(stage===3){state.lit=true;notify('💡 灯一盏盏亮起来了！第一颗守护星获得！')}
+ else if(stage===4)notify('⛏️ 睡眠区挖好啦！现在轻轻点一下空地放置睡眠舱');
+ else if(stage===5)notify('🛏️ 有新床啦！小伙伴们终于能舒舒服服睡觉了');
+ else if(stage===6)notify('🌊 听见水声啦！再点一下泉水，启用取水站');
+ else if(stage===7)notify('💧 太棒了！我们找到了稳定的地下水源');
+ else if(stage===8)notify('⛏️ 温室的位置挖好啦！选择温室放进去吧');
+ else if(stage===9)notify('🌱 水培温室建成！点一下它给植物浇水');
+ else if(stage===10){state.growStart=Date.now();state.harvest=0;state.watered=true;notify('💦 泉水灌溉成功！稍等小苗长大后，再来收获')}
+ else if(stage===11){state.completed=true;notify('🥕 收获成功！第一夜，守护家园成功！');setTimeout(()=>el('celebration').classList.add('show'),650)}
+ modeFree=false;
+ if(stage===4)tool='sleep';else if(stage===8)tool='farm';else if(stage===0||stage===3||stage===5||stage===7)tool='dig';else if([1,2,6,9,10].includes(stage))tool='use';
+ refresh();saveSoon();
+ if(stage!==10&&stage!==11){const a=target();center(a.x+(a.w||1)/2,a.y+(a.h||1)/2)}
+}
+function countMissing(cells){return cells.filter(([x,y])=>state.tiles[y][x]===1).length}
+function areaMissing(rect){let n=0;for(let y=rect.y;y<rect.y+rect.h;y++)for(let x=rect.x;x<rect.x+rect.w;x++)if(state.tiles[y][x]===1)n++;return n}
+function updateTexts(){let s=goals[state.stage];el('headline').textContent=s.head;el('description').textContent=s.desc;el('dialog').textContent=s.say;el('guideBtn').textContent=s.btn;
+ let status=s.status;
+ if(state.stage===0)status=`⛏️ 还需挖开 ${countMissing(ENERGY_PATH)} 块松软泥土`;
+ if(state.stage===3)status=`🛏️ 睡眠舱的空间还差 ${areaMissing(targetRoom.sleep)} 格`;
+ if(state.stage===5)status=`💧 寻找泉水：已挖通 ${WATER_PATH.length-countMissing(WATER_PATH)} / ${WATER_PATH.length} 格`;
+ if(state.stage===7)status=`🌱 温室空间还差 ${areaMissing(targetRoom.farm)} 格`;
+ if(state.stage===10)status=`🌱 小苗长大了 ${Math.floor(state.harvest*100)}% · 成熟后点温室采收`;
+ el('status').textContent=status;
+ const steps=[3,5,7,11];let done=steps.filter(k=>state.stage>=k).length;el('progressChip').textContent=`🌙 第一夜 · ${done}/4`;
+ el('sceneTitle').textContent=state.lit?'🌪️ 地表刮风 · 地下灯火明亮':'🌪️ 地表风暴 · 地下昏暗';
+ el('sceneSubtitle').textContent=state.completed?'第一夜成功 · 欢迎自由建设':state.lit?'家园正在一点点变得温暖':'避难所需要修复';
+ for(let i=0;i<4;i++){let d=state.stage>=steps[i],cur=!d&&(i===0||state.stage>=steps[i-1]);let item=el('list'+i);item.className='storyitem'+(d?' done':cur?' current':'');item.querySelector('.number').textContent=d?'✓':(i+1)}
+ const fill=el('progressFill');if(fill)fill.style.width=(done*25)+'%';
+}
+function refreshTools(){let types=[['dig','⛏️','挖泥土'],['use','👆','互动'],['sleep','🛏️','睡眠舱'],['farm','🌱','温室'],['garden','🌼','花园'],['pan','✋','移动']];let allowed;
+ if(modeFree||state.stage===11)allowed=types.map(t=>t[0]);
+ else if([0,3,5,7].includes(state.stage))allowed=['dig','pan'];
+ else if([1,2,6,9,10].includes(state.stage))allowed=['use','pan'];
+ else if(state.stage===4)allowed=['sleep','dig','pan'];
+ else if(state.stage===8)allowed=['farm','dig','pan'];
+ else allowed=['pan','dig'];
+ if(!allowed.includes(tool))tool=allowed[0];
+ let html=types.filter(([k])=>allowed.includes(k)).map(([k,a,b])=>`<button type="button" data-tool="${k}" class="tool ${tool===k?'selected':''}"><span class="emoji">${a}</span><small>${b}</small></button>`).join('');
+ el('toolbar').innerHTML=html;el('toolbar').querySelectorAll('button').forEach(btn=>btn.onclick=()=>select(btn.dataset.tool)); c.style.cursor=tool==='pan'?'grab':tool==='dig'?'crosshair':'copy';}
+function refresh(){updateTexts();refreshTools()}
+function select(t){tool=t;refreshTools();const x={dig:'⛏️ 点泥土只挖一格，拖动地图不会误挖',use:'👆 点击蓝色发光目标或建筑进行互动',sleep:'🛏️ 点击挖好的空地放睡眠舱',farm:'🌱 点击挖好的空地放地下温室',garden:'🌼 点击空地布置花园',pan:'✋ 拖动画面，看看你的地下家园'};el('status').textContent=x[t]||''}
+function target(){if(state.stage<=1)return{x:13,y:9,w:3,h:1};if(state.stage===2)return TARGET.generator;if(state.stage===3||state.stage===4)return targetRoom.sleep;if(state.stage===5)return{x:26,y:11,w:6,h:5};if(state.stage===6)return TARGET.spring;if(state.stage===7||state.stage===8)return targetRoom.farm;if(state.stage===9||state.stage===10){const r=state.rooms.find(r=>r.type==='farm');return r?{x:r.x,y:r.y,w:6,h:3}:targetRoom.farm}return{x:21,y:10}}
+function guide(){let t=target();center(t.x+(t.w||1)/2,t.y+(t.h||1)/2);if([0,3,5,7].includes(state.stage))select('dig');if([1,2,6,9,10].includes(state.stage))select('use');if(state.stage===4)select('sleep');if(state.stage===8)select('farm');if(state.stage===11)select('pan');notify(goals[state.stage].tip)}
+function hit(x,y,t,range=0){return x>=t.x-range&&x<t.x+(t.w||1)+range&&y>=t.y-range&&y<t.y+(t.h||1)+range}
+function excavateHint(cells,px,py){let picked=cells.find(([x,y])=>x===px&&y===py&&state.tiles[y][x]===1);if(!picked)picked=cells.find(([x,y])=>state.tiles[y][x]===1);if(!picked)return false;snapshot();digArea(picked[0],picked[1]);saveSoon();return true}
+function digRectSoft(rect,x,y){const miss=areaMissing(rect);if(!miss)return false;
+ snapshot();let spots=[];for(let yy=rect.y;yy<rect.y+rect.h;yy++)for(let xx=rect.x;xx<rect.x+rect.w;xx++)if(state.tiles[yy][xx]===1)spots.push([xx,yy]);
+ let chosen=spots.find(p=>Math.abs(p[0]-x)<=1&&Math.abs(p[1]-y)<=1)||spots[0];for(let yy=chosen[1];yy<Math.min(rect.y+rect.h,chosen[1]+2);yy++)for(let xx=chosen[0];xx<Math.min(rect.x+rect.w,chosen[0]+2);xx++)digArea(xx,yy);saveSoon();return true;}
+function roomAt(x,y){return state.rooms.find(r=>{let d=roomDefs[r.type];return x>=r.x-1&&x<r.x+d.w+1&&y>=r.y-1&&y<r.y+d.h+1})}
+function act(x,y){if(x<0||x>=W||y<SURFACE||y>=H)return;
+ if(state.stage===0&&ENERGY_PATH.some(([a,b])=>a===x&&b===y)&&tool==='dig'){excavateHint(ENERGY_PATH,x,y);updateTexts();if(!countMissing(ENERGY_PATH))setStage(1);else notify('⛏️ 泥土挖开啦！再点一下亮亮的棕色区域');return}
+ if(state.stage===1&&hit(x,y,TARGET.crystal,2)){snapshot();state.crystal=true;setStage(2);return}
+ if(state.stage===2&&hit(x,y,TARGET.generator,2)){snapshot();setStage(3);return}
+ if(state.stage===3&&tool==='dig'&&hit(x,y,targetRoom.sleep)){digRectSoft(targetRoom.sleep,x,y);if(!areaMissing(targetRoom.sleep))setStage(4);else{updateTexts();notify('⛏️ 房间一点点出现了！继续挖')}return}
+ if(state.stage===5&&tool==='dig'&&WATER_PATH.some(([a,b])=>a===x&&b===y)){excavateHint(WATER_PATH,x,y);if(!countMissing(WATER_PATH))setStage(6);else{updateTexts();notify('💧 水声更清楚啦！沿着亮点继续挖')}return}
+ else if(state.stage===6&&hit(x,y,TARGET.spring,3)){snapshot();state.spring=true;setStage(7);return}
+ else if(state.stage===7&&tool==='dig'&&hit(x,y,targetRoom.farm)){digRectSoft(targetRoom.farm,x,y);if(!areaMissing(targetRoom.farm)){digArea(26,9);setStage(8)}else{updateTexts();notify('⛏️ 再挖一点，就能建温室啦')}return}
+ else if(state.stage===9&&hit(x,y,target(),1)){snapshot();setStage(10);return}
+ else if(state.stage===10&&hit(x,y,target(),1)){if(state.harvest>=.99){snapshot();setStage(11)}else notify('🌱 小苗还在生长，待会儿再来收获！');return}
+ if(roomDefs[tool]){let d=roomDefs[tool],rx=x-Math.floor(d.w/2),ry=y-Math.floor(d.h/2);
+  const focus=state.stage===4&&tool==='sleep'?targetRoom.sleep:state.stage===8&&tool==='farm'?targetRoom.farm:null;
+  if(focus&&hit(x,y,focus,1)){rx=focus.x;ry=focus.y}
+  if(!canPlace(tool,rx,ry)){notify('🧱 这里放不下：试试房间中央，或者继续挖大一点');return}
+  snapshot();state.rooms.push({x:rx,y:ry,type:tool});
+  if(tool==='sleep'&&state.stage===4)setStage(5);else if(tool==='farm'&&state.stage===8)setStage(9);else{notify('🏡 '+roomDefs[tool].name+'建好啦！');saveSoon()}return}
+ if(tool==='dig'){
+  if(state.tiles[y][x]===2){notify('🪨 这是坚硬岩石，以后升级小钻机才能开凿！');return}
+  if(state.tiles[y][x]===1){
+   if(!modeFree&&state.stage<11){notify('✨ 先挖发光虚线里的泥土吧！也可以选择自由搭建');return}
+   snapshot();digArea(x,y);saveSoon();notify('⛏️ 轻轻挖开了一小块泥土！');return
+  }
+  notify('这里已经挖空啦，按住拖动地图可以移动画面')
+ }else if(tool==='pan'){notify('✋ 按住拖动地图，点击“找到目标”就能回到任务位置')}
+
+}
+function handleDown(e){if(e.target!==c)return; e.preventDefault();try{c.setPointerCapture(e.pointerId)}catch{}
+ activeTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(activeTouches.size>=2){const pts=[...activeTouches.values()],a=pts[0],b=pts[1];drag={pinch:true,startDist:Math.hypot(a.x-b.x,a.y-b.y),startZ:camera.z,startMid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},startCamera:{x:camera.x,y:camera.y}};return}
+ const p=toWorld(e);hover=p;const pan=tool==='pan'||e.button===2||e.shiftKey||e.ctrlKey;
+ drag={pointerId:e.pointerId,tool:pan?'pan':tool,from:p,last:p,downX:e.clientX,downY:e.clientY,moved:false,origCamera:{x:camera.x,y:camera.y}};}
+function handleMove(e){
+ if(activeTouches.has(e.pointerId))activeTouches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+ if(drag&&drag.pinch&&activeTouches.size>=2){const pts=[...activeTouches.values()],a=pts[0],b=pts[1];const dist=Math.hypot(a.x-b.x,a.y-b.y),mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};const newz=clamp(drag.startZ*dist/Math.max(20,drag.startDist),.65,2.3);const rect=c.getBoundingClientRect();const px=drag.startMid.x-rect.left,py=drag.startMid.y-rect.top;const worldX=drag.startCamera.x+px/drag.startZ,worldY=drag.startCamera.y+py/drag.startZ;
+  camera.z=newz;camera.x=worldX-(mid.x-rect.left)/newz;camera.y=worldY-(mid.y-rect.top)/newz;boundCamera();return}
+ const p=toWorld(e);hover=p;if(!drag||drag.pinch||drag.pointerId!==e.pointerId)return;
+ const dx=e.clientX-drag.downX,dy=e.clientY-drag.downY;if(Math.hypot(dx,dy)>10)drag.moved=true;
+ if(drag.moved||drag.tool==='pan'){camera.x=drag.origCamera.x-dx/camera.z;camera.y=drag.origCamera.y-dy/camera.z;boundCamera()}
+ drag.last=p;
+}
+function handleUp(e){
+ activeTouches.delete(e.pointerId);if(!drag)return;
+ if(drag.pinch){if(activeTouches.size<2)drag=null;return}
+ if(drag.pointerId!==e.pointerId)return;
+ const d=drag;drag=null;
+ // 无论使用何种工具，只要发生拖动，就只移动地图，不执行挖掘或建造。
+ if(d.moved||d.tool==='pan')return;
+ const p=toWorld(e);act(p.x,p.y);
+}
+function hash(x,y){let n=Math.sin(x*127.1+y*311.7)*43758.54;return n-Math.floor(n)}
+function round(x,y,w,h,r,fill){ctx.fillStyle=fill;ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill()}
+function text(s,x,y,size,color,align='center'){ctx.font=`700 ${size}px "Microsoft Yahei",sans-serif`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.fillText(s,x,y)}
+function star(cx,cy,t,size,color){ctx.save();ctx.translate(cx,cy);ctx.rotate(Math.sin(t*2)*.14);ctx.strokeStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-size,0);ctx.lineTo(size,0);ctx.moveTo(0,-size);ctx.lineTo(0,size);ctx.stroke();ctx.restore()}
+function drawRock(x,y,type){const px=x*T,py=y*T,n=hash(x,y);
+ if(type===2){
+  // cold grey-blue stone is currently locked; block shapes/cracks differentiate from soil.
+  ctx.fillStyle=(x+y)%3===0?'#46505d':'#414955';ctx.fillRect(px,py,T+.5,T+.5);
+  ctx.strokeStyle='#68748099';ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(px+5+n*5,py+9);ctx.lineTo(px+16,py+13+n*4);ctx.lineTo(px+20+n*3,py+25);ctx.stroke();
+  if(n>.73){ctx.fillStyle='#71899b';ctx.beginPath();ctx.arc(px+24,py+7,2,0,Math.PI*2);ctx.fill()}
+  ctx.strokeStyle='#30394399';ctx.strokeRect(px+.3,py+.3,T,T);
+ }else{
+  ctx.fillStyle='#977356';ctx.fillRect(px,py,T+.4,T+.4);
+  ctx.fillStyle=n>.5?'#b18b62':'#7e604b';ctx.globalAlpha=.65;ctx.beginPath();ctx.ellipse(px+9+n*13,py+10+n*12,4+n*3,2.7,0,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
+  ctx.strokeStyle='#644b3880';ctx.strokeRect(px+.2,py+.2,T,T);
+ }
+ if(y===SURFACE){ctx.fillStyle='#58715c';ctx.fillRect(px,py,T,4)}
+}
+function drawCave(){for(let y=SURFACE;y<H;y++)for(let x=0;x<W;x++){
+ const tile=state.tiles[y][x];if(tile!==0)drawRock(x,y,tile);else{const px=x*T,py=y*T;ctx.fillStyle='#26353c';ctx.fillRect(px,py,T+.6,T+.6);if(hash(x,y)>.92){ctx.fillStyle='#48606a';ctx.fillRect(px+9,py+24,4,2)}}}
+ ctx.save();ctx.strokeStyle='#ad998077';ctx.lineWidth=3;for(let y=SURFACE;y<H;y++)for(let x=0;x<W;x++)if(state.tiles[y][x]===0){const px=x*T,py=y*T;ctx.beginPath();if(x===0||state.tiles[y][x-1]){ctx.moveTo(px,py);ctx.lineTo(px,py+T)}if(y===SURFACE||state.tiles[y-1][x]){ctx.moveTo(px,py);ctx.lineTo(px+T,py)}if(x===W-1||state.tiles[y][x+1]){ctx.moveTo(px+T,py);ctx.lineTo(px+T,py+T)}if(y===H-1||state.tiles[y+1][x]){ctx.moveTo(px,py+T);ctx.lineTo(px+T,py+T)}ctx.stroke()}ctx.restore()}
+
+function drawSurface(t){const sky=ctx.createLinearGradient(0,-150,0,SURFACE*T);sky.addColorStop(0,'#475b6e');sky.addColorStop(1,'#8c8991');ctx.fillStyle=sky;ctx.fillRect(0,-250,W*T,SURFACE*T+250);for(let i=0;i<18;i++){let x=(i*103+t*18)%(W*T+130)-70,y=hash(i,1)*125-10;round(x,y,100,13,8,'#dce1e262')}ctx.fillStyle='#425b52';ctx.fillRect(0,SURFACE*T-10,W*T,15);for(let x=0;x<W;x+=6){ctx.fillStyle='#536d58';ctx.beginPath();ctx.moveTo(x*T-12,SURFACE*T-9);ctx.lineTo(x*T+5,SURFACE*T-32);ctx.lineTo(x*T+25,SURFACE*T-9);ctx.fill()}let x=21*T,y=SURFACE*T;round(x-12,y-29,86,32,5,'#889493');round(x-5,y-39,70,17,3,'#bdb6a4');round(x+16,y-25,26,27,3,state.lit?'#edcc7e':'#4e5153');text('避难所入口',x+28,y-60,14,'#eae6d8');for(let i=0;i<75;i++){let a=hash(i,9),b=hash(i,17);ctx.fillStyle='#dbebef7a';ctx.fillRect((a*W*T+t*(45+a*55))%(W*T),b*115,2,5)}}
+function drawLadder(x,y){ctx.strokeStyle='#d1ac80';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(x*T+9,y*T);ctx.lineTo(x*T+9,(y+1)*T);ctx.moveTo(x*T+23,y*T);ctx.lineTo(x*T+23,(y+1)*T);for(let k=0;k<3;k++){ctx.moveTo(x*T+9,y*T+7+k*10);ctx.lineTo(x*T+23,y*T+7+k*10)}ctx.stroke()}
+function drawGenerator(t){const x=19.7*T,y=8.4*T;ctx.save();ctx.shadowColor=state.lit?'#86f8c7':'transparent';ctx.shadowBlur=state.lit?25:0;round(x,y,103,68,12,'#4a6265');round(x+8,y+9,86,51,8,'#273b48');ctx.beginPath();ctx.arc(x+48,y+34,21,0,Math.PI*2);ctx.fillStyle=state.lit?'#8eebc1':'#60717a';ctx.fill();ctx.beginPath();ctx.arc(x+48,y+34,12,0,Math.PI*2);ctx.fillStyle=state.lit?'#e4fff0':'#2b414b';ctx.fill();ctx.restore();round(x+18,y+61,67,6,3,'#7c7771');text(state.lit?'运行中':'能源核心',x+51,y-10,12,state.lit?'#e3ffce':'#d2d7cd');if(state.stage===1)star(x+49,y+34,t,19,'#fef3bd')}
+function drawCrystal(t){if(state.crystal)return;const x=14.5*T,y=9.6*T;ctx.save();ctx.shadowColor='#8dedfd';ctx.shadowBlur=24+Math.sin(t*4)*6;ctx.fillStyle='#9ee7f4';ctx.beginPath();ctx.moveTo(x,y-21);ctx.lineTo(x+16,y-8);ctx.lineTo(x+5,y+18);ctx.lineTo(x-13,y+7);ctx.closePath();ctx.fill();ctx.restore();star(x,y-25,t,10,'#f9fcdf')}
+function drawSpring(t){let x=30*T,y=15*T;if(!state.spring){ctx.save();ctx.shadowBlur=22;ctx.shadowColor='#77dcff';ctx.fillStyle='#6ac7e7';ctx.beginPath();ctx.ellipse(x+20,y+11,24,18,0,0,Math.PI*2);ctx.fill();ctx.restore();star(x+16,y-7,t,10,'#bceeff')}else{ctx.fillStyle='#2d5c77';ctx.fillRect(27*T,15*T,6*T,23);ctx.fillStyle='#5fb7d6';ctx.fillRect(27*T,15*T+4,6*T,14);for(let i=0;i<6;i++){ctx.fillStyle='#b1f4fa';ctx.beginPath();ctx.arc((27+i)*T+8,15*T+12+Math.sin(t*2+i)*3,2.5,0,7);ctx.fill()}text('💧 地下泉水',30*T,16*T+17,13,'#d6f6ff');ctx.strokeStyle='#59bbcaaa';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(30*T,15*T);ctx.lineTo(30*T,11*T);ctx.lineTo(28*T,11*T);ctx.stroke()}}
+function drawSleep(r,t){let x=r.x*T,y=r.y*T,w=5*T,h=3*T;ctx.save();round(x+3,y+4,w-6,h-6,10,'#87746b');round(x+8,y+8,w-16,h-18,6,'#465457');round(x+12,y+13,w-24,h-26,5,'#b59a85');round(x+15,y+26,w-30,48,9,'#744f50');round(x+18,y+30,w-36,38,8,'#ead1b5');round(x+19,y+31,33,15,6,'#fff2d8');ctx.fillStyle='#f5b694';ctx.fillRect(x+w-23,y+20,7,17);ctx.save();ctx.shadowBlur=20;ctx.shadowColor='#ffe49e';ctx.fillStyle='#ffe2a3';ctx.beginPath();ctx.arc(x+w-21,y+18,6,0,7);ctx.fill();ctx.restore();text('睡眠舱',x+w/2,y+85,12,'#fff5d6');ctx.restore()}
+function drawFarm(r,t){let x=r.x*T,y=r.y*T,w=6*T,h=3*T;round(x+3,y+4,w-6,h-6,11,'#6d7469');round(x+8,y+10,w-16,h-19,8,'#345955');ctx.fillStyle='#6c9f9a';ctx.fillRect(x+14,y+14,w-28,5);for(let i=0;i<5;i++){let px=x+25+i*30;round(px-10,y+60,23,13,5,'#866f5d');let f=state.stage===10?clamp(state.harvest,.15,1):state.stage===9?.18:1;ctx.strokeStyle='#7bd08a';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px,y+60);ctx.lineTo(px,y+60-30*f);ctx.stroke();ctx.fillStyle='#8adfa5';ctx.beginPath();ctx.ellipse(px-7,y+54-25*f,8*f,5*f,.5,0,7);ctx.ellipse(px+7,y+52-27*f,8*f,5*f,-.5,0,7);ctx.fill();if(state.harvest>.96||state.stage===11){ctx.fillStyle='#ed9b59';ctx.beginPath();ctx.moveTo(px-5,y+60);ctx.lineTo(px+6,y+60);ctx.lineTo(px,y+70);ctx.fill()}}ctx.save();ctx.shadowBlur=14;ctx.shadowColor='#a6edb1';round(x+16,y+14,w-32,7,4,'#cdf5b8');ctx.restore();text('水培温室',x+w/2,y+83,12,'#ecffe1')}
+function drawGarden(r,t){let x=r.x*T,y=r.y*T,w=4*T,h=3*T;round(x+3,y+4,w-6,h-6,11,'#65836c');round(x+8,y+9,w-16,h-17,8,'#a7ba83');for(let i=0;i<4;i++){let px=x+22+i*26;ctx.strokeStyle='#49815d';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(px,y+70);ctx.lineTo(px,y+37);ctx.stroke();for(let n=0;n<5;n++){let a=n*Math.PI*2/5;ctx.fillStyle=['#f4baca','#eecf81','#e8bdf1'][i%3];ctx.beginPath();ctx.arc(px+Math.cos(a)*7,y+34+Math.sin(a)*7,5,0,7);ctx.fill()}ctx.fillStyle='#fff4bf';ctx.beginPath();ctx.arc(px,y+34,4,0,7);ctx.fill()}text('小花园',x+w/2,y+83,12,'#fefad2')}
+function drawFriends(t){const people=[{x:18.5,y:11},{x:24.1,y:11}];for(let i=0;i<people.length;i++){let p=people[i],x=p.x*T+Math.sin(t*.8+i)*7,y=p.y*T-17+Math.sin(t*2+i)*2;ctx.fillStyle=i?'#e9b6a7':'#a8ba8e';ctx.beginPath();ctx.arc(x,y,12,0,7);ctx.fill();ctx.beginPath();ctx.arc(x-7,y-10,5,0,7);ctx.arc(x+7,y-10,5,0,7);ctx.fill();ctx.fillStyle='#403c38';ctx.beginPath();ctx.arc(x-4,y-2,1.8,0,7);ctx.arc(x+4,y-2,1.8,0,7);ctx.fill();ctx.fillStyle='#d98a82';ctx.beginPath();ctx.arc(x,y+3,2.5,0,7);ctx.fill()}}
+function shadeNight(t){if(state.lit)return;ctx.fillStyle='#07131f83';ctx.fillRect(0,SURFACE*T,W*T,(H-SURFACE)*T);let x=21*T,y=9*T;const g=ctx.createRadialGradient(x,y,40,x,y,250);g.addColorStop(0,'#c6ad8248');g.addColorStop(1,'#26374700');ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,250,0,7);ctx.fill()}
+function drawTarget(t){if(modeFree&&state.stage===11)return;let st=state.stage,tar=target();if(st===11)return;
+ ctx.save();const pulse=0.45+.45*Math.sin(t*3);let color=[0,1,6].includes(st)?'#8ceaff':'#ffdf97';ctx.lineWidth=3+pulse*2;ctx.strokeStyle=color;ctx.setLineDash([7,6]);
+ if(st===0){for(let [x,y] of ENERGY_PATH)if(state.tiles[y][x]===1)ctx.strokeRect(x*T+2,y*T+2,T-4,T-4)}
+ else if(st===5){for(let [x,y] of WATER_PATH)if(state.tiles[y][x]===1)ctx.strokeRect(x*T+2,y*T+2,T-4,T-4)}
+ else if(st===3||st===7){for(let y=tar.y;y<tar.y+tar.h;y++)for(let x=tar.x;x<tar.x+tar.w;x++)if(state.tiles[y][x]===1){ctx.fillStyle='#fce5a922';ctx.fillRect(x*T,y*T,T,T)}ctx.strokeRect(tar.x*T,tar.y*T,tar.w*T,tar.h*T)}
+ else if(st===9||st===10)ctx.strokeRect(tar.x*T-3,tar.y*T-3,tar.w*T+6,tar.h*T+6);
+ else ctx.strokeRect((tar.x-.25)*T,(tar.y-.25)*T,((tar.w||1)+.5)*T,((tar.h||1)+.5)*T);
+ ctx.setLineDash([]);let x=(tar.x+(tar.w||1)/2)*T,y=(tar.y+(tar.h||1)/2)*T;
+ const lab=st===0?'⛏️ 挖开蓝光旁的泥土':st===1?'💎 收集能源石':st===2?'💡 修复机器':st===3?'⛏️ 挖出房间':st===4?'🛏️ 放置睡眠舱':st===5?'⛏️ 向泉水挖通道':st===6?'💧 启用泉水':st===7?'⛏️ 挖出温室空间':st===8?'🌱 放置温室':st===9?'💦 点击浇水':'🥕 等成熟再点采收';
+ text(lab,x,(tar.y-.65)*T,14,'#fff2c8');ctx.restore()}
+function draw(t){ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,cw,ch);ctx.fillStyle='#293942';ctx.fillRect(0,0,cw,ch);ctx.save();ctx.scale(camera.z,camera.z);ctx.translate(-camera.x,-camera.y);drawSurface(t);drawCave();for(const l of state.ladder)drawLadder(l.x,l.y);drawGenerator(t);drawCrystal(t);drawSpring(t);for(let r of state.rooms){if(r.type==='sleep')drawSleep(r,t);else if(r.type==='farm')drawFarm(r,t);else drawGarden(r,t)}drawFriends(t);shadeNight(t);if(state.lit){for(let i=0;i<7;i++){let x=(17.1+i*1.1)*T,y=7.3*T;ctx.save();ctx.shadowColor='#ffe3a6';ctx.shadowBlur=12;ctx.fillStyle='#ffe4a9';ctx.beginPath();ctx.arc(x,y,3.2,0,7);ctx.fill();ctx.restore()}}drawTarget(t);
+ if(hover&&tool==='dig'&&!drag?.moved&&hover.y>=SURFACE&&hover.y<H&&hover.x>=0&&hover.x<W){const t=state.tiles[hover.y][hover.x];ctx.strokeStyle=t===1?'#f3edbc':t===2?'#98a9be':'#a4aaa9';ctx.lineWidth=2;ctx.strokeRect(hover.x*T+2,hover.y*T+2,T-4,T-4)}else if(hover&&roomDefs[tool]){const d=roomDefs[tool],rx=hover.x-Math.floor(d.w/2),ry=hover.y-Math.floor(d.h/2),focus=state.stage===4&&tool==='sleep'?targetRoom.sleep:state.stage===8&&tool==='farm'?targetRoom.farm:null;const q=focus&&hit(hover.x,hover.y,focus,1)?focus:{x:rx,y:ry};const ok=canPlace(tool,q.x,q.y);ctx.fillStyle=ok?'#b4f2ac8a':'#f6ad9a77';ctx.fillRect(q.x*T,q.y*T,d.w*T,d.h*T);ctx.strokeStyle=ok?'#b7ffc3':'#ffbba4';ctx.lineWidth=2;ctx.strokeRect(q.x*T,q.y*T,d.w*T,d.h*T)}ctx.restore()}
+let lastRender=0,lastSecond=0;function frame(ms){let dt=Math.min(.6,(ms-last)/1000||0);last=ms;anim+=dt;
+ if(state.stage===10){state.harvest=clamp((Date.now()-(state.growStart||Date.now()))/14500,0,1);if(ms-lastSecond>550){updateTexts();lastSecond=ms}}
+ if(state&&ms-lastRender>34){draw(anim);lastRender=ms}requestAnimationFrame(frame)}
+el('guideBtn').onclick=guide;el('hintBtn').onclick=()=>notify(goals[state.stage].tip);el('freeBtn').onclick=()=>{modeFree=!modeFree;refreshTools();notify(modeFree?'🧱 可以自由挖松软泥土，坚硬岩石暂不可挖':'🌙 继续跟随第一夜冒险')};el('undoBtn').onclick=undo;el('saveBtn').onclick=()=>save(false);el('resetBtn').onclick=()=>{if(confirm('重新开始第一夜吗？当前家园会被清空。建议先备份哦。')){state=fresh();modeFree=false;saves=[];refresh();saveSoon();center(20,10);notify('🌙 新的第一夜开始啦！')}};el('keepBtn').onclick=()=>{el('celebration').classList.remove('show');modeFree=true;refreshTools();center(22,10);notify('🎉 可以在松软泥土中继续自由建设，坚硬岩石以后再探索！')};el('zoomIn').onclick=()=>zoom(.13);el('zoomOut').onclick=()=>zoom(-.13);el('centerBtn').onclick=()=>center(21,10);c.addEventListener('pointerdown',handleDown);c.addEventListener('pointermove',handleMove);c.addEventListener('pointerup',handleUp);c.addEventListener('pointercancel',e=>{activeTouches.delete(e.pointerId);drag=null});c.addEventListener('contextmenu',e=>e.preventDefault());c.addEventListener('wheel',e=>{e.preventDefault();zoom(e.deltaY>0?-.09:.09)},{passive:false});window.addEventListener('keydown',e=>{if(e.ctrlKey&&e.key.toLowerCase()==='z'){e.preventDefault();undo()}if(e.key==='Escape'&&el('celebration').classList.contains('show'))el('celebration').classList.remove('show')});el('exportBtn').onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});let url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='地下小家园-第一夜存档.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),250)};el('importBtn').onclick=()=>el('importFile').click();el('importFile').onchange=async e=>{let f=e.target.files[0];if(!f)return;try{let data=JSON.parse(await f.text());if(!valid(data))throw Error();snapshot();state=data;refresh();saveSoon();notify('✅ 地下家园恢复成功！')}catch{notify('⚠️ 不是有效的第一夜存档')}e.target.value=''};window.addEventListener('resize',()=>{resize();boundCamera()});document.addEventListener('visibilitychange',()=>{if(document.hidden)save(true)});
+try{const obj=JSON.parse(localStorage.getItem(SAVE)||'null');state=valid(obj)?obj:fresh()}catch{state=fresh()}resize();camera.z=clamp(cw/820,.85,1.35);center(21,10);refresh();requestAnimationFrame(frame);if(state.stage===0)notify('🌪️ 先挖开棕色泥土，找到能源石！灰色岩石暂时挖不动');
+})();
+</script></body></html>
