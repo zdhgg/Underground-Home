@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { Container, Sprite, Text, Texture, TextureSource, type Graphics } from 'pixi.js'
+import { Container, Sprite, Text, Texture, TextureSource, type Graphics, type Ticker } from 'pixi.js'
 import { dig } from '../src/core/dig'
 import { createDigHistory } from '../src/core/history'
 import { collectCrystal, repairCore } from '../src/core/interact'
@@ -7,6 +7,8 @@ import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE } from '../sr
 import { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrainTextures'
 import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
+import { loadCrystalTexture } from '../src/render/crystalTexture'
+import type { CrystalFeedback } from '../src/render/CrystalFeedback'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -31,6 +33,10 @@ vi.mock('../src/render/energyCoreTexture', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/energyCoreTexture')>(),
   loadEnergyCoreTexture: vi.fn(),
 }))
+vi.mock('../src/render/crystalTexture', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/crystalTexture')>(),
+  loadCrystalTexture: vi.fn(),
+}))
 
 function texture(size = 64): Texture {
   return new Texture({ source: new TextureSource({ width: size, height: size }) })
@@ -51,6 +57,12 @@ interface TerrainProbe {
   landmarkLayer: Container
   glowLayer: Container
   machineGlow: Graphics
+  crystal: Container | null
+  crystalFeedback: CrystalFeedback
+  lightLevel: number
+  spinUp: number
+  cameraTween: unknown
+  tick(ticker: Ticker): void
   updateTerrainCell(x: number, y: number): void
 }
 
@@ -67,6 +79,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({
       source: new TextureSource({ width: 1536, height: 1024 }),
     }))
+    vi.mocked(loadCrystalTexture).mockResolvedValue(texture(1254))
     renderer = await PixiWorldRenderer.create({ appendChild: vi.fn() } as unknown as HTMLElement)
     view = renderer as unknown as TerrainProbe
     world = createInitialWorld()
@@ -198,5 +211,60 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     assertCore('能源核心 · 等待能源石', 0xfff0d0)
     expect(repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y).ok).toBe(true)
     assertCore('能源核心 · 运行中', 0xeafff2)
+  })
+
+  it('能源石埋藏时只有微光，挖开显示PNG，收集后消失', () => {
+    expect(view.crystal?.children.some((child) => child instanceof Sprite)).toBe(false)
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    renderer.refresh()
+    const stone = view.crystal?.children.find((child) => child instanceof Sprite)
+    expect(stone).toBeDefined()
+    expect(stone!.height).toBe(48)
+    expect(collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y).ok).toBe(true)
+    renderer.refresh()
+    renderer.playCrystalCollection()
+    expect(view.crystal).toBeNull()
+    expect(view.crystalFeedback.view.visible).toBe(true)
+    const snapshot = JSON.stringify(world)
+    for (let i = 0; i < 5; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(view.crystalFeedback.view.visible).toBe(false)
+    expect(JSON.stringify(world)).toBe(snapshot)
+  })
+
+  it('安装动画结束才启动和点灯；任务及存档立即完成，载入已完成世界不重播', () => {
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    renderer.refresh()
+    renderer.playRepairCelebration()
+    const snapshot = JSON.stringify(world)
+    expect(view.crystalFeedback.installing).toBe(true)
+    for (let i = 0; i < 5; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(view.lightLevel).toBe(0)
+    expect(view.spinUp).toBe(0)
+    for (let i = 0; i < 3; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(view.crystalFeedback.installing).toBe(false)
+    expect(view.spinUp).toBeGreaterThan(0)
+    expect(view.lightLevel).toBeGreaterThan(0)
+    expect(JSON.stringify(world)).toBe(snapshot)
+    renderer.playRepairCelebration()
+    renderer.setWorld(world)
+    expect(view.crystalFeedback.installing).toBe(false)
+    expect(view.lightLevel).toBe(1)
+    expect(view.spinUp).toBe(0)
+    expect(view.crystal).toBeNull()
+  })
+
+  it('安装期间手动平移仍能取消自动拉远，晶体安装与启动继续完成', () => {
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    renderer.refresh()
+    renderer.playRepairCelebration()
+    renderer.panBy(20, 0)
+    for (let i = 0; i < 10; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(view.cameraTween).toBeNull()
+    expect(view.crystalFeedback.installing).toBe(false)
+    expect(view.spinUp).toBeGreaterThan(0)
   })
 })

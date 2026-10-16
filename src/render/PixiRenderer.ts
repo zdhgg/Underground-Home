@@ -13,6 +13,8 @@ import {
 } from '../core/world'
 import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from './terrainTextures'
 import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTexture } from './energyCoreTexture'
+import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
+import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -38,7 +40,6 @@ const COLORS = {
   coreReadyInner: 0xfff0d0,
   coreOn: 0x8eebc1,
   coreOnInner: 0xeafff2,
-  crystal: 0x9ee7f4,
   crystalGlow: 0x8dedfd,
   water: 0x5fb7d6,
   labelCream: 0xeae6d8,
@@ -162,7 +163,8 @@ export class PixiWorldRenderer {
   private readonly effects = new Graphics()
   private readonly hover = new Graphics()
 
-  private crystal: Graphics | null = null
+  private crystal: Container | null = null
+  private readonly crystalFeedback: CrystalFeedback
   private springGlow: Graphics | null = null
   private machineGlow: Graphics | null = null
   private friends: FriendSprite[] = []
@@ -188,7 +190,9 @@ export class PixiWorldRenderer {
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
-    const [textures, energyCoreTexture] = await Promise.all([loadTerrainTextures(), loadEnergyCoreTexture()])
+    const [textures, energyCoreTexture, crystalTexture] = await Promise.all([
+      loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(),
+    ])
     const app = new Application()
     await app.init({
       background: COLORS.caveDeep,
@@ -199,14 +203,16 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures, energyCoreTexture)
+    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture)
   }
 
   private constructor(
     private readonly app: Application,
     private readonly textures: TerrainTextures,
     private readonly energyCoreTexture: Texture,
+    private readonly crystalTexture: Texture,
   ) {
+    this.crystalFeedback = new CrystalFeedback(crystalTexture)
     this.viewport = { width: app.screen.width, height: app.screen.height }
     // 地形：底色 → 洞穴背景 → 瓦片与边缘
     this.buildBackdrop()
@@ -224,6 +230,7 @@ export class PixiWorldRenderer {
       this.lamps,
       this.highlightGfx,
       this.effects,
+      this.crystalFeedback.view,
       this.hover,
     )
     app.stage.addChild(this.worldLayer)
@@ -237,6 +244,11 @@ export class PixiWorldRenderer {
 
   /** 绑定世界数据（初始加载与替换时调用） */
   setWorld(world: WorldState): void {
+    this.crystalFeedback.reset()
+    this.spinUp = 0
+    this.pendingCelebration = false
+    this.celebrationTime = 0
+    this.cameraTween = null
     this.world = world
     this.lightLevel = world.progress.coreRepaired ? 1 : 0
     this.refresh()
@@ -341,16 +353,37 @@ export class PixiWorldRenderer {
     }
   }
 
-  /** 修复能源核心的整体演出：机器启动，随后镜头拉开展示点亮后的家园 */
+  /** 收集成功后的晶体上浮消失；世界状态已经由规则层确定。 */
+  playCrystalCollection(): void {
+    const x = (LANDMARKS.crystal.x + 0.5) * TILE_SIZE
+    const y = (LANDMARKS.crystal.y + 0.5) * TILE_SIZE
+    this.crystalFeedback.playCollection({ x, y })
+    this.playBurst(x, y, { color: COLORS.crystalGlow, count: 10, speed: 75 })
+  }
+
+  /** 先将已携带的能源石送入槽口，再衔接原来的启动和点灯演出。 */
   playRepairCelebration(): void {
-    this.spinUp = 1.2
-    this.pendingCelebration = true
+    this.crystalFeedback.playInstallation({
+      x: (LANDMARKS.generator.x + 0.5) * TILE_SIZE,
+      y: (LANDMARKS.generator.y + 0.5) * TILE_SIZE,
+    })
+    this.rebuildLandmarks()
+    // 提前排入镜头演出，使安装期间的手动平移 / 缩放仍能取消自动拉远。
     this.cameraTween = {
       from: { ...this.camera },
       to: this.computeRepairShowcase(),
-      elapsed: -0.7,
+      elapsed: -(CRYSTAL_INSTALL_DURATION + 0.7),
       duration: 1.3,
     }
+  }
+
+  private startRepairCelebration(): void {
+    this.rebuildLandmarks()
+    this.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
+      color: COLORS.warmGlow, count: 16, speed: 95, ring: true, ringRadius: 110,
+    })
+    this.spinUp = 1.2
+    this.pendingCelebration = true
   }
 
   /** 初始 / 回家视角：一眼看到避难所、能源核心和左侧的能源石区 */
@@ -408,6 +441,7 @@ export class PixiWorldRenderer {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
     this.elapsed += dt
     this.syncViewport()
+    if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
     this.updateCameraTween(dt)
     this.drawWind(this.elapsed)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
@@ -467,7 +501,7 @@ export class PixiWorldRenderer {
   // ---------- 内部：光照 ----------
 
   private updateLighting(dt: number): void {
-    const target = this.world?.progress.coreRepaired ? 1 : 0
+    const target = this.world?.progress.coreRepaired && !this.crystalFeedback.installing ? 1 : 0
     if (Math.abs(this.lightLevel - target) < 0.002) {
       this.lightLevel = target
     } else {
@@ -522,7 +556,7 @@ export class PixiWorldRenderer {
     const world = this.world
     if (!glow || !world) return
     const { crystalCollected, coreRepaired } = world.progress
-    if (coreRepaired) {
+    if (coreRepaired && !this.crystalFeedback.installing) {
       // 启动瞬间快速闪烁，随后稳定运转
       glow.alpha = this.spinUp > 0 ? 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(this.elapsed * 28)) : 1
     } else if (crystalCollected) {
@@ -783,7 +817,8 @@ export class PixiWorldRenderer {
     this.landmarkLayer.addChild(ladder)
 
     // 能源核心：机身（结构层）
-    const repaired = world.progress.coreRepaired
+    const installing = this.crystalFeedback.installing
+    const repaired = world.progress.coreRepaired && !installing
     const ready = world.progress.crystalCollected && !repaired
     const generatorX = (LANDMARKS.generator.x + 0.5) * T
     const generatorY = (LANDMARKS.generator.y + 0.5) * T
@@ -810,7 +845,7 @@ export class PixiWorldRenderer {
     }
     this.machineGlow = machineGlow
     this.glowLayer.addChild(machineGlow)
-    const machineLabel = repaired ? '能源核心 · 运行中' : ready ? '能源核心 · 等待能源石' : '能源核心 · 待修复'
+    const machineLabel = installing ? '能源核心 · 正在安装' : repaired ? '能源核心 · 运行中' : ready ? '能源核心 · 等待能源石' : '能源核心 · 待修复'
     const machineLabelColor = repaired ? COLORS.labelOn : ready ? COLORS.labelReady : COLORS.labelDim
     this.glowLayer.addChild(this.makeLabel(machineLabel, generatorX, generatorY + 52, machineLabelColor))
 
@@ -834,19 +869,19 @@ export class PixiWorldRenderer {
     const crystalX = (LANDMARKS.crystal.x + 0.5) * T
     const crystalY = (LANDMARKS.crystal.y + 0.5) * T
     if (!collected) {
-      const crystal = new Graphics()
+      const crystal = new Container()
+      const halo = new Graphics()
       if (revealed) {
-        crystal
-          .moveTo(crystalX, crystalY - 22)
-          .lineTo(crystalX + 17, crystalY - 8)
-          .lineTo(crystalX + 6, crystalY + 19)
-          .lineTo(crystalX - 14, crystalY + 8)
-          .closePath()
-          .fill(COLORS.crystal)
-        crystal.circle(crystalX, crystalY, 30).fill({ color: COLORS.crystalGlow, alpha: 0.18 })
+        halo.circle(crystalX, crystalY, 30).fill({ color: COLORS.crystalGlow, alpha: 0.18 })
+        const sprite = new Sprite(this.crystalTexture)
+        sprite.anchor.set(0.5)
+        sprite.position.set(crystalX, crystalY)
+        sprite.scale.set(CRYSTAL_DISPLAY_HEIGHT / this.crystalTexture.height)
+        crystal.addChild(halo, sprite)
         this.glowLayer.addChild(this.makeLabel('能源石', crystalX, crystalY - 38, COLORS.crystalGlow))
       } else {
-        crystal.circle(crystalX, crystalY, 24).fill({ color: COLORS.crystalGlow, alpha: 0.12 })
+        halo.circle(crystalX, crystalY, 24).fill({ color: COLORS.crystalGlow, alpha: 0.12 })
+        crystal.addChild(halo)
       }
       this.crystal = crystal
       this.glowLayer.addChild(crystal)

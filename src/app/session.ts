@@ -156,11 +156,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         const result = collectCrystal(world, cell.x, cell.y)
         if (result.ok) {
           renderer.refresh()
-          renderer.playBurst((LANDMARKS.crystal.x + 0.5) * TILE_SIZE, (LANDMARKS.crystal.y + 0.5) * TILE_SIZE, {
-            color: 0x8dedfd,
-            count: 10,
-            speed: 75,
-          })
+          renderer.playCrystalCollection()
           scheduleSave()
           pushProgress()
           hooks.onMessage('💎 能源石收好啦！')
@@ -184,13 +180,6 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
         renderer.refresh()
-        renderer.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
-          color: 0xffd9a0,
-          count: 16,
-          speed: 95,
-          ring: true,
-          ringRadius: 110,
-        })
         renderer.playRepairCelebration()
         scheduleSave()
         pushProgress()
