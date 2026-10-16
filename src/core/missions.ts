@@ -1,18 +1,17 @@
-import { LANDMARKS, TILE, tileAt, type WorldState } from './world'
+import { LANDMARKS, type Rect, type WorldState } from './world'
 
 /**
  * 任务（missions）：给"问题和目标"，不规定唯一解。
- * 每个任务的 isDone 只依赖世界数据本身（而不是玩家经过了哪些操作），
- * 因此自由建设、打乱顺序也能被正确判定。
- * P0 只实现第一夜真实目标的第一个；睡眠舱 / 泉水 / 温室在后续阶段追加。
+ * 完成判定只依赖世界数据（进度位 + 地图），与玩家的操作顺序无关；
+ * 进度位单调（撤销挖掘不会让任务回退），自由建设打乱节奏也能正确判定。
  */
 export interface Mission {
   id: string
-  /** 一句话目标（面板标题） */
+  /** 一句话目标（徽章标题） */
   title: string
-  /** 为什么做 */
-  why: string
-  /** 现在该做什么 */
+  /** 小鼹鼠阿土说的话：为什么 + 现在要做什么（面向 7 岁儿童） */
+  speech: string
+  /** 现在做什么（短句） */
   todo: string
   /** 做完会发生什么 */
   outcome: string
@@ -20,18 +19,31 @@ export interface Mission {
   isDone: (world: WorldState) => boolean
 }
 
-const isCrystalRevealed = (world: WorldState): boolean =>
-  tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y) === TILE.EMPTY
-
-/** 第一夜任务表 */
+/** 第一夜主线：找到能源石 → 收好它 → 修好能源核心点亮家园 */
 export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'find-energy-stone',
     title: '找到发光的能源石',
-    why: '避难所又黑又冷，要点亮灯光，先得找到能量。',
-    todo: '挖开左边泛着蓝光的松软泥土，把能源石露出来。',
-    outcome: '露出能源石后，就能修复能源核心，让地下亮起来。',
-    isDone: isCrystalRevealed,
+    speech: '外面风好大，家里黑漆漆的……左边那几块泥土里透着蓝光，那里一定藏着能量！',
+    todo: '点一点发蓝光的泥土，一格一格挖开它。挖错了可以撤销。',
+    outcome: '把能源石露出来，就能把它收好带走。',
+    isDone: (world) => world.progress.crystalFound,
+  },
+  {
+    id: 'collect-energy-stone',
+    title: '收好能源石',
+    speech: '找到啦！这块亮晶晶的石头就是能源石，快收好它！',
+    todo: '点一下露出来的蓝色能源石。',
+    outcome: '带上能源石，就能去修好中间的大机器。',
+    isDone: (world) => world.progress.crystalCollected,
+  },
+  {
+    id: 'repair-energy-core',
+    title: '修好能源核心，点亮家园',
+    speech: '把能源石放进中间的大机器，它就能重新转起来！',
+    todo: '点一下大厅中间的能源核心。',
+    outcome: '机器一运转，地下的灯就会全部亮起来！',
+    isDone: (world) => world.progress.coreRepaired,
   },
 ]
 
@@ -54,4 +66,19 @@ export function currentMission(world: WorldState): Mission | null {
 export function missionSummary(world: WorldState): { done: number; total: number } {
   const progress = getMissionProgress(world)
   return { done: progress.filter((item) => item.done).length, total: progress.length }
+}
+
+/** 当前步骤在地图上的高亮指引（线索，不是唯一挖法） */
+export type GuideHighlight =
+  | { kind: 'dig'; rect: Rect }
+  | { kind: 'collect'; rect: Rect }
+  | { kind: 'repair'; rect: Rect }
+  | { kind: 'none' }
+
+export function guideHighlight(world: WorldState): GuideHighlight {
+  const { crystalFound, crystalCollected, coreRepaired } = world.progress
+  if (!crystalFound) return { kind: 'dig', rect: LANDMARKS.crystalZone }
+  if (!crystalCollected) return { kind: 'collect', rect: LANDMARKS.crystalZone }
+  if (!coreRepaired) return { kind: 'repair', rect: LANDMARKS.generatorZone }
+  return { kind: 'none' }
 }

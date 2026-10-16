@@ -23,8 +23,8 @@ export const TILE_SIZE = 32
 /** 地表行：y < SURFACE_Y 为天空，y >= SURFACE_Y 为地层 */
 export const SURFACE_Y = 4
 
-/** 世界结构版本号，结构变化时递增（存档会校验） */
-export const WORLD_VERSION = 1
+/** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
+export const WORLD_VERSION = 2
 
 export interface Rect {
   x: number
@@ -46,13 +46,27 @@ export const LANDMARKS = {
   shaft: { x: 21, y: 4, w: 2, h: 4 },
   /** 能源石（埋在松软泥土里，挖开即露出） */
   crystal: { x: 14, y: 9 },
-  /** 能源核心（位于大厅中，P1 点亮） */
+  /** 能源石互动区（点按收集的容错范围） */
+  crystalZone: { x: 13, y: 8, w: 3, h: 3 },
+  /** 能源核心（位于大厅中，P1 修复后点亮家园） */
   generator: { x: 21, y: 9 },
+  /** 能源核心互动区（点按修复的容错范围） */
+  generatorZone: { x: 19, y: 8, w: 4, h: 3 },
   /** 地下泉水（隐约可见，P3 使用） */
   spring: { x: 31, y: 15 },
 } as const satisfies Record<string, Rect | Cell>
 
-/** 世界状态：一张固定小地图 */
+/** 第一夜的进度位：全部单调，不因撤销回退 */
+export interface WorldProgress {
+  /** 挖开过能源石所在泥土（发现能源石） */
+  crystalFound: boolean
+  /** 能源石已收集到手 */
+  crystalCollected: boolean
+  /** 能源核心已修复（家园点亮） */
+  coreRepaired: boolean
+}
+
+/** 世界状态：一张固定小地图 + 第一夜进度 */
 export interface WorldState {
   version: number
   width: number
@@ -61,6 +75,7 @@ export interface WorldState {
   tiles: TileType[][]
   /** 累计挖开格数（展示与统计用） */
   dugCount: number
+  progress: WorldProgress
 }
 
 /**
@@ -93,7 +108,14 @@ export function createInitialWorld(): WorldState {
   )
   for (const rect of SOFT_POCKETS) fillRect(tiles, rect, TILE.SOIL)
   for (const rect of CARVED_CAVES) fillRect(tiles, rect, TILE.EMPTY)
-  return { version: WORLD_VERSION, width: MAP_WIDTH, height: MAP_HEIGHT, tiles, dugCount: 0 }
+  return {
+    version: WORLD_VERSION,
+    width: MAP_WIDTH,
+    height: MAP_HEIGHT,
+    tiles,
+    dugCount: 0,
+    progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
+  }
 }
 
 /** 坐标是否在地图内 */

@@ -53,10 +53,18 @@ describe('挖掘规则', () => {
     expect(world.dugCount).toBe(0)
   })
 
-  it('挖开能源石所在的泥土后，能源石露出（格子变空）', () => {
+  it('挖开能源石所在的泥土后，能源石露出并记为"已发现"', () => {
     const world = createInitialWorld()
+    expect(world.progress.crystalFound).toBe(false)
     const result = dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     expect(result.ok).toBe(true)
     expect(tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)).toBe(TILE.EMPTY)
+    expect(world.progress.crystalFound).toBe(true)
+  })
+
+  it('挖别处不会误记"已发现能源石"', () => {
+    const world = createInitialWorld()
+    dig(world, 13, 9)
+    expect(world.progress.crystalFound).toBe(false)
   })
 })

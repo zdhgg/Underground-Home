@@ -1,4 +1,4 @@
-import { SURFACE_Y, TILE, isInside, type TileType, type WorldState } from './world'
+import { LANDMARKS, SURFACE_Y, TILE, isInside, type TileType, type WorldState } from './world'
 
 /** 挖掘失败原因（翻译成儿童可读的提示由界面层负责） */
 export type DigFailure =
@@ -41,6 +41,10 @@ export function dig(world: WorldState, x: number, y: number): DigResult {
   if (result.ok) {
     world.tiles[y][x] = TILE.EMPTY
     world.dugCount += 1
+    // 挖开能源石所在的泥土 = 发现能源石。进度位单调，撤销不会回退它。
+    if (x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y) {
+      world.progress.crystalFound = true
+    }
   }
   return result
 }

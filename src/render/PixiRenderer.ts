@@ -30,15 +30,47 @@ const COLORS = {
   machineInner: 0x273b48,
   machineCore: 0x5d6f78,
   machineCoreInner: 0x33474f,
+  machineOn: 0x4f7a68,
+  machineOnInner: 0x2e4f46,
+  coreOn: 0x8eebc1,
+  coreOnInner: 0xeafff2,
   crystal: 0x9ee7f4,
   crystalGlow: 0x8dedfd,
   water: 0x5fb7d6,
   labelCream: 0xeae6d8,
   labelDim: 0xcfd6cc,
-  labelWater: 0xa8e4f2,
+  labelOn: 0xbdf3d2,
+  lamp: 0xffe3a6,
+  lampCore: 0xfff3c8,
+  warmGlow: 0xffd9a0,
 } as const
 
+/** 地图上的高亮指引（由会话层根据任务状态计算后传入） */
+export interface HighlightSpec {
+  x: number
+  y: number
+  width: number
+  height: number
+  tone: 'cyan' | 'amber'
+}
+
 const LABEL_FONT = 'ui-rounded, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
+
+interface Particle {
+  x: number
+  y: number
+  vx: number
+  vy: number
+  age: number
+  life: number
+  size: number
+}
+
+interface FriendSprite {
+  view: Container
+  baseY: number
+  phase: number
+}
 
 function hash(x: number, y: number): number {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
@@ -47,23 +79,34 @@ function hash(x: number, y: number): number {
 
 /**
  * PixiJS 渲染器：只负责"世界 → 画面"。
- * 不包含任何游戏规则，挖掘判定由 core/dig 决定后再通知本层刷新。
+ * 不包含任何游戏规则；挖掘 / 互动判定由 core 决定后再通知本层刷新。
  */
 export class PixiWorldRenderer {
   private readonly worldLayer = new Container()
   private readonly terrain = new Graphics()
   private readonly wind = new Graphics()
   private readonly landmarkLayer = new Container()
+  private readonly glowLayer = new Container()
+  private readonly friendsLayer = new Container()
+  private readonly darkness = new Graphics()
+  private readonly lamps = new Graphics()
+  private readonly highlightGfx = new Graphics()
+  private readonly effects = new Graphics()
   private readonly hover = new Graphics()
 
   private crystal: Graphics | null = null
   private springGlow: Graphics | null = null
+  private friends: FriendSprite[] = []
+  private particles: Particle[] = []
+  private highlight: HighlightSpec | null = null
 
   private world: WorldState | null = null
   private hoverCell: Cell | null = null
   private camera: Camera = { x: 0, y: 0, zoom: 1 }
   private viewport: Viewport
   private elapsed = 0
+  /** 0 = 全黑，1 = 灯火通明（修复能源核心后平滑过渡） */
+  private lightLevel = 0
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     const app = new Application()
@@ -81,7 +124,19 @@ export class PixiWorldRenderer {
 
   private constructor(private readonly app: Application) {
     this.viewport = { width: app.screen.width, height: app.screen.height }
-    this.worldLayer.addChild(this.terrain, this.wind, this.landmarkLayer, this.hover)
+    // 顺序即光照逻辑：结构在黑暗之下，发光物与标签在黑暗之上
+    this.worldLayer.addChild(
+      this.terrain,
+      this.wind,
+      this.landmarkLayer,
+      this.friendsLayer,
+      this.darkness,
+      this.glowLayer,
+      this.lamps,
+      this.highlightGfx,
+      this.effects,
+      this.hover,
+    )
     app.stage.addChild(this.worldLayer)
     app.ticker.add(this.tick)
   }
@@ -94,14 +149,39 @@ export class PixiWorldRenderer {
   /** 绑定世界数据（初始加载与替换时调用） */
   setWorld(world: WorldState): void {
     this.world = world
+    this.lightLevel = world.progress.coreRepaired ? 1 : 0
     this.refresh()
   }
 
-  /** 世界数据变化后刷新画面（挖掘后调用） */
+  /** 世界数据变化后刷新画面（挖掘 / 互动 / 撤销后调用） */
   refresh(): void {
     this.rebuildTerrain()
     this.rebuildLandmarks()
+    this.rebuildFriends()
     this.redrawHover()
+  }
+
+  /** 设置地图高亮指引；传 null 清除 */
+  setHighlight(spec: HighlightSpec | null): void {
+    this.highlight = spec
+  }
+
+  /** 在某个格子播放挖掘尘土效果 */
+  playDigEffect(cell: Cell): void {
+    const cx = (cell.x + 0.5) * TILE_SIZE
+    const cy = (cell.y + 0.5) * TILE_SIZE
+    for (let i = 0; i < 5; i++) {
+      const angle = (Math.PI * 2 * i) / 5 + hash(cell.x + i, cell.y) * 0.8
+      this.particles.push({
+        x: cx + Math.cos(angle) * 6,
+        y: cy + Math.sin(angle) * 6,
+        vx: Math.cos(angle) * 46,
+        vy: Math.sin(angle) * 46 - 26,
+        age: 0,
+        life: 0.45,
+        size: 3 + hash(i, cell.x) * 2.5,
+      })
+    }
   }
 
   /** 初始视角：对准避难所 */
@@ -110,6 +190,12 @@ export class PixiWorldRenderer {
     const centerX = (LANDMARKS.generator.x + 0.5) * TILE_SIZE
     const centerY = (LANDMARKS.generator.y + 0.5) * TILE_SIZE - 60
     this.camera = centerOn(centerX, centerY, this.viewport, zoom)
+    this.applyCamera()
+  }
+
+  /** 把某个世界坐标居中（"带我去看看"） */
+  focusOn(worldX: number, worldY: number): void {
+    this.camera = centerOn(worldX, worldY, this.viewport, this.camera.zoom)
     this.applyCamera()
   }
 
@@ -146,9 +232,14 @@ export class PixiWorldRenderer {
   // ---------- 内部：逐帧 ----------
 
   private readonly tick = (ticker: Ticker): void => {
-    this.elapsed += ticker.deltaMS / 1000
+    const dt = Math.min(0.1, ticker.deltaMS / 1000)
+    this.elapsed += dt
     this.syncViewport()
     this.drawWind(this.elapsed)
+    this.updateLighting(dt)
+    this.drawHighlight()
+    this.updateFriends()
+    this.updateParticles(dt)
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
   }
@@ -167,7 +258,129 @@ export class PixiWorldRenderer {
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
   }
 
-  // ---------- 内部：绘制 ----------
+  // ---------- 内部：光照 ----------
+
+  private updateLighting(dt: number): void {
+    const target = this.world?.progress.coreRepaired ? 1 : 0
+    if (Math.abs(this.lightLevel - target) < 0.002) {
+      this.lightLevel = target
+    } else {
+      this.lightLevel += (target - this.lightLevel) * Math.min(1, dt * 2.2)
+    }
+    this.drawLighting()
+  }
+
+  private drawLighting(): void {
+    const g = this.darkness
+    g.clear()
+    const lampG = this.lamps
+    lampG.clear()
+    if (!this.world) return
+
+    // 未点亮时的地下昏暗 + 能源核心周围的微弱暖光
+    const darkAlpha = 0.42 * (1 - this.lightLevel)
+    if (darkAlpha > 0.01) {
+      g.rect(0, SURFACE_Y * TILE_SIZE, WORLD_PIXEL_WIDTH, WORLD_PIXEL_HEIGHT - SURFACE_Y * TILE_SIZE).fill({
+        color: 0x0a1620,
+        alpha: darkAlpha,
+      })
+      const gx = (LANDMARKS.generator.x + 0.5) * TILE_SIZE
+      const gy = (LANDMARKS.generator.y + 0.5) * TILE_SIZE
+      const warm = 0.11 * (1 - this.lightLevel)
+      g.circle(gx, gy, 300).fill({ color: COLORS.warmGlow, alpha: warm * 0.3 })
+      g.circle(gx, gy, 190).fill({ color: COLORS.warmGlow, alpha: warm * 0.4 })
+      g.circle(gx, gy, 100).fill({ color: COLORS.warmGlow, alpha: warm * 0.5 })
+    }
+
+    // 修复后：大厅顶部一排暖灯
+    if (this.lightLevel > 0.02) {
+      const flicker = 0.88 + 0.12 * Math.sin(this.elapsed * 2.6)
+      for (let i = 0; i < 7; i++) {
+        const lx = (17.1 + i * 1.15) * TILE_SIZE
+        const ly = 7.35 * TILE_SIZE
+        lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * this.lightLevel * flicker })
+        lampG.circle(lx, ly, 4.5).fill({ color: COLORS.lampCore, alpha: 0.95 * this.lightLevel })
+      }
+    }
+  }
+
+  // ---------- 内部：高亮指引 ----------
+
+  private drawHighlight(): void {
+    const g = this.highlightGfx
+    g.clear()
+    const spec = this.highlight
+    if (!spec) return
+    const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * 3)
+    const color = spec.tone === 'amber' ? 0xffdf97 : 0x8ceaff
+    g.rect(spec.x, spec.y, spec.width, spec.height).fill({ color, alpha: 0.05 + 0.07 * pulse })
+    const len = 16
+    const corners: Array<[number, number, number, number]> = [
+      [spec.x, spec.y, 1, 1],
+      [spec.x + spec.width, spec.y, -1, 1],
+      [spec.x, spec.y + spec.height, 1, -1],
+      [spec.x + spec.width, spec.y + spec.height, -1, -1],
+    ]
+    for (const [cx, cy, dx, dy] of corners) {
+      g.moveTo(cx, cy + dy * len).lineTo(cx, cy).lineTo(cx + dx * len, cy)
+    }
+    g.stroke({ width: 4, color, alpha: 0.45 + 0.45 * pulse })
+  }
+
+  // ---------- 内部：伙伴与粒子 ----------
+
+  private rebuildFriends(): void {
+    this.friendsLayer.removeChildren()
+    this.friends = []
+    const world = this.world
+    if (!world) return
+    const spots = [
+      { x: 18.6, y: 11.45 },
+      { x: 23.9, y: 11.45 },
+    ]
+    spots.forEach((spot, i) => {
+      const view = new Container()
+      const body = new Graphics()
+      const bodyColor = i === 0 ? 0xa8ba8e : 0xe9b6a7
+      body.circle(0, 0, 13).fill(bodyColor)
+      body.circle(-7, -10, 5).fill(bodyColor)
+      body.circle(7, -10, 5).fill(bodyColor)
+      body.circle(-4, -2, 1.8).fill(0x403c38)
+      body.circle(4, -2, 1.8).fill(0x403c38)
+      body.circle(0, 4, 2.6).fill(0xd98a82)
+      view.addChild(body)
+      view.position.set(spot.x * TILE_SIZE, spot.y * TILE_SIZE)
+      this.friendsLayer.addChild(view)
+      this.friends.push({ view, baseY: spot.y * TILE_SIZE, phase: i * 1.7 })
+    })
+  }
+
+  private updateFriends(): void {
+    const repaired = this.world?.progress.coreRepaired ?? false
+    for (const friend of this.friends) {
+      const bounce = repaired
+        ? Math.abs(Math.sin(this.elapsed * 3 + friend.phase)) * 10
+        : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
+      friend.view.y = friend.baseY - bounce
+    }
+  }
+
+  private updateParticles(dt: number): void {
+    const g = this.effects
+    g.clear()
+    if (this.particles.length === 0) return
+    for (const p of this.particles) {
+      p.age += dt
+      p.x += p.vx * dt
+      p.y += p.vy * dt
+      p.vy += 90 * dt
+      const k = 1 - p.age / p.life
+      if (k > 0) g.circle(p.x, p.y, p.size * k).fill({ color: 0xc9a981, alpha: 0.8 * k })
+    }
+    this.particles = this.particles.filter((p) => p.age < p.life)
+  }
+
+  // ---------- 内部：静态绘制 ----------
 
   private rebuildTerrain(): void {
     const g = this.terrain
@@ -235,15 +448,15 @@ export class PixiWorldRenderer {
   }
 
   private rebuildLandmarks(): void {
-    const layer = this.landmarkLayer
-    layer.removeChildren()
+    this.landmarkLayer.removeChildren()
+    this.glowLayer.removeChildren()
     this.crystal = null
     this.springGlow = null
     const world = this.world
     if (!world) return
     const T = TILE_SIZE
 
-    // 竖井里的木梯
+    // 竖井里的木梯（结构层，受黑暗影响）
     const ladder = new Graphics()
     const ladderX = (LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * T
     const ladderTop = LANDMARKS.shaft.y * T
@@ -252,23 +465,41 @@ export class PixiWorldRenderer {
     ladder.moveTo(ladderX + 9, ladderTop).lineTo(ladderX + 9, ladderBottom)
     for (let y = ladderTop + 8; y < ladderBottom; y += 11) ladder.moveTo(ladderX - 9, y).lineTo(ladderX + 9, y)
     ladder.stroke({ width: 3, color: COLORS.wood, alpha: 0.9 })
-    layer.addChild(ladder)
+    this.landmarkLayer.addChild(ladder)
 
-    // 地表入口标签
-    layer.addChild(
-      this.makeLabel('避难所入口', (LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * T, SURFACE_Y * T - 16, COLORS.labelCream),
-    )
-
-    // 能源核心（旧机器，P1 修复后点亮）
+    // 能源核心：机身（结构层）
+    const repaired = world.progress.coreRepaired
     const generatorX = (LANDMARKS.generator.x + 0.5) * T
     const generatorY = (LANDMARKS.generator.y + 0.5) * T
     const machine = new Graphics()
-    machine.roundRect(generatorX - 52, generatorY - 34, 104, 68, 12).fill(COLORS.machine)
-    machine.roundRect(generatorX - 44, generatorY - 25, 88, 50, 8).fill(COLORS.machineInner)
-    machine.circle(generatorX, generatorY, 20).fill(COLORS.machineCore)
-    machine.circle(generatorX, generatorY, 11).fill(COLORS.machineCoreInner)
-    layer.addChild(machine)
-    layer.addChild(this.makeLabel('能源核心 · 待修复', generatorX, generatorY + 52, COLORS.labelDim))
+    machine.roundRect(generatorX - 52, generatorY - 34, 104, 68, 12).fill(repaired ? COLORS.machineOn : COLORS.machine)
+    machine.roundRect(generatorX - 44, generatorY - 25, 88, 50, 8).fill(repaired ? COLORS.machineOnInner : COLORS.machineInner)
+    this.landmarkLayer.addChild(machine)
+
+    // 能源核心：运转灯与标签（发光层，穿透黑暗）
+    const machineGlow = new Graphics()
+    if (repaired) {
+      machineGlow.circle(generatorX, generatorY, 40).fill({ color: COLORS.coreOn, alpha: 0.22 })
+      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.coreOn)
+      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.coreOnInner)
+    } else {
+      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.machineCore)
+      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.machineCoreInner)
+    }
+    this.glowLayer.addChild(machineGlow)
+    this.glowLayer.addChild(
+      this.makeLabel(
+        repaired ? '能源核心 · 运行中' : '能源核心 · 待修复',
+        generatorX,
+        generatorY + 52,
+        repaired ? COLORS.labelOn : COLORS.labelDim,
+      ),
+    )
+
+    // 地表入口标签
+    this.glowLayer.addChild(
+      this.makeLabel('避难所入口', (LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * T, SURFACE_Y * T - 16, COLORS.labelCream),
+    )
 
     // 地下泉水：藏在岩层里，只透出隐约蓝光（探索期待的伏笔）
     const spring = new Graphics()
@@ -277,28 +508,31 @@ export class PixiWorldRenderer {
     spring.ellipse(springX, springY, 26, 18).fill({ color: COLORS.water, alpha: 0.5 })
     spring.circle(springX, springY, 48).fill({ color: COLORS.water, alpha: 0.12 })
     this.springGlow = spring
-    layer.addChild(spring)
+    this.glowLayer.addChild(spring)
 
-    // 能源石：挖开泥土后露出；未挖开时只透出一点微光
+    // 能源石：露出且未收集时显示；收集后消失；未挖开只透出一点微光
     const revealed = world.tiles[LANDMARKS.crystal.y][LANDMARKS.crystal.x] === TILE.EMPTY
+    const collected = world.progress.crystalCollected
     const crystalX = (LANDMARKS.crystal.x + 0.5) * T
     const crystalY = (LANDMARKS.crystal.y + 0.5) * T
-    const crystal = new Graphics()
-    if (revealed) {
-      crystal
-        .moveTo(crystalX, crystalY - 22)
-        .lineTo(crystalX + 17, crystalY - 8)
-        .lineTo(crystalX + 6, crystalY + 19)
-        .lineTo(crystalX - 14, crystalY + 8)
-        .closePath()
-        .fill(COLORS.crystal)
-      crystal.circle(crystalX, crystalY, 30).fill({ color: COLORS.crystalGlow, alpha: 0.18 })
-      layer.addChild(this.makeLabel('能源石', crystalX, crystalY - 38, COLORS.crystalGlow))
-    } else {
-      crystal.circle(crystalX, crystalY, 24).fill({ color: COLORS.crystalGlow, alpha: 0.12 })
+    if (!collected) {
+      const crystal = new Graphics()
+      if (revealed) {
+        crystal
+          .moveTo(crystalX, crystalY - 22)
+          .lineTo(crystalX + 17, crystalY - 8)
+          .lineTo(crystalX + 6, crystalY + 19)
+          .lineTo(crystalX - 14, crystalY + 8)
+          .closePath()
+          .fill(COLORS.crystal)
+        crystal.circle(crystalX, crystalY, 30).fill({ color: COLORS.crystalGlow, alpha: 0.18 })
+        this.glowLayer.addChild(this.makeLabel('能源石', crystalX, crystalY - 38, COLORS.crystalGlow))
+      } else {
+        crystal.circle(crystalX, crystalY, 24).fill({ color: COLORS.crystalGlow, alpha: 0.12 })
+      }
+      this.crystal = crystal
+      this.glowLayer.addChild(crystal)
     }
-    this.crystal = crystal
-    layer.addChild(crystal)
   }
 
   private redrawHover(): void {

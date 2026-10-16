@@ -10,8 +10,11 @@ const messageWarning = ref(false)
 const toastVisible = ref(false)
 const progress = ref<SessionProgress>({
   title: '找到发光的能源石',
+  speech: '外面风好大，家里黑漆漆的……左边那几块泥土里透着蓝光，那里一定藏着能量！',
+  todo: '点一点发蓝光的泥土，一格一格挖开它。挖错了可以撤销。',
+  outcome: '把能源石露出来，就能把它收好带走。',
   done: 0,
-  total: 1,
+  total: 3,
   finished: false,
 })
 
@@ -69,20 +72,40 @@ onBeforeUnmount(() => {
     <main class="stage">
       <div ref="stageEl" class="stage-canvas" />
       <div v-if="fatalError" class="fatal">{{ fatalError }}</div>
+
+      <section class="mole" :class="{ 'mole-done': progress.finished }">
+        <div class="mole-head">
+          <span class="mole-face">🐹</span>
+          <div class="mole-name">
+            <strong>小鼹鼠 阿土</strong>
+            <small>你的地下向导</small>
+          </div>
+        </div>
+        <p class="mole-speech">{{ progress.speech }}</p>
+        <div v-if="!progress.finished" class="mole-lines">
+          <p><span class="tag">👉 现在做</span>{{ progress.todo }}</p>
+          <p><span class="tag">✨ 做完后</span>{{ progress.outcome }}</p>
+        </div>
+        <button type="button" class="ghost" @click="session?.focusTarget()">👀 带我去看看</button>
+      </section>
+
       <div class="zoom">
         <button type="button" aria-label="放大" @click="session?.zoomBy(0.12)">＋</button>
         <button type="button" aria-label="缩小" @click="session?.zoomBy(-0.12)">－</button>
         <button type="button" aria-label="回到家园" @click="session?.centerOnHome()">⌂</button>
       </div>
+
+      <button type="button" class="undo" @click="session?.undo()">↶ 撤销</button>
       <div class="legend">🟫 泥土可挖　🪨 灰色岩石暂不可挖</div>
+
       <transition name="toast">
         <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
       </transition>
     </main>
 
     <footer class="bottom">
-      <span>点击泥土挖一格 · 拖动画面平移 · 滚轮或 ＋/－ 缩放</span>
-      <span class="scope">P0 工程初始化 · 后续玩法见 docs/PHASES.md</span>
+      <span>点泥土挖一格 · 拖动画面平移 · 滚轮或 ＋/－ 缩放 · 挖错了点右下角撤销</span>
+      <span class="scope">P1 · 第一夜：找到能源石，点亮避难所</span>
     </footer>
   </div>
 </template>
@@ -189,6 +212,104 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
+.mole {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: min(320px, calc(100% - 96px));
+  background: #fffdf7f0;
+  border-radius: 16px;
+  padding: 12px 14px 10px;
+  box-shadow: 0 6px 20px #213d3026;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mole-done {
+  background: #f2fbeff0;
+}
+
+.mole-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.mole-face {
+  font-size: 24px;
+  background: #e4f1d8;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.mole-name {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.mole-name strong {
+  font-size: 14px;
+  color: #3d7253;
+}
+
+.mole-name small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.mole-speech {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #536b58;
+}
+
+.mole-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 1px dashed var(--line);
+  padding-top: 8px;
+}
+
+.mole-lines p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #5c6f60;
+}
+
+.tag {
+  display: inline-block;
+  background: var(--green-soft);
+  color: var(--green);
+  border-radius: 7px;
+  font-weight: 700;
+  padding: 1px 6px;
+  margin-right: 6px;
+  font-size: 11px;
+}
+
+.ghost {
+  align-self: flex-start;
+  background: #eef5e9;
+  color: #3d7253;
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ghost:active {
+  transform: scale(0.96);
+}
+
 .zoom {
   position: absolute;
   top: 12px;
@@ -213,6 +334,24 @@ onBeforeUnmount(() => {
   transform: scale(0.94);
 }
 
+.undo {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: 14px;
+  background: #fffaf1f2;
+  color: #3c6154;
+  font-size: 15px;
+  font-weight: 800;
+  box-shadow: 0 4px 14px #213d3026;
+}
+
+.undo:active {
+  transform: scale(0.95);
+}
+
 .legend {
   position: absolute;
   left: 12px;
@@ -230,7 +369,7 @@ onBeforeUnmount(() => {
 .toast {
   position: absolute;
   left: 50%;
-  bottom: 16px;
+  bottom: 74px;
   transform: translateX(-50%);
   background: #fffdf7f2;
   color: var(--ink);
@@ -281,9 +420,18 @@ onBeforeUnmount(() => {
   }
 
   .mission-title {
-    max-width: 38vw;
+    max-width: 34vw;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .mole {
+    width: min(280px, calc(100% - 80px));
+    padding: 10px 12px 8px;
+  }
+
+  .mole-lines {
+    display: none;
   }
 }
 </style>

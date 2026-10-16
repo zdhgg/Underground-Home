@@ -1,25 +1,50 @@
 import { describe, expect, it } from 'vitest'
 import { dig } from '../src/core/dig'
-import { currentMission, getMissionProgress, missionSummary } from '../src/core/missions'
-import { LANDMARKS, createInitialWorld } from '../src/core/world'
+import { createDigHistory } from '../src/core/history'
+import { collectCrystal, repairCore } from '../src/core/interact'
+import {
+  FIRST_NIGHT_MISSIONS,
+  currentMission,
+  getMissionProgress,
+  guideHighlight,
+  missionSummary,
+} from '../src/core/missions'
+import { LANDMARKS, TILE, createInitialWorld, tileAt } from '../src/core/world'
 
-describe('任务系统', () => {
-  it('初始状态：0/1，当前任务为找到能源石', () => {
+describe('第一夜任务链', () => {
+  it('初始：0/3，当前任务是找到能源石，高亮指向能源石区域', () => {
     const world = createInitialWorld()
-    expect(missionSummary(world)).toEqual({ done: 0, total: 1 })
+    expect(missionSummary(world)).toEqual({ done: 0, total: 3 })
     expect(currentMission(world)?.id).toBe('find-energy-stone')
     expect(currentMission(world)?.title).toBe('找到发光的能源石')
+
+    const guide = guideHighlight(world)
+    expect(guide.kind).toBe('dig')
+    if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.crystalZone)
   })
 
-  it('挖开能源石所在泥土后任务完成', () => {
+  it('挖开 → 收集 → 修复，任务逐级推进，高亮跟随切换', () => {
     const world = createInitialWorld()
+
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     expect(missionSummary(world).done).toBe(1)
-    expect(getMissionProgress(world)[0].done).toBe(true)
+    expect(currentMission(world)?.id).toBe('collect-energy-stone')
+    expect(guideHighlight(world).kind).toBe('collect')
+
+    collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    expect(missionSummary(world).done).toBe(2)
+    expect(currentMission(world)?.id).toBe('repair-energy-core')
+    const guide = guideHighlight(world)
+    expect(guide.kind).toBe('repair')
+    if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.generatorZone)
+
+    repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    expect(missionSummary(world).done).toBe(3)
     expect(currentMission(world)).toBeNull()
+    expect(guideHighlight(world).kind).toBe('none')
   })
 
-  it('挖别处的泥土不会误判完成', () => {
+  it('挖别处的泥土不会完成任何任务', () => {
     const world = createInitialWorld()
     dig(world, 9, 8)
     dig(world, 10, 9)
@@ -27,12 +52,33 @@ describe('任务系统', () => {
     expect(currentMission(world)?.id).toBe('find-energy-stone')
   })
 
-  it('任务判定只看世界状态，不依赖操作顺序（撤销后再挖同样成立）', () => {
+  it('跳过步骤不算完成：没收集能源石就修不了核心，任务也不推进', () => {
     const world = createInitialWorld()
-    dig(world, 12, 9)
-    dig(world, 13, 9)
-    expect(missionSummary(world).done).toBe(0)
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    const attempt = repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    expect(attempt.ok).toBe(false)
     expect(missionSummary(world).done).toBe(1)
+  })
+
+  it('进度单调：撤销挖开能源石的泥土，任务不回退', () => {
+    const world = createInitialWorld()
+    const history = createDigHistory()
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    history.record(LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    expect(missionSummary(world).done).toBe(1)
+
+    history.undo(world)
+    expect(tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)).toBe(TILE.SOIL)
+    expect(missionSummary(world).done).toBe(1) // 但任务保持完成
+    expect(world.progress.crystalFound).toBe(true)
+  })
+
+  it('每个任务都带有儿童可读的引导文案（说什么 / 做什么 / 会怎样）', () => {
+    for (const mission of FIRST_NIGHT_MISSIONS) {
+      expect(mission.speech.length).toBeGreaterThan(0)
+      expect(mission.todo.length).toBeGreaterThan(0)
+      expect(mission.outcome.length).toBeGreaterThan(0)
+    }
+    expect(getMissionProgress(createInitialWorld())).toHaveLength(3)
   })
 })

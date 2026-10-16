@@ -56,4 +56,8 @@ describe('初始世界蓝图', () => {
     expect(isInside(world, MAP_WIDTH, 5)).toBe(false)
     expect(tileAt(world, MAP_WIDTH, 5)).toBeNull()
   })
+
+  it('初始进度位全部未完成', () => {
+    expect(world.progress).toEqual({ crystalFound: false, crystalCollected: false, coreRepaired: false })
+  })
 })

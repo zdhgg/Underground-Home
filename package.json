@@ -1,7 +1,7 @@
 {
   "name": "underground-home",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "地下小家园 —— 面向 7 岁儿童的 2D 横截面地下家园建造游戏",
   "scripts": {
