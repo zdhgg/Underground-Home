@@ -1,6 +1,6 @@
 import { dig, type DigResult } from '../core/dig'
 import { createDigHistory } from '../core/history'
-import { collectCrystal, repairCore, type InteractResult } from '../core/interact'
+import { collectCrystal, repairCore } from '../core/interact'
 import { currentMission, guideHighlight, missionSummary } from '../core/missions'
 import {
   createIndexedDbStore,
@@ -20,11 +20,10 @@ export interface SessionHooks {
   onProgress(progress: SessionProgress): void
 }
 
-/** 面向界面的一次引导快照：阿土说什么、做什么、会怎样 */
+/** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
 export interface SessionProgress {
   title: string
   speech: string
-  todo: string
   outcome: string
   done: number
   total: number
@@ -35,7 +34,7 @@ export interface SessionProgress {
 export interface GameSession {
   zoomBy(delta: number): void
   centerOnHome(): void
-  /** 撤销最近一次挖掘（挖错保护） */
+  /** 撤销最近一次挖掘（挖错保护；能源石被挖开后不可再被埋回去） */
   undo(): void
   /** 把当前任务目标居中（"带我去看看"，只移动画面） */
   focusTarget(): void
@@ -69,15 +68,6 @@ function describeDigFailure(result: DigResult): string {
     default:
       return '这里是地图边缘，换个地方挖吧'
   }
-}
-
-function describeInteractFailure(result: InteractResult): string {
-  if (result.kind === 'collect-crystal') {
-    if (result.reason === 'already-collected') return '能源石已经收好了，去修能源核心吧'
-    return '能源石还埋在泥土里，先把它挖出来'
-  }
-  if (result.reason === 'already-repaired') return '能源核心已经在运转啦'
-  return '机器还没有能量：先找到能源石吧'
 }
 
 export async function createGameSession(host: HTMLElement, hooks: SessionHooks): Promise<GameSession> {
@@ -127,8 +117,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     const mission = currentMission(world)
     hooks.onProgress({
       title: mission ? mission.title : '第一盏灯，点亮啦',
-      speech: mission ? mission.speech : '叮——灯全亮啦！家又变得暖暖的，谢谢你！🎉',
-      todo: mission ? mission.todo : '可以在松软的泥土里继续自由挖一挖，岩石以后再来。',
+      speech: mission ? mission.speech : '叮——灯全亮啦！家又暖暖的，谢谢你！🎉',
       outcome: mission ? mission.outcome : '',
       done: summary.done,
       total: summary.total,
@@ -150,6 +139,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   }
   pushProgress()
 
+  /** 悬停时的指针形状：可互动区域用 pointer，可挖泥土用 crosshair */
+  const pickCursor = (cell: Cell | null): string => {
+    if (!cell) return 'default'
+    if (inRect(LANDMARKS.generatorZone, cell)) return 'pointer'
+    if (inRect(LANDMARKS.crystalZone, cell) && !world.progress.crystalCollected) return 'pointer'
+    return world.tiles[cell.y][cell.x] === TILE.SOIL ? 'crosshair' : 'default'
+  }
+
   const handleTap = (cell: Cell): void => {
     const beforeDone = missionSummary(world).done
 
@@ -159,38 +156,60 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         const result = collectCrystal(world, cell.x, cell.y)
         if (result.ok) {
           renderer.refresh()
+          renderer.playBurst((LANDMARKS.crystal.x + 0.5) * TILE_SIZE, (LANDMARKS.crystal.y + 0.5) * TILE_SIZE, {
+            color: 0x8dedfd,
+            count: 10,
+            speed: 75,
+          })
           scheduleSave()
           pushProgress()
           hooks.onMessage('💎 能源石收好啦！')
           return
         }
-        if (result.reason !== 'not-revealed') {
-          hooks.onMessage(describeInteractFailure(result))
-          return
-        }
         // not-revealed：泥土还盖着，继续按挖掘处理
       } else if (world.tiles[cell.y][cell.x] !== TILE.SOIL) {
-        hooks.onMessage('能源石已经收好了，去修能源核心吧')
+        // 已收集：给一点点小星光，不再重复提示
+        renderer.playBurst((LANDMARKS.crystal.x + 0.5) * TILE_SIZE, (LANDMARKS.crystal.y + 0.5) * TILE_SIZE, {
+          color: 0x8dedfd,
+          count: 6,
+          speed: 50,
+        })
         return
       }
       // 已收集 + 点的是泥土 → 保持自由挖掘
     }
 
-    // 2) 能源核心区域：修复 / 给引导提示
+    // 2) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
     if (inRect(LANDMARKS.generatorZone, cell)) {
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
         renderer.refresh()
+        renderer.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
+          color: 0xffd9a0,
+          count: 16,
+          speed: 95,
+          ring: true,
+          ringRadius: 110,
+        })
+        renderer.playRepairCelebration()
         scheduleSave()
         pushProgress()
-        hooks.onMessage('💡 轰隆隆——能源核心启动了，灯全亮啦！🎉')
+        hooks.onMessage('💡 轰隆隆——家园亮起来啦！🎉')
         return
       }
-      hooks.onMessage(describeInteractFailure(result))
+      if (result.reason === 'need-crystal') {
+        hooks.onMessage('机器还没有能量：先找到能源石吧')
+      } else {
+        renderer.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
+          color: 0xffd9a0,
+          count: 6,
+          speed: 50,
+        })
+      }
       return
     }
 
-    // 3) 普通挖掘（严格单格）
+    // 3) 普通挖掘（严格单格）：尘土即反馈，不再逐次弹文字
     const result = dig(world, cell.x, cell.y)
     if (!result.ok) {
       hooks.onMessage(describeDigFailure(result))
@@ -201,11 +220,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     renderer.playDigEffect(cell)
     scheduleSave()
     pushProgress()
-    const afterDone = missionSummary(world).done
-    if (afterDone > beforeDone) {
+    if (missionSummary(world).done > beforeDone) {
       hooks.onMessage('💎 能源石露出来了！')
-    } else {
-      hooks.onMessage('⛏️ 挖开了一小块泥土！')
     }
   }
 
@@ -215,7 +231,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       if (cell) handleTap(cell)
     },
     onPanBy: (delta) => renderer.panBy(delta.x, delta.y),
-    onHover: (screen) => renderer.setHoverCell(screen ? renderer.tileAtScreen(screen) : null),
+    onHover: (screen) => {
+      const cell = screen ? renderer.tileAtScreen(screen) : null
+      renderer.setHoverCell(cell)
+      renderer.setCursor(pickCursor(cell))
+    },
     onZoom: (delta, anchor) => renderer.zoomBy(delta, anchor),
   })
 
@@ -229,7 +249,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     zoomBy: (delta) => renderer.zoomBy(delta),
     centerOnHome: () => renderer.focusHome(),
     undo: () => {
-      const restored = history.undo(world)
+      // 已挖开的能源石不可被埋回去（避免"任务已完成、石头又没了"的矛盾状态）
+      const restored = history.undo(
+        world,
+        (x, y) => x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y && world.progress.crystalFound,
+      )
       if (!restored) {
         hooks.onMessage('还没有可以撤销的操作')
         return

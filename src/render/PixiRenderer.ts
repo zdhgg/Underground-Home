@@ -5,6 +5,7 @@ import {
   WORLD_PIXEL_WIDTH,
   centerOn,
   clampCamera,
+  clampZoom,
   panCamera,
   screenToWorld,
   zoomAt,
@@ -32,6 +33,8 @@ const COLORS = {
   machineCoreInner: 0x33474f,
   machineOn: 0x4f7a68,
   machineOnInner: 0x2e4f46,
+  coreReady: 0xffc978,
+  coreReadyInner: 0xfff0d0,
   coreOn: 0x8eebc1,
   coreOnInner: 0xeafff2,
   crystal: 0x9ee7f4,
@@ -39,6 +42,7 @@ const COLORS = {
   water: 0x5fb7d6,
   labelCream: 0xeae6d8,
   labelDim: 0xcfd6cc,
+  labelReady: 0xffd9a0,
   labelOn: 0xbdf3d2,
   lamp: 0xffe3a6,
   lampCore: 0xfff3c8,
@@ -54,6 +58,15 @@ export interface HighlightSpec {
   tone: 'cyan' | 'amber'
 }
 
+/** 一次性爆发的粒子效果参数 */
+export interface BurstOptions {
+  color: number
+  count?: number
+  speed?: number
+  ring?: boolean
+  ringRadius?: number
+}
+
 const LABEL_FONT = 'ui-rounded, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
 
 interface Particle {
@@ -64,6 +77,18 @@ interface Particle {
   age: number
   life: number
   size: number
+  color: number
+  gravity: number
+  square: boolean
+}
+
+interface Ring {
+  x: number
+  y: number
+  age: number
+  life: number
+  maxRadius: number
+  color: number
 }
 
 interface FriendSprite {
@@ -72,9 +97,25 @@ interface FriendSprite {
   phase: number
 }
 
+interface CameraTween {
+  from: Camera
+  to: Camera
+  /** 已运行时间；起始为负数表示开场延迟 */
+  elapsed: number
+  duration: number
+}
+
 function hash(x: number, y: number): number {
   const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453
   return n - Math.floor(n)
+}
+
+function clamp01(n: number): number {
+  return Math.min(1, Math.max(0, n))
+}
+
+function easeInOutCubic(k: number): number {
+  return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2
 }
 
 /**
@@ -96,17 +137,25 @@ export class PixiWorldRenderer {
 
   private crystal: Graphics | null = null
   private springGlow: Graphics | null = null
+  private machineGlow: Graphics | null = null
   private friends: FriendSprite[] = []
   private particles: Particle[] = []
+  private rings: Ring[] = []
   private highlight: HighlightSpec | null = null
 
   private world: WorldState | null = null
   private hoverCell: Cell | null = null
   private camera: Camera = { x: 0, y: 0, zoom: 1 }
+  private cameraTween: CameraTween | null = null
   private viewport: Viewport
   private elapsed = 0
   /** 0 = 全黑，1 = 灯火通明（修复能源核心后平滑过渡） */
   private lightLevel = 0
+  /** 机器启动动画剩余时间（快速闪烁） */
+  private spinUp = 0
+  /** 等灯光亮到一定程度后触发一次庆祝 */
+  private pendingCelebration = false
+  private celebrationTime = 0
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     const app = new Application()
@@ -166,6 +215,11 @@ export class PixiWorldRenderer {
     this.highlight = spec
   }
 
+  /** 设置画布鼠标指针形状（pointer / crosshair / default） */
+  setCursor(cursor: string): void {
+    if (this.app.canvas.style.cursor !== cursor) this.app.canvas.style.cursor = cursor
+  }
+
   /** 在某个格子播放挖掘尘土效果 */
   playDigEffect(cell: Cell): void {
     const cx = (cell.x + 0.5) * TILE_SIZE
@@ -180,31 +234,82 @@ export class PixiWorldRenderer {
         age: 0,
         life: 0.45,
         size: 3 + hash(i, cell.x) * 2.5,
+        color: 0xc9a981,
+        gravity: 90,
+        square: false,
       })
     }
   }
 
-  /** 初始视角：对准避难所 */
+  /** 一次性粒子爆发（收集 / 修复等关键互动的反馈） */
+  playBurst(worldX: number, worldY: number, options: BurstOptions): void {
+    const count = options.count ?? 10
+    const speed = options.speed ?? 80
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + hash(i, worldX) * 0.7
+      const v = speed * (0.55 + hash(i, worldY) * 0.6)
+      this.particles.push({
+        x: worldX + Math.cos(angle) * 5,
+        y: worldY + Math.sin(angle) * 5,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v - 18,
+        age: 0,
+        life: 0.55,
+        size: 2.4 + hash(i, i) * 2,
+        color: options.color,
+        gravity: 70,
+        square: false,
+      })
+    }
+    if (options.ring) {
+      this.rings.push({
+        x: worldX,
+        y: worldY,
+        age: 0,
+        life: 0.75,
+        maxRadius: options.ringRadius ?? 90,
+        color: options.color,
+      })
+    }
+  }
+
+  /** 修复能源核心的整体演出：机器启动，随后镜头拉开展示点亮后的家园 */
+  playRepairCelebration(): void {
+    this.spinUp = 1.2
+    this.pendingCelebration = true
+    this.cameraTween = {
+      from: { ...this.camera },
+      to: this.computeRepairShowcase(),
+      elapsed: -0.7,
+      duration: 1.3,
+    }
+  }
+
+  /** 初始 / 回家视角：一眼看到避难所、能源核心和左侧的能源石区 */
   focusHome(): void {
-    const zoom = Math.min(1.25, Math.max(0.85, this.viewport.width / 1280))
-    const centerX = (LANDMARKS.generator.x + 0.5) * TILE_SIZE
-    const centerY = (LANDMARKS.generator.y + 0.5) * TILE_SIZE - 60
+    this.cancelCameraTween()
+    const zoom = clampZoom(Math.min(1.55, Math.max(0.9, this.viewport.width / 920)))
+    const centerX = 17.8 * TILE_SIZE
+    const centerY = 9.2 * TILE_SIZE - 20
     this.camera = centerOn(centerX, centerY, this.viewport, zoom)
     this.applyCamera()
   }
 
   /** 把某个世界坐标居中（"带我去看看"） */
   focusOn(worldX: number, worldY: number): void {
+    this.cancelCameraTween()
     this.camera = centerOn(worldX, worldY, this.viewport, this.camera.zoom)
     this.applyCamera()
   }
 
   panBy(dxScreen: number, dyScreen: number): void {
+    this.cancelCameraTween()
     this.camera = panCamera(this.camera, dxScreen, dyScreen, this.viewport)
     this.applyCamera()
   }
 
   zoomBy(deltaZoom: number, anchor?: { x: number; y: number }): void {
+    this.cancelCameraTween()
     const point = anchor ?? { x: this.viewport.width / 2, y: this.viewport.height / 2 }
     this.camera = zoomAt(this.camera, deltaZoom, point, this.viewport)
     this.applyCamera()
@@ -235,11 +340,14 @@ export class PixiWorldRenderer {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
     this.elapsed += dt
     this.syncViewport()
+    this.updateCameraTween(dt)
     this.drawWind(this.elapsed)
+    if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
     this.updateLighting(dt)
     this.drawHighlight()
-    this.updateFriends()
-    this.updateParticles(dt)
+    this.updateMachineGlow()
+    this.updateFriends(dt)
+    this.updateEffects(dt)
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
   }
@@ -258,6 +366,36 @@ export class PixiWorldRenderer {
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
   }
 
+  private computeRepairShowcase(): Camera {
+    const centerX = (LANDMARKS.shelter.x + LANDMARKS.shelter.w / 2) * TILE_SIZE - TILE_SIZE
+    const centerY = (LANDMARKS.shelter.y + LANDMARKS.shelter.h / 2) * TILE_SIZE - 40
+    const zoom = clampZoom(Math.min(1.15, this.viewport.width / 1250))
+    return centerOn(centerX, centerY, this.viewport, zoom)
+  }
+
+  private cancelCameraTween(): void {
+    this.cameraTween = null
+  }
+
+  private updateCameraTween(dt: number): void {
+    const tween = this.cameraTween
+    if (!tween) return
+    tween.elapsed += dt
+    if (tween.elapsed < 0) return
+    const k = Math.min(1, tween.elapsed / tween.duration)
+    const e = easeInOutCubic(k)
+    this.camera = clampCamera(
+      {
+        x: tween.from.x + (tween.to.x - tween.from.x) * e,
+        y: tween.from.y + (tween.to.y - tween.from.y) * e,
+        zoom: tween.from.zoom + (tween.to.zoom - tween.from.zoom) * e,
+      },
+      this.viewport,
+    )
+    this.applyCamera()
+    if (k >= 1) this.cameraTween = null
+  }
+
   // ---------- 内部：光照 ----------
 
   private updateLighting(dt: number): void {
@@ -265,7 +403,12 @@ export class PixiWorldRenderer {
     if (Math.abs(this.lightLevel - target) < 0.002) {
       this.lightLevel = target
     } else {
-      this.lightLevel += (target - this.lightLevel) * Math.min(1, dt * 2.2)
+      this.lightLevel += (target - this.lightLevel) * Math.min(1, dt * 1.6)
+    }
+    if (this.pendingCelebration && this.lightLevel > 0.72) {
+      this.pendingCelebration = false
+      this.celebrationTime = 2.6
+      this.spawnConfetti()
     }
     this.drawLighting()
   }
@@ -292,15 +435,33 @@ export class PixiWorldRenderer {
       g.circle(gx, gy, 100).fill({ color: COLORS.warmGlow, alpha: warm * 0.5 })
     }
 
-    // 修复后：大厅顶部一排暖灯
+    // 修复后：大厅顶部的灯一盏一盏依次亮起
     if (this.lightLevel > 0.02) {
-      const flicker = 0.88 + 0.12 * Math.sin(this.elapsed * 2.6)
       for (let i = 0; i < 7; i++) {
+        const on = clamp01((this.lightLevel - i * 0.075) / 0.22)
+        if (on <= 0.01) continue
+        const flicker = 0.85 + 0.15 * Math.sin(this.elapsed * (2.6 + i * 0.37) + i * 1.7)
         const lx = (17.1 + i * 1.15) * TILE_SIZE
         const ly = 7.35 * TILE_SIZE
-        lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * this.lightLevel * flicker })
-        lampG.circle(lx, ly, 4.5).fill({ color: COLORS.lampCore, alpha: 0.95 * this.lightLevel })
+        lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * on * flicker })
+        lampG.circle(lx, ly, 3.5 + 1.5 * on).fill({ color: COLORS.lampCore, alpha: 0.95 * on })
       }
+    }
+  }
+
+  private updateMachineGlow(): void {
+    const glow = this.machineGlow
+    const world = this.world
+    if (!glow || !world) return
+    const { crystalCollected, coreRepaired } = world.progress
+    if (coreRepaired) {
+      // 启动瞬间快速闪烁，随后稳定运转
+      glow.alpha = this.spinUp > 0 ? 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(this.elapsed * 28)) : 1
+    } else if (crystalCollected) {
+      // 拿到能源石后核心微微呼吸，提示"可以来装了"
+      glow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 4)
+    } else {
+      glow.alpha = 1
     }
   }
 
@@ -327,7 +488,7 @@ export class PixiWorldRenderer {
     g.stroke({ width: 4, color, alpha: 0.45 + 0.45 * pulse })
   }
 
-  // ---------- 内部：伙伴与粒子 ----------
+  // ---------- 内部：伙伴与特效 ----------
 
   private rebuildFriends(): void {
     this.friendsLayer.removeChildren()
@@ -355,29 +516,75 @@ export class PixiWorldRenderer {
     })
   }
 
-  private updateFriends(): void {
+  private updateFriends(dt: number): void {
     const repaired = this.world?.progress.coreRepaired ?? false
+    if (this.celebrationTime > 0) this.celebrationTime = Math.max(0, this.celebrationTime - dt)
+    const celebrating = this.celebrationTime > 0
     for (const friend of this.friends) {
-      const bounce = repaired
-        ? Math.abs(Math.sin(this.elapsed * 3 + friend.phase)) * 10
-        : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
+      const bounce = celebrating
+        ? Math.abs(Math.sin(this.elapsed * 6 + friend.phase)) * 16
+        : repaired
+          ? Math.abs(Math.sin(this.elapsed * 3 + friend.phase)) * 10
+          : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
       friend.view.y = friend.baseY - bounce
     }
   }
 
-  private updateParticles(dt: number): void {
+  private spawnConfetti(): void {
+    const colors = [0xf6c85f, 0x9ee7f4, 0xf2a7b3, 0xa8e6cf]
+    const anchors = [
+      { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
+      { x: 23.9 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
+      { x: 21.5 * TILE_SIZE, y: 8.4 * TILE_SIZE },
+    ]
+    for (let i = 0; i < 18; i++) {
+      const anchor = anchors[i % anchors.length]
+      const n = hash(i, 3)
+      this.particles.push({
+        x: anchor.x + (hash(i, 1) - 0.5) * 70,
+        y: anchor.y + (hash(i, 2) - 0.5) * 26,
+        vx: (hash(i, 4) - 0.5) * 70,
+        vy: -40 - hash(i, 5) * 70,
+        age: 0,
+        life: 1.3 + n * 0.6,
+        size: 3 + n * 2.5,
+        color: colors[i % colors.length],
+        gravity: 55,
+        square: true,
+      })
+    }
+  }
+
+  private updateEffects(dt: number): void {
     const g = this.effects
     g.clear()
-    if (this.particles.length === 0) return
+    if (this.particles.length === 0 && this.rings.length === 0) return
     for (const p of this.particles) {
       p.age += dt
       p.x += p.vx * dt
       p.y += p.vy * dt
-      p.vy += 90 * dt
+      p.vy += p.gravity * dt
       const k = 1 - p.age / p.life
-      if (k > 0) g.circle(p.x, p.y, p.size * k).fill({ color: 0xc9a981, alpha: 0.8 * k })
+      if (k <= 0) continue
+      if (p.square) {
+        g.rect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size).fill({ color: p.color, alpha: 0.9 * k })
+      } else {
+        g.circle(p.x, p.y, p.size * k).fill({ color: p.color, alpha: 0.8 * k })
+      }
     }
     this.particles = this.particles.filter((p) => p.age < p.life)
+    for (const ring of this.rings) {
+      ring.age += dt
+      const k = ring.age / ring.life
+      if (k >= 1) continue
+      const eased = 1 - (1 - k) * (1 - k)
+      g.circle(ring.x, ring.y, Math.max(1, ring.maxRadius * eased)).stroke({
+        width: 4 * (1 - k) + 1,
+        color: ring.color,
+        alpha: 0.7 * (1 - k),
+      })
+    }
+    this.rings = this.rings.filter((r) => r.age < r.life)
   }
 
   // ---------- 内部：静态绘制 ----------
@@ -452,6 +659,7 @@ export class PixiWorldRenderer {
     this.glowLayer.removeChildren()
     this.crystal = null
     this.springGlow = null
+    this.machineGlow = null
     const world = this.world
     if (!world) return
     const T = TILE_SIZE
@@ -469,6 +677,7 @@ export class PixiWorldRenderer {
 
     // 能源核心：机身（结构层）
     const repaired = world.progress.coreRepaired
+    const ready = world.progress.crystalCollected && !repaired
     const generatorX = (LANDMARKS.generator.x + 0.5) * T
     const generatorY = (LANDMARKS.generator.y + 0.5) * T
     const machine = new Graphics()
@@ -476,25 +685,26 @@ export class PixiWorldRenderer {
     machine.roundRect(generatorX - 44, generatorY - 25, 88, 50, 8).fill(repaired ? COLORS.machineOnInner : COLORS.machineInner)
     this.landmarkLayer.addChild(machine)
 
-    // 能源核心：运转灯与标签（发光层，穿透黑暗）
+    // 能源核心：状态灯与标签（发光层，穿透黑暗；alpha 由 updateMachineGlow 控制）
     const machineGlow = new Graphics()
     if (repaired) {
       machineGlow.circle(generatorX, generatorY, 40).fill({ color: COLORS.coreOn, alpha: 0.22 })
       machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.coreOn)
       machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.coreOnInner)
+    } else if (ready) {
+      // 手上有能源石：核心透出暖橘色呼吸光，明确"来点我"
+      machineGlow.circle(generatorX, generatorY, 44).fill({ color: COLORS.warmGlow, alpha: 0.16 })
+      machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.coreReady)
+      machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.coreReadyInner)
     } else {
       machineGlow.circle(generatorX, generatorY, 20).fill(COLORS.machineCore)
       machineGlow.circle(generatorX, generatorY, 11).fill(COLORS.machineCoreInner)
     }
+    this.machineGlow = machineGlow
     this.glowLayer.addChild(machineGlow)
-    this.glowLayer.addChild(
-      this.makeLabel(
-        repaired ? '能源核心 · 运行中' : '能源核心 · 待修复',
-        generatorX,
-        generatorY + 52,
-        repaired ? COLORS.labelOn : COLORS.labelDim,
-      ),
-    )
+    const machineLabel = repaired ? '能源核心 · 运行中' : ready ? '能源核心 · 等待能源石' : '能源核心 · 待修复'
+    const machineLabelColor = repaired ? COLORS.labelOn : ready ? COLORS.labelReady : COLORS.labelDim
+    this.glowLayer.addChild(this.makeLabel(machineLabel, generatorX, generatorY + 52, machineLabelColor))
 
     // 地表入口标签
     this.glowLayer.addChild(

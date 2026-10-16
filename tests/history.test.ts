@@ -67,16 +67,39 @@ describe('挖掘撤销', () => {
     expect(world.dugCount).toBe(1)
   })
 
-  it('撤销挖掘不会回退任务进度（已发现能源石保持完成）', () => {
+  it('撤销挖掘不会回退任务进度（已发现能源石保持完成且露出）', () => {
     const world = createInitialWorld()
     const history = createDigHistory()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     history.record(LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     expect(missionSummary(world).done).toBe(1)
 
-    history.undo(world)
-    expect(tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)).toBe(TILE.SOIL)
-    expect(missionSummary(world).done).toBe(1) // 进度不回退
+    // 会话层传入的保护规则：已挖开的能源石不可被埋回去
+    const protect = (x: number, y: number): boolean =>
+      x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y && world.progress.crystalFound
+    expect(history.undo(world, protect)).toBeNull()
+    expect(tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)).toBe(TILE.EMPTY)
+    expect(missionSummary(world).done).toBe(1)
     expect(world.progress.crystalFound).toBe(true)
+    expect(world.dugCount).toBe(1)
+  })
+
+  it('受保护记录被跳过后，撤销继续作用于更早的一次挖掘', () => {
+    const world = createInitialWorld()
+    const history = createDigHistory()
+    const protect = (x: number, y: number): boolean =>
+      x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y && world.progress.crystalFound
+
+    dig(world, 12, 9)
+    history.record(12, 9)
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    history.record(LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+
+    const restored = history.undo(world, protect)
+    expect(restored).toEqual({ x: 12, y: 9 })
+    expect(tileAt(world, 12, 9)).toBe(TILE.SOIL)
+    expect(tileAt(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)).toBe(TILE.EMPTY) // 能源石保持露出
+    expect(world.dugCount).toBe(1)
+    expect(history.undo(world, protect)).toBeNull() // 保护记录已被跳过，没有更多可撤销内容
   })
 })

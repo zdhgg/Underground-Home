@@ -10,9 +10,8 @@ const messageWarning = ref(false)
 const toastVisible = ref(false)
 const progress = ref<SessionProgress>({
   title: '找到发光的能源石',
-  speech: '外面风好大，家里黑漆漆的……左边那几块泥土里透着蓝光，那里一定藏着能量！',
-  todo: '点一点发蓝光的泥土，一格一格挖开它。挖错了可以撤销。',
-  outcome: '把能源石露出来，就能把它收好带走。',
+  speech: '家里又黑又冷……挖开左边泛蓝光的泥土，找一找能源石！',
+  outcome: '能源石能把家园照亮。',
   done: 0,
   total: 3,
   finished: false,
@@ -78,15 +77,12 @@ onBeforeUnmount(() => {
           <span class="mole-face">🐹</span>
           <div class="mole-name">
             <strong>小鼹鼠 阿土</strong>
-            <small>你的地下向导</small>
+            <small>{{ progress.finished ? '第一夜 · 完成' : '你的地下向导' }}</small>
           </div>
+          <button type="button" class="ghost" @click="session?.focusTarget()">👀 带我去看看</button>
         </div>
         <p class="mole-speech">{{ progress.speech }}</p>
-        <div v-if="!progress.finished" class="mole-lines">
-          <p><span class="tag">👉 现在做</span>{{ progress.todo }}</p>
-          <p><span class="tag">✨ 做完后</span>{{ progress.outcome }}</p>
-        </div>
-        <button type="button" class="ghost" @click="session?.focusTarget()">👀 带我去看看</button>
+        <p v-if="!progress.finished" class="mole-outcome">✨ {{ progress.outcome }}</p>
       </section>
 
       <div class="zoom">
@@ -104,8 +100,8 @@ onBeforeUnmount(() => {
     </main>
 
     <footer class="bottom">
-      <span>点泥土挖一格 · 拖动画面平移 · 滚轮或 ＋/－ 缩放 · 挖错了点右下角撤销</span>
-      <span class="scope">P1 · 第一夜：找到能源石，点亮避难所</span>
+      <span>点泥土挖一格 · 拖动平移 · 挖错了点右下角撤销</span>
+      <span class="scope">第一夜：找到能源石，点亮避难所</span>
     </footer>
   </div>
 </template>
@@ -216,14 +212,14 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 12px;
   left: 12px;
-  width: min(320px, calc(100% - 96px));
+  width: min(340px, calc(100% - 96px));
   background: #fffdf7f0;
   border-radius: 16px;
-  padding: 12px 14px 10px;
+  padding: 11px 14px 10px;
   box-shadow: 0 6px 20px #213d3026;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 7px;
 }
 
 .mole-done {
@@ -237,11 +233,11 @@ onBeforeUnmount(() => {
 }
 
 .mole-face {
-  font-size: 24px;
+  font-size: 22px;
   background: #e4f1d8;
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   flex: none;
@@ -251,10 +247,11 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   line-height: 1.25;
+  flex: 1;
 }
 
 .mole-name strong {
-  font-size: 14px;
+  font-size: 13px;
   color: #3d7253;
 }
 
@@ -266,44 +263,25 @@ onBeforeUnmount(() => {
 .mole-speech {
   margin: 0;
   font-size: 13px;
-  line-height: 1.65;
-  color: #536b58;
+  line-height: 1.6;
+  color: #44584c;
 }
 
-.mole-lines {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  border-top: 1px dashed var(--line);
-  padding-top: 8px;
-}
-
-.mole-lines p {
+.mole-outcome {
   margin: 0;
   font-size: 12px;
-  line-height: 1.55;
-  color: #5c6f60;
-}
-
-.tag {
-  display: inline-block;
-  background: var(--green-soft);
-  color: var(--green);
-  border-radius: 7px;
-  font-weight: 700;
-  padding: 1px 6px;
-  margin-right: 6px;
-  font-size: 11px;
+  line-height: 1.5;
+  color: #77907f;
 }
 
 .ghost {
-  align-self: flex-start;
   background: #eef5e9;
   color: #3d7253;
   border-radius: 10px;
-  padding: 7px 11px;
+  padding: 6px 10px;
   font-size: 12px;
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .ghost:active {
@@ -426,11 +404,11 @@ onBeforeUnmount(() => {
   }
 
   .mole {
-    width: min(280px, calc(100% - 80px));
+    width: min(300px, calc(100% - 80px));
     padding: 10px 12px 8px;
   }
 
-  .mole-lines {
+  .mole-outcome {
     display: none;
   }
 }
