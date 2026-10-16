@@ -1,0 +1,289 @@
+<script setup lang="ts">
+import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { createGameSession, type GameSession, type SessionProgress } from './app/session'
+
+const stageEl = ref<HTMLElement | null>(null)
+const session = shallowRef<GameSession | null>(null)
+const fatalError = ref('')
+const message = ref('')
+const messageWarning = ref(false)
+const toastVisible = ref(false)
+const progress = ref<SessionProgress>({
+  title: '找到发光的能源石',
+  done: 0,
+  total: 1,
+  finished: false,
+})
+
+let toastTimer: number | undefined
+
+function showMessage(text: string, warning = false): void {
+  message.value = text
+  messageWarning.value = warning
+  toastVisible.value = true
+  window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => {
+    toastVisible.value = false
+  }, 2600)
+}
+
+onMounted(async () => {
+  const host = stageEl.value
+  if (!host) return
+  try {
+    session.value = await createGameSession(host, {
+      onMessage: (text, kind) => showMessage(text, kind === 'warning'),
+      onProgress: (next) => {
+        progress.value = next
+      },
+    })
+  } catch {
+    fatalError.value = '渲染初始化失败：当前浏览器可能不支持 WebGL，请换用新版浏览器打开。'
+  }
+})
+
+onBeforeUnmount(() => {
+  window.clearTimeout(toastTimer)
+  session.value?.destroy()
+  session.value = null
+})
+</script>
+
+<template>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <span class="logo">🏔️</span>
+        <div class="brand-text">
+          <h1>地下小家园</h1>
+          <small>把黑暗的避难所，变成温暖的家</small>
+        </div>
+      </div>
+      <div class="mission" :class="{ 'mission-done': progress.finished }">
+        <span class="mission-badge">{{ progress.finished ? '☑' : '🌙' }}</span>
+        <span class="mission-title">{{ progress.title }}</span>
+        <span class="mission-count">{{ progress.done }}/{{ progress.total }}</span>
+      </div>
+    </header>
+
+    <main class="stage">
+      <div ref="stageEl" class="stage-canvas" />
+      <div v-if="fatalError" class="fatal">{{ fatalError }}</div>
+      <div class="zoom">
+        <button type="button" aria-label="放大" @click="session?.zoomBy(0.12)">＋</button>
+        <button type="button" aria-label="缩小" @click="session?.zoomBy(-0.12)">－</button>
+        <button type="button" aria-label="回到家园" @click="session?.centerOnHome()">⌂</button>
+      </div>
+      <div class="legend">🟫 泥土可挖　🪨 灰色岩石暂不可挖</div>
+      <transition name="toast">
+        <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
+      </transition>
+    </main>
+
+    <footer class="bottom">
+      <span>点击泥土挖一格 · 拖动画面平移 · 滚轮或 ＋/－ 缩放</span>
+      <span class="scope">P0 工程初始化 · 后续玩法见 docs/PHASES.md</span>
+    </footer>
+  </div>
+</template>
+
+<style scoped>
+.app {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  max-width: 1800px;
+  margin: 0 auto;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--cream);
+  border-radius: 18px;
+  padding: 10px 16px;
+  box-shadow: 0 5px 20px #35534112;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo {
+  font-size: 26px;
+  line-height: 1;
+  background: #e4f1d8;
+  border-radius: 12px;
+  padding: 9px 10px;
+}
+
+.brand-text h1 {
+  font-size: 18px;
+  margin: 0;
+}
+
+.brand-text small {
+  color: var(--muted);
+}
+
+.mission {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--green-soft);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.mission-count {
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 9px;
+  color: var(--green);
+}
+
+.mission-done {
+  background: #dff3e6;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 320px;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px #35534114;
+  background: #22313a;
+}
+
+.stage-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+.stage-canvas :deep(canvas) {
+  display: block;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.fatal {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #ffd9c4;
+  background: #22313acc;
+  font-size: 14px;
+}
+
+.zoom {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.zoom button {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: #fffaf1e8;
+  color: #3c6154;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 4px 12px #213d3022;
+}
+
+.zoom button:active {
+  transform: scale(0.94);
+}
+
+.legend {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  background: #fffaf1e8;
+  border: 1px solid #e9d8b9;
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #526052;
+  pointer-events: none;
+}
+
+.toast {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  background: #fffdf7f2;
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: 0 6px 18px #213d3026;
+  max-width: 82%;
+  pointer-events: none;
+}
+
+.toast.warning {
+  background: #fff3e2f2;
+  color: #8a5a2b;
+}
+
+.toast-enter-active,
+.toast-leave-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.toast-enter-from,
+.toast-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(6px);
+}
+
+.bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.scope {
+  opacity: 0.85;
+}
+
+@media (max-width: 720px) {
+  .bottom {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+
+  .mission-title {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+</style>

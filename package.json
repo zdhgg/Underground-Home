@@ -1,0 +1,25 @@
+{
+  "name": "underground-home",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "地下小家园 —— 面向 7 岁儿童的 2D 横截面地下家园建造游戏",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "pixi.js": "^8.22.0",
+    "vue": "^3.5.44"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^6.0.10",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5",
+    "vue-tsc": "^3.3.13"
+  }
+}

@@ -1,0 +1,39 @@
+:root {
+  --ink: #334742;
+  --muted: #78887e;
+  --green: #3c8e72;
+  --green-soft: #eef5e9;
+  --cream: #fffdf7;
+  --page: #e8ede4;
+  --line: #e0e5d8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: ui-rounded, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  touch-action: manipulation;
+}
+
+button:focus-visible {
+  outline: 3px solid #64bfa5;
+  outline-offset: 2px;
+}
