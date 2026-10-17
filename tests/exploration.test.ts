@@ -3,7 +3,7 @@ import { createInitialWorld, TILE, LANDMARKS, type WorldState } from '../src/cor
 import { dig } from '../src/core/dig'
 import { canRestoreDig, placePod } from '../src/core/build'
 import { createWorldHistory } from '../src/core/history'
-import { canPlaceWallLamp, canStand, inspectCrack, shaftConnected, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
+import { canPlaceWallLamp, canStand, inspectCrack, moleRoute, shaftConnected, shaftFrontier, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
 import { deserialize, serialize } from '../src/core/persistence'
 import { explorationGuide, guideHighlight } from '../src/core/missions'
 
@@ -191,5 +191,52 @@ describe('首次突破岩层闭环', () => {
       expect(result.world.exploration.clueFound).toBe(false)
     }
     expect(payload).toEqual(before)
+  })
+})
+
+describe('施工委托：阿土自动前往', () => {
+  it('梯道目标永远是最上面那块没挖开的岩段，挖完指向下一块', () => {
+    const w = readyWorld()
+    inspectCrack(w, 27, 12); upgradePickaxe(w)
+    expect(shaftFrontier(w, 27)).toEqual({ x: 27, y: 12 })
+    dig(w, 27, 12)
+    expect(shaftFrontier(w, 27)).toEqual({ x: 27, y: 13 })
+    for (let y = 13; y < 19; y++) if (w.tiles[y][27] !== TILE.EMPTY) dig(w, 27, y)
+    expect(shaftFrontier(w, 27)).toBeNull()
+    expect(shaftConnected(w)).toBe(true)
+  })
+
+  it('还没进场时从大厅地面出发，进场后从自己的站位出发，路线只走真实通道', () => {
+    const w = readyWorld()
+    const home = moleRoute(w, { x: 27, y: 11 })!
+    expect(home[0]).toEqual({ x: 18, y: 11 })
+    expect(home.at(-1)).toEqual({ x: 27, y: 11 })
+    expect(home.every((cell) => canStand(w, cell.x, cell.y))).toBe(true)
+    inspectCrack(w, 27, 12); upgradePickaxe(w)
+    for (let y = 12; y <= 13; y++) dig(w, 27, y)
+    w.exploration.explorer = { x: 27, y: 12 }
+    const route = moleRoute(w, { x: 27, y: 13 })!
+    expect(route[0]).toEqual({ x: 27, y: 12 })
+    expect(route.at(-1)).toEqual({ x: 27, y: 13 })
+    expect(route.every((cell) => canStand(w, cell.x, cell.y))).toBe(true)
+    // 洞还没挖到的地方不能直达
+    expect(moleRoute(w, { x: 27, y: 17 })).toBeNull()
+  })
+
+  it('挖到一半的梯道：阿土站在梯段里存档往返一致，不能提前站进泉水层洞穴', () => {
+    const w = readyWorld()
+    inspectCrack(w, 27, 12); upgradePickaxe(w)
+    for (let y = 12; y <= 14; y++) dig(w, 27, y)
+    w.exploration.explorer = { x: 27, y: 13 }
+    const loaded = deserialize(serialize(w))
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) expect(loaded.world.exploration.explorer).toEqual({ x: 27, y: 13 })
+    const inCave = structuredClone(w)
+    for (let y = 12; y < 19; y++) if (inCave.tiles[y][27] !== TILE.EMPTY) dig(inCave, 27, y)
+    inCave.exploration.explorer = { x: 27, y: 21 } // 还没抵达就想站到泉水层
+    expect(deserialize(serialize(inCave)).ok).toBe(false)
+    const offShaft = structuredClone(w)
+    offShaft.exploration.explorer = { x: 26, y: 13 }
+    expect(deserialize(serialize(offShaft)).ok).toBe(false)
   })
 })

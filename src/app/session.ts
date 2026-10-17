@@ -3,7 +3,8 @@ import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
-import { canPlaceWallLamp, inspectCrack, isShaftColumn, shaftConnected, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
+import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftConnected, shaftFrontier, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
+import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
 import {
   createIndexedDbStore,
   createMemoryStore,
@@ -12,7 +13,6 @@ import {
   loadLegacySave,
   type SaveStore,
 } from '../core/persistence'
-import { LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
 import type { DepthView } from '../render/camera'
 import { attachPointerControls } from '../input/pointerControls'
 import { PixiWorldRenderer } from '../render/PixiRenderer'
@@ -270,15 +270,73 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   /** 悬停时的指针形状：可互动区域用 pointer，可挖泥土用 crosshair */
   const pickCursor = (cell: Cell | null): string => {
     if (!cell) return 'default'
-    if (isShaftColumn(cell.x) && cell.y >= 11 && cell.y <= 21) return 'pointer'
-    if (cell.y >= 15) return world.exploration.entered ? 'crosshair' : 'not-allowed'
+    const tile = world.tiles[cell.y][cell.x]
+    // 裂纹岩（和它下面已经挖开的梯段）= 阿土的施工目标
+    if (isShaftColumn(cell.x) && cell.y >= HOME_FLOOR_Y && cell.y <= SHAFT_LAST_Y && (tile === TILE.WEAK_ROCK || tile === TILE.EMPTY)) {
+      const e = world.exploration
+      if (!e.pickaxeUpgraded) return tile === TILE.WEAK_ROCK ? 'pointer' : 'default'
+      return !e.clueFound || e.shaftX === cell.x ? 'pointer' : 'not-allowed'
+    }
+    if (cell.y >= 15) {
+      if (!world.exploration.entered) return 'not-allowed'
+      return isSpringTarget(cell) ? 'pointer' : 'crosshair'
+    }
     if (inRect(LANDMARKS.generatorZone, cell)) return 'pointer'
     if (inRect(LANDMARKS.crystalZone, cell) && !world.progress.crystalCollected) return 'pointer'
-    return world.tiles[cell.y][cell.x] === TILE.SOIL ? 'crosshair' : 'default'
+    return tile === TILE.SOIL ? 'crosshair' : 'default'
+  }
+
+  /** 已经露面、值得让阿土走过去看的泉水（点击容错 ±1 格）。 */
+  const isSpringTarget = (cell: Cell): boolean =>
+    world.exploration.entered && !world.exploration.springFound
+    && cell.y >= 19 && cell.y <= 21 && Math.abs(cell.x - LANDMARKS.spring.x) <= 1
+    && world.tiles[cell.y][cell.x] === TILE.EMPTY && springVisible(world)
+
+  /**
+   * 裂纹岩施工委托：玩家指定目标，阿土自己沿真实通道走过去（走完才动手）。
+   * 普通泥土不经过这里——点一下就直接挖开。
+   */
+  const orderBreakthrough = (cell: Cell): boolean => {
+    if (!isShaftColumn(cell.x) || cell.y < HOME_FLOOR_Y || cell.y > SHAFT_LAST_Y) return false
+    const tile = world.tiles[cell.y][cell.x]
+    if (tile !== TILE.WEAK_ROCK && tile !== TILE.EMPTY) return false
+    const e = world.exploration
+    if (!e.pickaxeUpgraded) {
+      if (tile !== TILE.WEAK_ROCK) return false
+      if (!world.pods.length) { hooks.onMessage('先给伙伴安好小床，再来听岩壁里的水声。'); return true }
+      if (e.clueFound) {
+        if (e.shaftX !== cell.x) { hooks.onMessage('先顺着刚才发现水汽的裂纹探索吧，换上小铁镐就能挖了。'); return true }
+        playWaterClue()
+        hooks.onMessage('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
+        return true
+      }
+      const route = moleRoute(world, { x: cell.x, y: HOME_FLOOR_Y - 1 })
+      if (!route) { hooks.onMessage('先挖通裂纹上方的泥土，让阿土能走到这里。'); return true }
+      moveExplorer(route, () => {
+        if (!inspectCrack(world, cell.x, HOME_FLOOR_Y)) return
+        playWaterClue()
+        renderer.playBurst((cell.x + 0.5) * TILE_SIZE, (HOME_FLOOR_Y - 0.5) * TILE_SIZE, { color: 0xaee5e0, count: 10, speed: 42, ring: true, ringRadius: 26 })
+        hooks.onMessage('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
+      })
+      return true
+    }
+    if (!e.clueFound || e.shaftX !== cell.x) {
+      hooks.onMessage('这一轮先挖通刚才那条裂纹吧，另一条以后再探索。')
+      return true
+    }
+    const target = shaftFrontier(world, cell.x)
+    if (!target) {
+      hooks.onMessage(shaftConnected(world) ? '梯道已经通到洞底啦，点“沿梯子下去”吧。' : '先挖通裂纹上方的泥土，让阿土能走到梯口。')
+      return true
+    }
+    const route = moleRoute(world, { x: target.x, y: target.y - 1 })
+    if (!route) { hooks.onMessage('先挖通上面的泥土，阿土才有路走近裂纹。'); return true }
+    orderBreak(route, target)
+    return true
   }
 
   const handleTap = (cell: Cell): void => {
-    if (traveling) { hooks.onMessage('阿土正在沿通道走，马上就到！'); return }
+    if (traveling) { hooks.onMessage('阿土正在沿通道赶过去，马上就好！'); return }
     if (lampMode) {
       if (cell.y < 19 || cell.y > 21 || !canPlaceWallLamp(world, cell.x)) {
         hooks.onMessage('先挖出三格高的空地，避开泉水和梯子，再点这里安壁灯。'); return
@@ -296,39 +354,29 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       return
     }
     const beforeDone = missionSummary(world).done
-    if (isShaftColumn(cell.x) && cell.y === 12 && !world.exploration.pickaxeUpgraded) {
-      if (world.exploration.clueFound && world.exploration.shaftX !== cell.x) {
-        hooks.onMessage('先顺着刚才发现水汽的裂纹探索吧，换上小铁镐就能挖了。')
-        return
-      }
-      if (inspectCrack(world, cell.x, cell.y)) {
+    // 1) 裂纹岩 = 施工委托；普通泥土不经过这里
+    if (orderBreakthrough(cell)) return
+
+    // 2) 露面的泉水 = 出动目标：阿土自己沿挖通的通道走到水边
+    if (isSpringTarget(cell) && springVisible(world)) {
+      const route = moleRoute(world, { x: LANDMARKS.spring.x, y: 21 })
+      if (!route) { hooks.onMessage('先挖开脚边的泥土，让阿土能走到水声那边。'); return }
+      moveExplorer(route, () => {
+        world.exploration.springFound = true
         playWaterClue()
-        renderer.refreshExploration(); scheduleSave(); pushProgress()
-        hooks.onMessage('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
-      } else hooks.onMessage(world.pods.length ? '先挖通裂纹上方的泥土，让阿土能走到这里。' : '先给伙伴安好小床，再来听岩壁里的水声。')
+        renderer.playBurst((LANDMARKS.spring.x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0xa5efdd, count: 28, ring: true })
+        hooks.onMessage('🎉 找到天然泉水啦！这里也能成为我们的家！')
+      })
       return
     }
-    if (cell.y >= 19 && cell.y <= 21 && world.exploration.entered && world.tiles[cell.y][cell.x] === TILE.EMPTY && world.tiles[21][cell.x] === TILE.EMPTY) {
-      const target = { x: cell.x, y: 21 }
-      const from = world.exploration.explorer
-      const route = from && walkingRoute(world, from, target)
-      if (route) {
-        moveExplorer(route, () => {
-          if (Math.abs(target.x - LANDMARKS.spring.x) <= 1 && springVisible(world)) {
-            const first = !world.exploration.springFound
-            world.exploration.springFound = true
-            if (first) {
-              playWaterClue()
-              renderer.playBurst((LANDMARKS.spring.x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0xa5efdd, count: 28, ring: true })
-              hooks.onMessage('🎉 找到天然泉水啦！这里也能成为我们的家！')
-            }
-          }
-        })
-        return
-      }
+    if (world.exploration.entered && world.exploration.springFound
+      && cell.y >= 19 && cell.y <= 21 && Math.abs(cell.x - LANDMARKS.spring.x) <= 1 && world.tiles[cell.y][cell.x] === TILE.EMPTY) {
+      // 找到之后再点泉水：给一点点小水花，不再重复提示
+      renderer.playBurst((LANDMARKS.spring.x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0x8dedfd, count: 6, speed: 50 })
+      return
     }
 
-    // 1) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
+    // 3) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
     if (inRect(LANDMARKS.crystalZone, cell)) {
       if (!world.progress.crystalCollected) {
         const result = collectCrystal(world, cell.x, cell.y)
@@ -353,7 +401,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       // 已收集 + 点的是泥土 → 保持自由挖掘
     }
 
-    // 2) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
+    // 4) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
     if (inRect(LANDMARKS.generatorZone, cell)) {
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
@@ -376,7 +424,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       return
     }
 
-    // 3) 普通挖掘（严格单格）：尘土即反馈，不再逐次弹文字
+    // 5) 普通挖掘（严格单格）：尘土即反馈，不再逐次弹文字
     const result = dig(world, cell.x, cell.y)
     if (!result.ok) {
       hooks.onMessage(describeDigFailure(result))
@@ -408,6 +456,44 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       traveling = false
       onArrived?.()
       renderer.refreshExploration(); scheduleSave(); pushProgress()
+    })
+  }
+
+  /**
+   * 施工委托：阿土沿真实通道走到梯段，挥镐落下去时才改世界。
+   * 走路和挥镐期间都收紧输入，避免隔空多挖或演出中改地图。
+   */
+  const orderBreak = (route: Cell[], target: Cell): void => {
+    traveling = true
+    pushProgress()
+    renderer.focusOn((route[Math.floor(route.length / 2)].x + 0.5) * TILE_SIZE, (route[Math.floor(route.length / 2)].y + 0.5) * TILE_SIZE)
+    renderer.playExplorationTravel(route, () => {
+      world.exploration.explorer = { ...route[route.length - 1] }
+      renderer.playRockBreak(target, () => {
+        const result = dig(world, target.x, target.y)
+        traveling = false
+        if (!result.ok) {
+          hooks.onMessage(describeDigFailure(result))
+          renderer.refreshExploration(); pushProgress()
+          return
+        }
+        canImport = false
+        history.record({ kind: 'dig', x: target.x, y: target.y, tile: result.tile ?? TILE.WEAK_ROCK })
+        renderer.refreshTerrain([target])
+        renderer.refreshExploration()
+        scheduleSave()
+        pushProgress()
+        const x = world.exploration.shaftX ?? target.x
+        if (shaftConnected(world)) {
+          // 突破反馈：水声更近、凉风水汽从洞口冒出来，下面透出一线微光
+          playWaterClue()
+          renderer.playBurst((x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0xa5efdd, count: 22, speed: 60, ring: true, ringRadius: 70 })
+          renderer.playBurst((x + 0.5) * TILE_SIZE, 18.4 * TILE_SIZE, { color: 0xbfeef0, count: 12, speed: 26, gravity: -14 })
+          hooks.onMessage('💧 哗啦——水声就在下面！梯道通到洞底啦，点“沿梯子下去”。')
+        } else {
+          hooks.onMessage('⛏ 岩壁破开一块，小梯子又往下接好一节！')
+        }
+      })
     })
   }
 
@@ -530,7 +616,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     upgradeTool: () => {
       if (traveling || !upgradePickaxe(world)) return
       renderer.refreshExploration(); scheduleSave(); pushProgress()
-      hooks.onMessage('⛏ 小铁镐准备好啦！点带裂纹的岩石，试着向下挖。')
+      hooks.onMessage('⛏ 小铁镐准备好啦！点带裂纹的岩石，我会沿梯道一块块挖下去。')
     },
     travel: () => {
       if (traveling || !shaftConnected(world) || !world.exploration.explorer) return

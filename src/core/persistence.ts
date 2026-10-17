@@ -14,7 +14,7 @@ import {
   BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
-import { canStand, explorationAccessIntact, shaftConnected, springVisible, walkingRoute } from './exploration'
+import { canStand, explorationAccessIntact, HALL_START_Y, shaftConnected, SHAFT_LAST_Y, springVisible, walkingRoute } from './exploration'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
@@ -208,8 +208,9 @@ function validateExploration(raw: unknown, world: WorldState): ExplorationState 
   }
   world.exploration = structuredClone(e)
   if (e.entered && !shaftConnected(world)) return null
-  if (e.explorer && (!canStand(world, e.explorer.x, e.explorer.y) || !walkingRoute(world, { x: e.shaftX!, y: 11 }, e.explorer))) return null
-  if (!e.entered && e.explorer && e.explorer.y !== 11) return null
+  if (e.explorer && (!canStand(world, e.explorer.x, e.explorer.y) || !walkingRoute(world, { x: e.shaftX!, y: HALL_START_Y }, e.explorer))) return null
+  // 未抵达时阿土只在梯道里作业：梯口，或已经挖开的那一段梯子，不能提前进泉水层洞穴。
+  if (!e.entered && e.explorer && (e.explorer.x !== e.shaftX || e.explorer.y < HALL_START_Y || e.explorer.y > SHAFT_LAST_Y)) return null
   if (e.springFound && !springVisible(world)) return null
   const seen = new Set<number>()
   for (const lamp of e.lamps) {

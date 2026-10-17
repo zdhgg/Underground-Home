@@ -111,7 +111,7 @@ onBeforeUnmount(() => {
           <span>↓ 向下看看</span><small>第 2 层 · {{ exploration.entered ? '已抵达' : '水声从这里传来' }}</small>
         </button>
         <button type="button" class="overview-button" :aria-pressed="view.overview" @click="session?.showOverview()">⊞ 家园全景</button>
-        <small class="depth-hint">{{ view.overview ? '全景只看不挖 · 点楼层继续' : exploration.entered ? '看地图不等于走路 · 阿土会沿梯子往返' : '寻找岩壁裂纹，亲手挖通梯道' }}</small>
+        <small class="depth-hint">{{ view.overview ? '全景只看不挖 · 点楼层继续' : exploration.entered ? '点泥土或泉水就行 · 阿土会自己走过去' : '点裂纹岩：阿土会走过去听、去挖通' }}</small>
       </nav>
       <span class="prototype-note">泉水探索试玩 · 独立存档</span>
       <button v-if="exploration.canImport" class="legacy-import" type="button" @click="session?.importLegacy()">💾 复制 v0.1.0 进度 · 原档保留</button>
@@ -130,7 +130,7 @@ onBeforeUnmount(() => {
         <p v-if="build.active" role="status">{{ build.message }}</p>
         <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
-      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? '⛏ 小铁镐 · 裂纹岩可挖　🪨 坚硬基岩保留' : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
+      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? (exploration.entered ? (exploration.found ? '💧 泉水找到啦 · 继续扩建或安一盏小灯' : '🟫 点泥土挖过去　💧 看见泉水点一下它') : '⛏ 点裂纹岩：阿土沿通道去挖　🪨 坚硬基岩保留') : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
 
       <transition name="toast">
         <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
@@ -138,7 +138,7 @@ onBeforeUnmount(() => {
     </main>
 
     <footer class="bottom">
-      <span>点泥土挖一格 · 拖动平移 · 挖错了点右下角撤销</span>
+      <span>点泥土挖一格 · 点裂纹岩让阿土去挖 · 拖动平移 · 挖错点右下角撤销</span>
       <span class="scope">点亮家园 → 安好小床 → 听水声，向下探索</span>
     </footer>
   </div>

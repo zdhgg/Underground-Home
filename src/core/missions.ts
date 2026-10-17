@@ -113,15 +113,15 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   const connected = shaftConnected(world)
   const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound].filter(Boolean).length
   const guide = !e.clueFound
-    ? ['听听岩壁里的水声', '滴答、滴答！挖通裂纹上方的泥土，再点一下岩壁听听。', '岩壁的裂纹，也许通向新的家园。']
+    ? ['听听岩壁里的水声', '滴答、滴答！挖通裂纹上方的泥土，再点一下裂纹——我会走过去听听。', '岩壁的裂纹，也许通向新的家园。']
     : !e.pickaxeUpgraded
       ? ['换上小铁镐', '裂缝里有凉凉的水汽！换上小铁镐，就能挖开这种带裂纹的岩石。', '坚硬的大岩石还要留着。']
       : !connected
-        ? ['亲手挖出向下的梯道', '点裂纹，一格一格往下挖。我会帮你把小梯子接好！', '梯子连到洞底，我们才能下去。']
+        ? ['亲手挖出向下的梯道', '点带裂纹的岩石：我会沿着挖开的路走过去，一块一块把它挖开！', '梯子连到洞底，我们才能下去。']
         : !e.entered
           ? ['沿梯子去第二层', '通啦！点“沿梯子下去”，和我一起到新地方看看！', '顺着真实的梯子，抵达泉水层。']
           : !e.springFound
-            ? ['找到滴答响的泉水', springVisible(world) ? '泉水露出来啦！点一下泉水，我沿着地面走过去看看。' : `水声从${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边传来！先挖脚边的土，再向上挖宽。点空地，我会走过去。`, '找到水源，这里也能成为家园。']
+            ? ['找到滴答响的泉水', springVisible(world) ? '泉水露出来啦！点一下泉水，我会沿着地面走过去看看。' : `水声从${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边传来！点着泥土一格一格挖过去，挖到水边我就能走过去看看。`, '找到水源，这里也能成为家园。']
             : ['泉水层，成为新家园！', '找到天然泉水啦！试着往左右扩建，再放一盏小壁灯。新家园怎么布置，由你决定！', '更深处的坚硬岩层，等我们以后再探索。']
   return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 5, finished: e.springFound }
 }

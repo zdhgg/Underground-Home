@@ -1,7 +1,12 @@
 import { BREAKTHROUGHS, HOME_FLOOR_Y, LANDMARKS, TILE, type Cell, type WorldState } from './world'
 
 export const isShaftColumn = (x: number): boolean => BREAKTHROUGHS.some((column) => column === x)
-export const isShaftCell = (x: number, y: number): boolean => isShaftColumn(x) && y >= HOME_FLOOR_Y && y < 19
+/** 裂纹梯道最下一格；再往下就是泉水层的天然洞穴。 */
+export const SHAFT_LAST_Y = 18
+export const isShaftCell = (x: number, y: number): boolean => isShaftColumn(x) && y >= HOME_FLOOR_Y && y <= SHAFT_LAST_Y
+/** 阿土在大厅地面的两个可达起点：还没进场时从这里出发，也用于检查裂纹可达。 */
+export const HALL_START_Y = HOME_FLOOR_Y - 1
+export const HALL_STARTS = [18, 25] as const
 const occupied = (world: WorldState, x: number, y: number): boolean => world.pods.some((p) => x >= p.x && x < p.x + 3 && y >= p.y && y < p.y + 2)
 
 export function suggestedBreakthrough(world: WorldState): number {
@@ -37,16 +42,37 @@ export function walkingRoute(world: WorldState, from: Cell, to: Cell): Cell[] | 
   return null
 }
 
+/** 梯道施工的下一个目标：从 y12 起往下第一块还没挖开的岩段 */
+export function shaftFrontier(world: WorldState, x: number): Cell | null {
+  for (let y = HOME_FLOOR_Y; y <= SHAFT_LAST_Y; y++) {
+    if (world.tiles[y][x] !== TILE.EMPTY) return { x, y }
+  }
+  return null
+}
+
+/** 阿土的一次施工路线：优先从他当前站位出发；还没进场时从大厅地面出发。 */
+export function moleRoute(world: WorldState, to: Cell): Cell[] | null {
+  const from = world.exploration.explorer
+  const current = from ? walkingRoute(world, from, to) : null
+  if (current) return current
+  for (const x of HALL_STARTS) {
+    if (!canStand(world, x, HALL_START_Y)) continue
+    const route = walkingRoute(world, { x, y: HALL_START_Y }, to)
+    if (route) return route
+  }
+  return null
+}
+
 export function inspectCrack(world: WorldState, x: number, y: number): boolean {
   if (!world.progress.coreRepaired || !world.pods.length || !isShaftColumn(x) || y !== HOME_FLOOR_Y) return false
   if (world.exploration.clueFound) return world.exploration.shaftX === x && !world.exploration.entered
-  if (!canStand(world, x, 11)) return false
+  if (!canStand(world, x, HALL_START_Y)) return false
   // 到达裂纹上方必须有从大厅地面走来的路，不能远程发现孤立洞口。
-  if (![18, 25].some((startX) => canStand(world, startX, 11) && walkingRoute(world, { x: startX, y: 11 }, { x, y: 11 }))) return false
+  if (!HALL_STARTS.some((startX) => canStand(world, startX, HALL_START_Y) && walkingRoute(world, { x: startX, y: HALL_START_Y }, { x, y: HALL_START_Y }))) return false
   if (world.exploration.entered) return false
   world.exploration.clueFound = true
   world.exploration.shaftX = x
-  world.exploration.explorer = { x, y: 11 }
+  world.exploration.explorer = { x, y: HALL_START_Y }
   return true
 }
 
@@ -99,8 +125,8 @@ export function canPlaceWallLamp(world: WorldState, x: number): boolean {
 export function explorationAccessIntact(world: WorldState): boolean {
   const e = world.exploration
   if (!e.clueFound || e.shaftX === null) return true
-  const top = { x: e.shaftX, y: 11 }
-  if (![18, 25].some((x) => canStand(world, x, 11) && walkingRoute(world, { x, y: 11 }, top))) return false
+  const top = { x: e.shaftX, y: HALL_START_Y }
+  if (!HALL_STARTS.some((x) => canStand(world, x, HALL_START_Y) && walkingRoute(world, { x, y: HALL_START_Y }, top))) return false
   if (!e.entered) return true
   if (!shaftConnected(world) || !e.explorer || !walkingRoute(world, top, e.explorer)) return false
   return (!e.springFound || !!walkingRoute(world, top, LANDMARKS.spring))

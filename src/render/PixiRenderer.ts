@@ -77,6 +77,8 @@ export interface BurstOptions {
   speed?: number
   ring?: boolean
   ringRadius?: number
+  /** 重力加速度（像素/秒²）；负数 = 轻轻上飘的水汽 */
+  gravity?: number
 }
 
 const LABEL_FONT = 'ui-rounded, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif'
@@ -376,6 +378,20 @@ export class PixiWorldRenderer {
   refreshExploration(): void { if (this.world) this.explorationScene.refresh(this.world) }
   playExplorationTravel(points: Cell[], done: () => void): void { this.explorationScene.travel(points, done) }
 
+  /**
+   * 破岩演出：阿土在梯段上挥镐，落镐瞬间回调（由会话层改世界并落地反馈）。
+   * 挥镐期间画面先动、世界后变，孩子看到的是"挖开"而不是"隔空消失"。
+   */
+  playRockBreak(target: Cell, onStrike: () => void): void {
+    this.explorationScene.work(target, () => {
+      onStrike()
+      this.playDigEffect(target)
+      this.playBurst((target.x + 0.5) * TILE_SIZE, (target.y + 0.5) * TILE_SIZE, {
+        color: 0xd9c295, count: 12, speed: 70, ring: true, ringRadius: 24,
+      })
+    })
+  }
+
   /** 只重建舱体，不碰伙伴；建成演出先刷新舱体再播放入场 */
   refreshPods(): void {
     this.podEntrance = null
@@ -495,7 +511,7 @@ export class PixiWorldRenderer {
         life: 0.55,
         size: 2.4 + hash(i, i) * 2,
         color: options.color,
-        gravity: 70,
+        gravity: options.gravity ?? 70,
         square: false,
       })
     }
