@@ -191,7 +191,7 @@ onBeforeUnmount(() => {
 
     <footer class="bottom">
       <span>点泥土挖一格 · 点裂纹岩让阿土去挖 · 拖动平移 · 挖错点右下角撤销</span>
-      <span class="scope">点亮家园 → 安好小床 → 找到水 → 引水种菜 → 请伙伴吃饭</span>
+      <span class="scope">点亮家园 → 安床（小满来）→ 找水（小泉来）→ 种菜吃饭</span>
     </footer>
   </div>
 </template>

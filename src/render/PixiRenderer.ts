@@ -22,7 +22,7 @@ import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type
 import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE, BEDS_PER_POD } from '../core/build'
-import { waitingPartners } from '../core/partners'
+import { partnerAt, waitingPartners } from '../core/partners'
 import { foundRelics } from '../core/relics'
 import { drawRelic } from './relicProps'
 import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
@@ -128,6 +128,8 @@ interface FriendSprite {
   podId: number | null
   /** 站在大厅时用的落脚点，重建后用它重算 baseY */
   spot: { x: number; y: number }
+  /** 还没入住时头顶的名字标签；住进床里就销毁 */
+  nameLabel: Text | null
 }
 
 interface RoutePoint {
@@ -212,8 +214,8 @@ const ENTRANCE_SEGMENT_TIME = 0.22
 const IDLE_SPOTS = [
   { x: 18.6, y: 11 }, { x: 23.9, y: 11 }, { x: 17.2, y: 11 }, { x: 25.3, y: 11 },
 ] as const
-/** 伙伴配色：前两位是原来的老住户，后两位是找到水之后才搬来的新朋友 */
-const FRIEND_COLORS = [0xa8ba8e, 0xe9b6a7, 0xb9a7e0, 0xe5cf95] as const
+/** 伙伴配色，和 core/partners 的名单同序：阿土（土绿）、阿灯（淡紫）、小满（浅粉）、小泉（沙黄） */
+const FRIEND_COLORS = [0xa8ba8e, 0xb9a7e0, 0xe9b6a7, 0xe5cf95] as const
 
 const REPAIR_CONFETTI_ANCHORS = [
   { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
@@ -982,12 +984,13 @@ export class PixiWorldRenderer {
       const bedIndex = i % BEDS_PER_POD
       const spot = IDLE_SPOTS[i % IDLE_SPOTS.length]
       const standing = friendWalkY(world, { x: Math.floor(spot.x), y: spot.y })
+      const partner = partnerAt(i)
       const bodyColor = FRIEND_COLORS[i % FRIEND_COLORS.length]
       const view = new Container()
       const body = new Graphics()
       const friend: FriendSprite = {
         view, body, bodyColor, baseY: standing, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
-        podId: pod ? pod.id : null, spot: { x: spot.x, y: standing },
+        podId: pod ? pod.id : null, spot: { x: spot.x, y: standing }, nameLabel: null,
       }
       // 已经入住的伙伴接着睡；正在入场的这一对站在原地等演出开始。
       if (pod && pod.id !== arrivingPodId) {
@@ -998,12 +1001,31 @@ export class PixiWorldRenderer {
         view.scale.set(FRIEND_REST_SCALE)
       } else {
         view.position.set(spot.x * TILE_SIZE, standing)
+        // 还站着等床的伙伴带名字：孩子得知道"是谁在等"，而不是"一个球在等"。
+        const label = new Text({
+          text: partner.name,
+          style: {
+            fontFamily: LABEL_FONT, fontSize: 10, fontWeight: '600',
+            fill: 0xf7f2e4, stroke: { color: 0x1a2a2e, width: 3 },
+          },
+        })
+        label.anchor.set(0.5)
+        label.position.set(0, -FRIEND_RADIUS - 12)
+        friend.nameLabel = label
       }
       paintFriend(body, bodyColor, friend.pose)
       view.addChild(body)
+      if (friend.nameLabel) view.addChild(friend.nameLabel)
       this.friendsLayer.addChild(view)
       this.friends.push(friend)
     }
+  }
+
+  /** 伙伴躺下后不再需要名字标签 */
+  private clearNameLabel(friend: FriendSprite): void {
+    if (!friend.nameLabel) return
+    friend.nameLabel.destroy()
+    friend.nameLabel = null
   }
 
   private updateFriends(dt: number): void {
@@ -1091,6 +1113,7 @@ export class PixiWorldRenderer {
       friend.bed = bed
       friend.view.scale.set(FRIEND_REST_SCALE)
       friend.view.position.set(bed.x, bed.y)
+      this.clearNameLabel(friend)
       paintFriend(friend.body, friend.bodyColor, 'rest')
     }
   }
@@ -1116,6 +1139,7 @@ export class PixiWorldRenderer {
           const last = traveller.points[traveller.points.length - 1]
           friend.bed = { x: last.x, y: last.y }
           friend.view.position.set(last.x, last.y)
+          this.clearNameLabel(friend)
           paintFriend(friend.body, friend.bodyColor, 'rest')
         }
         continue

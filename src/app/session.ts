@@ -1,11 +1,11 @@
 import { dig, type DigResult } from '../core/dig'
 import { createWorldHistory } from '../core/history'
-import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
+import { canPlacePod, placePod, podAnchorFromPointer, BEDS_PER_POD, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
 import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
-import { canBuildMorePods, waitingPartners } from '../core/partners'
+import { canBuildMorePods, PARTNERS, partnersWilling, waitingPartnerList, waitingPartners } from '../core/partners'
 import { relicAt, relicSummary } from '../core/relics'
 import {
   canPlacePlanter,
@@ -621,10 +621,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         playSpringFound()
         renderer.playSpringDiscovery()
         renderer.playMoleReaction('找到水啦！')
-        // 有了水，另外两位朋友才肯搬来——他们先在大厅等着，安好新床就会住进去。
+        // 找到水：小泉从水里冒出来；小满如果还在等床，也在这一刻被看见。
         renderer.refreshFriends()
-        notify(`🎉 找到天然泉水啦！还有 ${waitingPartners(world)} 位朋友说：有水就搬来住！`)
-        hooks.onMilestone?.({ emoji: '💧', title: '发现地下泉水！', detail: '两位新朋友愿意搬来 · 回暖窝层给他们安新床' })
+        notify('🎉 小泉从水里冒出来啦！他说：这水真甜，我帮你引上去。')
+        hooks.onMilestone?.({ emoji: '💧', title: '发现地下泉水！', detail: `小泉来了 · 还有 ${waitingPartners(world)} 位朋友在等床` })
       })
       return
     }
@@ -880,13 +880,21 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       renderer.playBurst((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
       scheduleSave()
       pushProgress()
-      hooks.onMessage(world.pods.length > 1 ? '🛏️ 新朋友的小床安好啦！' : '🛏️ 小床安好啦！伙伴准备钻进被窝……')
+      // 这次搬进来的是谁：按床位顺序取名单，孩子听到的是名字而不是"两位伙伴"。
+      const bedsStart = (world.pods.length - 1) * BEDS_PER_POD
+      const movedIn = PARTNERS
+        .slice(bedsStart, Math.min(bedsStart + BEDS_PER_POD, partnersWilling(world)))
+        .map((partner) => partner.name)
+        .join('和')
+      // 建好第一间床之后，小满会闻着"家的味道"来；她还站在大厅里等第二张床。
+      const stillWaiting = waitingPartnerList(world).map((partner) => partner.name).join('和')
+      hooks.onMessage(world.pods.length > 1 ? `🛏️ ${movedIn}的小床安好啦！` : `🛏️ 小床安好啦！${movedIn}准备钻进被窝……`)
       renderer.playPodEntrance(pod, () => {
         resting = true
         renderer.playPodCelebration(pod)
         pushProgress()
         renderer.refreshExploration()
-        hooks.onMessage('💤 伙伴钻进被窝，睡着啦！')
+        hooks.onMessage(stillWaiting ? `💤 ${movedIn}睡着啦！${stillWaiting}闻到家的味道，来了。` : `💤 ${movedIn}睡着啦！`)
       })
     },
     zoomBy: (delta) => renderer.zoomBy(delta),

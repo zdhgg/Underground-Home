@@ -88,6 +88,7 @@ interface TerrainProbe {
     bed: { x: number; y: number } | null
     inEntrance: boolean
     podId: number | null
+    nameLabel: { text: string } | null
   }[]
   refreshPods(): void
   refreshFriends(arrivingPodId?: number | null): void
@@ -421,20 +422,25 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     return next
   }
 
-  it('载入带睡眠舱的存档时伙伴直接睡在床上，不重播入场', () => {
+  it('载入带睡眠舱的存档时：老住户直接睡在床上，新来的小满站在大厅等床', () => {
     const saved = carvedWorld()
     const pod = placePod(saved, 12, 10)!
     renderer.setWorld(saved)
     const beds = bedSlots(pod)
     expect(view.podEntrance).toBeNull()
-    expect(view.friends).toHaveLength(2)
-    view.friends.forEach((friend, i) => {
-      expect(friend.pose).toBe('rest')
+    // 阿土和阿灯睡在床上；小满闻到家的味道来了，还站着等第二张床。
+    expect(view.friends).toHaveLength(3)
+    const sleeping = view.friends.filter((friend) => friend.pose === 'rest')
+    expect(sleeping).toHaveLength(2)
+    sleeping.forEach((friend, i) => {
       expect(friend.bed).toEqual(beds[i])
       expect(friend.view.x).toBeCloseTo(beds[i].x, 5)
       expect(friend.view.y).toBeCloseTo(beds[i].y, 5)
       expect(friend.view.scale.x).toBeCloseTo(0.65, 5)
     })
+    const waiting = view.friends.find((friend) => friend.pose === 'idle')
+    expect(waiting?.bed).toBeNull()
+    expect(waiting?.nameLabel?.text).toBe('小满')
   })
 
   it('建成刷新只重建舱体，伙伴仍留在避难所等待出发', () => {
@@ -447,6 +453,25 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.friends[0].pose).toBe('idle')
     expect(view.friends[0].view.y).toBe(beforeY)
     expect(view.podLayer.children).toHaveLength(1)
+  })
+
+  it('建好第一间床：小满带着名字出现在大厅，等她自己的床', () => {
+    const next = carvedWorld()
+    renderer.setWorld(next)
+    // 还没有床：阿土和阿灯站着，各自带着名字
+    expect(view.friends.map((friend) => friend.nameLabel?.text)).toEqual(['阿土', '阿灯'])
+    const pod = placePod(next, 12, 10)!
+    renderer.refreshPods()
+    renderer.refreshFriends(pod.id)
+    // 入场前：新舱两位站着，小满也来了
+    expect(view.friends).toHaveLength(3)
+    expect(view.friends.map((friend) => friend.nameLabel?.text)).toEqual(['阿土', '阿灯', '小满'])
+    renderer.playPodEntrance(pod, () => {})
+    for (let i = 0; i < 240; i++) view.tick({ deltaMS: 16 } as Ticker)
+    // 阿土和阿灯躺下后名字消失；小满还在等，名字留着
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'idle'])
+    expect(view.friends.slice(0, 2).every((friend) => friend.nameLabel === null)).toBe(true)
+    expect(view.friends[2].nameLabel?.text).toBe('小满')
   })
 
   it('建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调', () => {
