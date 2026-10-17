@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { canPlacePod, canRestoreDig, placePod } from '../src/core/build'
+import { canPlacePod, canRestoreDig, placePod, podAnchorFromPointer } from '../src/core/build'
 import { dig } from '../src/core/dig'
 import { createWorldHistory } from '../src/core/history'
 import { deserialize, serialize } from '../src/core/persistence'
@@ -14,6 +14,19 @@ function readyWorld() {
 }
 
 describe('睡眠舱粗版必要规则', () => {
+  it('点击地面格换算成舱体底边中心，左右两处都能直接建造', () => {
+    const left = readyWorld()
+    const leftAnchor = podAnchorFromPointer({ x: 13, y: 9 })
+    expect(leftAnchor).toEqual({ x: 12, y: 8 })
+    expect(canPlacePod(left, leftAnchor.x, leftAnchor.y)).toEqual({ ok: true, door: 'right' })
+
+    const right = readyWorld()
+    for (let y = 10; y < 12; y++) for (let x = 26; x < 29; x++) dig(right, x, y)
+    const rightAnchor = podAnchorFromPointer({ x: 27, y: 11 })
+    expect(rightAnchor).toEqual({ x: 26, y: 10 })
+    expect(canPlacePod(right, rightAnchor.x, rightAnchor.y)).toEqual({ ok: true, door: 'left' })
+  })
+
   it('可在自行挖出的左右两处空间建造，任务依赖真实设施', () => {
     const left = readyWorld()
     expect(placePod(left, 12, 8)?.door).toBe('right')

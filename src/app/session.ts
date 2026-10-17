@@ -1,6 +1,6 @@
 import { dig, type DigResult } from '../core/dig'
 import { createWorldHistory } from '../core/history'
-import { canPlacePod, placePod, type BuildFailure } from '../core/build'
+import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { currentMission, guideHighlight, missionSummary } from '../core/missions'
 import {
@@ -32,10 +32,16 @@ export interface BuildState {
 }
 
 const BUILD_MESSAGES: Record<BuildFailure, string> = {
-  power: '先修好能源核心，再安小床。', bounds: '这里超出地下范围啦。',
-  reserved: '给入口和能源核心留出位置。', overlap: '这里已经有睡眠舱啦。',
-  soil: '先切回挖掘，挖出3格宽、2格高的空地。', support: '舱底需要一整排泥土或岩石托住。',
-  access: '需要侧门连通家园，也要给伙伴和核心留条路。',
+  power: '先修好能源核心，再安小床。', bounds: '这里太靠边啦，换个地方试试。',
+  reserved: '入口和能源核心旁边要留出位置。', overlap: '这里已经有一张小床啦。',
+  soil: '先切回挖掘，挖出一块能放下小床的空地。', support: '小床下面要有泥土或岩石托住，不能悬空。',
+  access: '小床的门要通到家里，也要给伙伴和核心留条路。',
+}
+
+/** 预览旁边的短提示：孩子不用低头看底部面板也能判断 */
+const BUILD_SHORT_HINTS: Record<BuildFailure, string> = {
+  power: '先修好能源核心', bounds: '太靠边了', reserved: '这里要留空',
+  overlap: '已经有小床', soil: '先挖空这块', support: '小床要落地', access: '门要通到家里',
 }
 
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
@@ -104,13 +110,46 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let hoverBuild: Cell | null = null
 
   const pushBuild = (): void => {
-    const point = candidate ?? hoverBuild
-    const result = point ? canPlacePod(world, point.x, point.y) : null
-    renderer.setBuildPreview(building ? point : null, result?.ok, result?.ok ? result.door : 'left')
+    // 本阶段只开放第一间睡眠舱：建成后收起工具，避免没人使用的空舱造成误解。
+    const available = world.progress.coreRepaired && world.pods.length === 0
+    if (!available && building) {
+      building = false
+      candidate = null
+      hoverBuild = null
+    }
+    const hoverAnchor = hoverBuild ? podAnchorFromPointer(hoverBuild) : null
+    const previewPoint = building ? candidate ?? hoverAnchor : null
+    const previewResult = previewPoint ? canPlacePod(world, previewPoint.x, previewPoint.y) : null
+    const selectedResult = candidate ? canPlacePod(world, candidate.x, candidate.y) : null
+    const previewHint = previewResult
+      ? previewResult.ok ? '可以建 ✓' : BUILD_SHORT_HINTS[previewResult.reason]
+      : ''
+    renderer.setBuildPreview(
+      previewPoint,
+      previewResult?.ok ?? false,
+      previewResult?.ok ? previewResult.door : 'left',
+      building ? previewHint : '',
+    )
+
+    let message = '点一下想放小床的地面，看看预览。'
+    if (!available) {
+      message = '小床已经安好啦。'
+    } else if (!building) {
+      message = '先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面。'
+    } else if (candidate && selectedResult) {
+      message = selectedResult.ok
+        ? '这里可以建！点“确认建造”。想换位置，再点别处。'
+        : `${BUILD_MESSAGES[selectedResult.reason]} 再点别处换位置。`
+    } else if (hoverAnchor && previewResult) {
+      message = previewResult.ok
+        ? '这里可以建！点一下这里把位置定下来。'
+        : `${BUILD_MESSAGES[previewResult.reason]} 换个地方，或先挖空这里。`
+    }
+
     hooks.onBuild?.({
-      available: world.progress.coreRepaired, active: building, selected: candidate !== null,
-      valid: candidate !== null && Boolean(result?.ok), count: world.pods.length,
-      message: result ? (result.ok ? '这里可以建！确认后伙伴就有床啦。' : BUILD_MESSAGES[result.reason]) : '点选睡眠舱左上角的位置（3格宽 × 2格高）。',
+      available, active: building, selected: candidate !== null,
+      valid: candidate !== null && selectedResult?.ok === true, count: world.pods.length,
+      message,
     })
   }
 
@@ -153,7 +192,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     const mission = currentMission(world)
     hooks.onProgress({
       title: mission ? mission.title : '有灯、有床的小家园',
-      speech: mission ? mission.speech : '伙伴睡得好香！你还可以继续挖空间，试试别的布局。',
+      speech: mission ? mission.speech : '小床安好啦！你还可以继续挖空间，把家变得更大。',
       outcome: mission ? mission.outcome : '',
       done: summary.done,
       total: summary.total,
@@ -186,7 +225,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   const handleTap = (cell: Cell): void => {
     if (building) {
-      candidate = cell
+      // 点击格 = 舱体底边中间格；孩子只需点“想放床的地面”。
+      candidate = podAnchorFromPointer(cell)
       pushBuild()
       return
     }
@@ -285,7 +325,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   return {
     setBuildMode: (active) => {
-      if (active && !world.progress.coreRepaired) return
+      if (active && (!world.progress.coreRepaired || world.pods.length > 0)) return
       building = active
       candidate = null
       hoverBuild = null
@@ -306,7 +346,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       renderer.playBurst((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
       scheduleSave()
       pushProgress()
-      hooks.onMessage('🛏️ 小床安好啦！伙伴来休息了。')
+      hooks.onMessage('🛏️ 小床安好啦！')
     },
     zoomBy: (delta) => renderer.zoomBy(delta),
     centerOnHome: () => renderer.focusHome(),

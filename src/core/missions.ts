@@ -48,8 +48,8 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'build-sleep-pod',
     title: '给伙伴安一个睡眠舱',
-    speech: '灯亮啦！在大厅旁挖出3×2格空地，再选“睡眠舱”。位置由你决定！',
-    todo: '挖空、选位置，确认建造一间双人睡眠舱。',
+    speech: '灯亮啦！找一块能挖通的地方，挖出一块能放下小床的空地，再选“睡眠舱”。放在哪儿由你决定！',
+    todo: '挖出一块空地，选位置，确认建造一间双人睡眠舱。',
     outcome: '两位伙伴就能钻进小床休息啦。',
     isDone: (world) => world.pods.length > 0,
   },

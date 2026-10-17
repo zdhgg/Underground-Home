@@ -7,6 +7,15 @@ export type BuildFailure = 'power' | 'bounds' | 'reserved' | 'overlap' | 'soil' 
 export type Placement = { ok: true; door: SleepPod['door'] } | { ok: false; reason: BuildFailure }
 export const contains = (rect: Rect, x: number, y: number): boolean => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h
 export const podRect = (pod: Cell): Rect => ({ ...pod, ...POD_SIZE })
+
+/**
+ * 把玩家点中的地面格换算成睡眠舱左上角：
+ * 点击格是舱体底边的中间格，舱体向上、向左右展开。
+ * 规则与存档仍使用左上角坐标，只有输入层需要这层换算。
+ */
+export function podAnchorFromPointer(cell: Cell): Cell {
+  return { x: cell.x - Math.floor(POD_SIZE.w / 2), y: cell.y - (POD_SIZE.h - 1) }
+}
 const overlaps = (a: Rect, b: Rect) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 export const podDoor = (pod: SleepPod): Cell => ({ x: pod.x + (pod.door === 'left' ? -1 : POD_SIZE.w), y: pod.y + POD_SIZE.h - 1 })
 

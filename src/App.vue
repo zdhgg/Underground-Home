@@ -97,12 +97,15 @@ onBeforeUnmount(() => {
       <section v-if="build.available" class="build-tools" aria-label="建设工具">
         <div class="build-buttons">
           <button type="button" :aria-pressed="!build.active" @click="session?.setBuildMode(false)">⛏ 挖掘</button>
-          <button type="button" :aria-pressed="build.active" @click="session?.setBuildMode(true)">🛏 睡眠舱 · 3×2</button>
-          <button v-if="build.active" type="button" :disabled="!build.valid" @click="session?.confirmBuild()">确认建造</button>
-          <span v-else>已有 {{ build.count }} 间 · 2个床位／间</span>
+          <button type="button" :aria-pressed="build.active" @click="session?.setBuildMode(!build.active)">🛏 睡眠舱</button>
+          <template v-if="build.active">
+            <button type="button" class="confirm" :disabled="!build.valid" @click="session?.confirmBuild()">✅ 确认建造</button>
+            <button type="button" class="cancel" @click="session?.setBuildMode(false)">✖ 取消</button>
+          </template>
+          <span v-else>选“睡眠舱”开始建造</span>
         </div>
         <p v-if="build.active" role="status">{{ build.message }}</p>
-        <p v-else>先挖空，再选睡眠舱；选位置后确认。建错了也能撤销。</p>
+        <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
       <div class="legend">🟫 泥土可挖　🪨 灰色岩石暂不可挖</div>
 
@@ -134,6 +137,7 @@ onBeforeUnmount(() => {
 .build-buttons { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .build-buttons button { border-radius: 9px; padding: 10px 12px; background: #e9eee4; color: #3c6154; font-weight: 700; }
 .build-buttons button[aria-pressed="true"], .build-buttons button:not([aria-pressed]) { background: #3c8063; color: white; }
+.build-buttons button.cancel { background: #efe9dd; color: #6d5a47; }
 .build-buttons button:disabled { opacity: 0.4; cursor: default; }
 .build-buttons span { font-size: 12px; }
 .build-tools p { margin: 7px 0 0; font-size: 12px; line-height: 1.5; }

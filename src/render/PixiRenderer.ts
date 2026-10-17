@@ -278,16 +278,40 @@ export class PixiWorldRenderer {
     this.rebuildFriends()
   }
 
-  setBuildPreview(cell: Cell | null, valid = false, door: 'left' | 'right' = 'left'): void {
+  setBuildPreview(cell: Cell | null, valid = false, door: 'left' | 'right' = 'left', hint = ''): void {
     for (const child of this.buildPreview.removeChildren()) child.destroy({ children: true })
     if (!cell) return
+    const color = valid ? 0x8fe3a6 : 0xff947e
     const room = drawSleepPod({ ...cell, door }, true)
     room.alpha = 0.6
     const outline = new Graphics()
     outline.rect(cell.x * TILE_SIZE, cell.y * TILE_SIZE, POD_SIZE.w * TILE_SIZE, POD_SIZE.h * TILE_SIZE)
-      .fill({ color: valid ? 0x8fe3a6 : 0xff947e, alpha: 0.15 })
-      .stroke({ width: 3, color: valid ? 0x8fe3a6 : 0xff947e })
+      .fill({ color, alpha: 0.15 })
+      .stroke({ width: 3, color })
     this.buildPreview.addChild(room, outline)
+    if (!hint) return
+    // 预览旁给一个短句：不用低头看底部面板也能知道行不行。
+    const label = new Text({
+      text: hint,
+      style: {
+        fontFamily: LABEL_FONT, fontSize: 13, fontWeight: '700',
+        fill: valid ? 0xc8f7d2 : 0xffd0c4,
+      },
+    })
+    label.anchor.set(0.5)
+    const padX = 8
+    const padY = 4
+    const width = label.width + padX * 2
+    const height = label.height + padY * 2
+    const tag = new Container()
+    const bg = new Graphics()
+    bg.roundRect(-width / 2, -height / 2, width, height, 8).fill({ color: 0x16252b, alpha: 0.82 })
+    tag.addChild(bg, label)
+    tag.position.set(
+      (cell.x + POD_SIZE.w / 2) * TILE_SIZE,
+      cell.y * TILE_SIZE - 10 - height / 2,
+    )
+    this.buildPreview.addChild(tag)
   }
 
   /**
