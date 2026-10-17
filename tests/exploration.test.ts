@@ -3,7 +3,7 @@ import { createInitialWorld, TILE, LANDMARKS, type WorldState } from '../src/cor
 import { dig } from '../src/core/dig'
 import { canRestoreDig, placePod } from '../src/core/build'
 import { createWorldHistory } from '../src/core/history'
-import { canPlaceWallLamp, canStand, inspectCrack, moleRoute, shaftConnected, shaftFrontier, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
+import { canPlaceWallLamp, canStand, inspectCrack, moleRoute, shaftChainReady, shaftConnected, shaftDugSegments, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
 import { deserialize, serialize } from '../src/core/persistence'
 import { explorationGuide, guideHighlight } from '../src/core/missions'
 
@@ -21,6 +21,11 @@ function openShaft(w: WorldState, x = 27): void {
   expect(upgradePickaxe(w)).toBe(true)
   for (let y = 12; y < 19; y++) if (w.tiles[y][x] !== TILE.EMPTY) expect(dig(w, x, y).ok).toBe(true)
   expect(shaftConnected(w)).toBe(true)
+}
+/** 听完水声、换上小铁镐：可以开始破岩的状态 */
+function initChain(w: WorldState): void {
+  expect(inspectCrack(w, 27, 12)).toBe(true)
+  expect(upgradePickaxe(w)).toBe(true)
 }
 function enter(w: WorldState): void {
   expect(walkingRoute(w, w.exploration.explorer!, { x: w.exploration.shaftX!, y: 21 })).not.toBeNull()
@@ -238,5 +243,46 @@ describe('施工委托：阿土自动前往', () => {
     const offShaft = structuredClone(w)
     offShaft.exploration.explorer = { x: 26, y: 13 }
     expect(deserialize(serialize(offShaft)).ok).toBe(false)
+  })
+})
+
+describe('连续施工：剩余段数与可用时机', () => {
+  it('剩余段数只数真正还要挥镐的岩段', () => {
+    const w = readyWorld()
+    inspectCrack(w, 27, 12); upgradePickaxe(w)
+    expect(shaftDugSegments(w, 27)).toBe(0)
+    // 右侧梯道下方 y=18 已是天然洞穴，所以是 6 段；左侧到 y=18 全是裂纹岩，是 7 段。
+    expect(shaftRemainingSegments(w, 27)).toBe(6)
+    expect(shaftRemainingSegments(w, 16)).toBe(7)
+    dig(w, 27, 12); dig(w, 27, 13)
+    expect(shaftDugSegments(w, 27)).toBe(2)
+    expect(shaftRemainingSegments(w, 27)).toBe(4)
+  })
+
+  it('前两段手动，第三段起一次委托就能挖到底；挖通后不再提示', () => {
+    const w = readyWorld()
+    initChain(w)
+    expect(shaftChainReady(w)).toBe(false)
+    dig(w, 27, 12)
+    expect(shaftChainReady(w)).toBe(false)
+    dig(w, 27, 13)
+    expect(shaftChainReady(w)).toBe(true)
+    for (let y = 14; y < 19; y++) if (w.tiles[y][27] !== TILE.EMPTY) dig(w, 27, y)
+    expect(shaftConnected(w)).toBe(true)
+    expect(shaftChainReady(w)).toBe(false)
+    expect(shaftRemainingSegments(w, 27)).toBe(0)
+  })
+
+  it('半挖梯道存档往返后，段数与连续施工的解锁时机一致', () => {
+    const w = readyWorld()
+    initChain(w)
+    for (let y = 12; y <= 13; y++) dig(w, 27, y)
+    const loaded = deserialize(serialize(w))
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) {
+      expect(shaftDugSegments(loaded.world, 27)).toBe(2)
+      expect(shaftChainReady(loaded.world)).toBe(true)
+      expect(shaftConnected(loaded.world)).toBe(false)
+    }
   })
 })

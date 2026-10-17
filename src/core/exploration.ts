@@ -50,6 +50,36 @@ export function shaftFrontier(world: WorldState, x: number): Cell | null {
   return null
 }
 
+/** 已经挖开、连成一串的梯段数（从 y12 往下数）。 */
+export function shaftDugSegments(world: WorldState, x: number): number {
+  let dug = 0
+  for (let y = HOME_FLOOR_Y; y <= SHAFT_LAST_Y; y++) {
+    if (world.tiles[y][x] !== TILE.EMPTY) break
+    dug++
+  }
+  return dug
+}
+
+/** 从当前工作面到洞底还剩几段岩：等于真正还要挥几次镐。 */
+export function shaftRemainingSegments(world: WorldState, x: number): number {
+  const frontier = shaftFrontier(world, x)
+  if (!frontier) return 0
+  let left = 0
+  for (let y = frontier.y; y <= SHAFT_LAST_Y; y++) {
+    if (world.tiles[y][x] !== TILE.EMPTY) left++
+  }
+  return left
+}
+
+/** 前两段由玩家亲自委托（学会指挥施工），之后一次委托就能从当前梯段挖到洞底。 */
+export const LEARN_SEGMENTS = 2
+
+export function shaftChainReady(world: WorldState): boolean {
+  const e = world.exploration
+  if (e.shaftX === null || !e.clueFound || !e.pickaxeUpgraded || e.entered) return false
+  return !shaftConnected(world) && shaftDugSegments(world, e.shaftX) >= LEARN_SEGMENTS
+}
+
 /** 阿土的一次施工路线：优先从他当前站位出发；还没进场时从大厅地面出发。 */
 export function moleRoute(world: WorldState, to: Cell): Cell[] | null {
   const from = world.exploration.explorer

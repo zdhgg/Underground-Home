@@ -11,12 +11,22 @@ export interface PointerControlsHandlers {
   onZoom(delta: number, anchor: Point): void
 }
 
+export interface PointerControls {
+  /** 解除全部事件绑定 */
+  detach(): void
+  /**
+   * 丢掉没结束的手势（窗口失焦、切后台、指针捕获被收回）。
+   * 只复位手势状态，不改画面与世界；这样回到游戏后的第一次点击依然有效。
+   */
+  reset(): void
+}
+
 /**
  * 画布指针控制：把底层指针事件翻译成"点击 / 拖动 / 缩放"意图。
  * 单击与拖动严格区分（距离阈值），互不误触；
  * 本模块只处理手势，不关心世界规则与渲染。
  */
-export function attachPointerControls(canvas: HTMLCanvasElement, handlers: PointerControlsHandlers): () => void {
+export function attachPointerControls(canvas: HTMLCanvasElement, handlers: PointerControlsHandlers): PointerControls {
   let startPoint: Point | null = null
   let lastPoint: Point | null = null
   let panning = false
@@ -25,6 +35,20 @@ export function attachPointerControls(canvas: HTMLCanvasElement, handlers: Point
   const toLocal = (event: { clientX: number; clientY: number }): Point => {
     const rect = canvas.getBoundingClientRect()
     return { x: event.clientX - rect.left, y: event.clientY - rect.top }
+  }
+
+  const reset = (): void => {
+    if (activePointerId !== null) {
+      try {
+        canvas.releasePointerCapture(activePointerId)
+      } catch {
+        /* 捕获早就丢了就忽略 */
+      }
+    }
+    activePointerId = null
+    startPoint = null
+    lastPoint = null
+    panning = false
   }
 
   const onPointerDown = (event: PointerEvent): void => {
@@ -58,21 +82,15 @@ export function attachPointerControls(canvas: HTMLCanvasElement, handlers: Point
     if (activePointerId !== event.pointerId) return
     const current = toLocal(event)
     const wasClick = !cancelled && !panning && startPoint !== null && classifyGesture(startPoint, current) === 'click'
-    activePointerId = null
-    startPoint = null
-    lastPoint = null
-    panning = false
-    try {
-      canvas.releasePointerCapture(event.pointerId)
-    } catch {
-      /* 忽略 */
-    }
+    reset()
     if (wasClick) handlers.onTap(current)
   }
 
   const onPointerUp = (event: PointerEvent): void => endPointer(event, false)
   const onPointerCancel = (event: PointerEvent): void => endPointer(event, true)
   const onPointerLeave = (): void => handlers.onHover(null)
+  /** 捕获被系统收回（窗口失焦、设备被拔掉）时等不到 pointerup，直接复位。 */
+  const onLostCapture = (): void => reset()
 
   const onWheel = (event: WheelEvent): void => {
     event.preventDefault()
@@ -86,16 +104,21 @@ export function attachPointerControls(canvas: HTMLCanvasElement, handlers: Point
   canvas.addEventListener('pointerup', onPointerUp)
   canvas.addEventListener('pointercancel', onPointerCancel)
   canvas.addEventListener('pointerleave', onPointerLeave)
+  canvas.addEventListener('lostpointercapture', onLostCapture)
   canvas.addEventListener('wheel', onWheel, { passive: false })
   canvas.addEventListener('contextmenu', onContextMenu)
 
-  return () => {
-    canvas.removeEventListener('pointerdown', onPointerDown)
-    canvas.removeEventListener('pointermove', onPointerMove)
-    canvas.removeEventListener('pointerup', onPointerUp)
-    canvas.removeEventListener('pointercancel', onPointerCancel)
-    canvas.removeEventListener('pointerleave', onPointerLeave)
-    canvas.removeEventListener('wheel', onWheel)
-    canvas.removeEventListener('contextmenu', onContextMenu)
+  return {
+    reset,
+    detach: () => {
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('pointermove', onPointerMove)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      canvas.removeEventListener('pointercancel', onPointerCancel)
+      canvas.removeEventListener('pointerleave', onPointerLeave)
+      canvas.removeEventListener('lostpointercapture', onLostCapture)
+      canvas.removeEventListener('wheel', onWheel)
+      canvas.removeEventListener('contextmenu', onContextMenu)
+    },
   }
 }

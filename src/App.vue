@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { createGameSession, type BuildState, type ExplorationUI, type GameSession, type SessionProgress } from './app/session'
+import { createGameSession, type BuildState, type ExplorationUI, type GameSession, type Milestone, type SessionProgress } from './app/session'
 import { STRATA } from './core/world'
 import type { DepthView } from './render/camera'
 
@@ -20,9 +20,12 @@ const progress = ref<SessionProgress>({
 })
 const build = ref<BuildState>({ available: false, active: false, selected: false, valid: false, message: '', count: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
-const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false })
+const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false, canChain: false, chaining: false, remaining: 0 })
+/** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
+const milestone = ref<Milestone | null>(null)
 
 let toastTimer: number | undefined
+let milestoneTimer: number | undefined
 
 function showMessage(text: string, warning = false): void {
   message.value = text
@@ -32,6 +35,14 @@ function showMessage(text: string, warning = false): void {
   toastTimer = window.setTimeout(() => {
     toastVisible.value = false
   }, 2600)
+}
+
+function showMilestone(card: Milestone): void {
+  milestone.value = card
+  window.clearTimeout(milestoneTimer)
+  milestoneTimer = window.setTimeout(() => {
+    milestone.value = null
+  }, 3000)
 }
 
 onMounted(async () => {
@@ -46,6 +57,7 @@ onMounted(async () => {
       onBuild: (next) => { build.value = next },
       onView: (next) => { view.value = next },
       onExploration: (next) => { exploration.value = next },
+      onMilestone: showMilestone,
     })
   } catch {
     fatalError.value = '渲染初始化失败：当前浏览器可能不支持 WebGL，请换用新版浏览器打开。'
@@ -54,6 +66,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   window.clearTimeout(toastTimer)
+  window.clearTimeout(milestoneTimer)
   session.value?.destroy()
   session.value = null
 })
@@ -92,6 +105,13 @@ onBeforeUnmount(() => {
         <p class="mole-speech">{{ progress.speech }}</p>
         <p v-if="!progress.finished" class="mole-outcome">✨ {{ progress.outcome }}</p>
         <button v-if="exploration.clue && !exploration.upgraded" type="button" class="adventure-action" @click="session?.upgradeTool()">⛏ 换上小铁镐</button>
+        <button
+          v-if="exploration.canChain"
+          type="button"
+          class="adventure-action chain"
+          :disabled="exploration.traveling"
+          @click="session?.digToBottom()"
+        >{{ exploration.chaining ? `⛏ 阿土正在挖……（还剩 ${exploration.remaining} 段）` : `⛏ 一路挖到底（还剩 ${exploration.remaining} 段）` }}</button>
         <button v-if="exploration.connected" type="button" class="adventure-action" :disabled="exploration.traveling" @click="session?.travel()">{{ exploration.traveling ? '🪜 阿土正在走……' : exploration.downstairs ? '↑ 沿梯子回家' : '↓ 沿梯子下去' }}</button>
         <button v-if="exploration.found" type="button" class="ghost" :aria-pressed="exploration.lampMode" @click="session?.toggleLamp()">{{ exploration.lampMode ? '⛏ 收起壁灯，继续挖掘' : '🏮 安一盏小壁灯' }}</button>
       </section>
@@ -130,7 +150,17 @@ onBeforeUnmount(() => {
         <p v-if="build.active" role="status">{{ build.message }}</p>
         <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
-      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? (exploration.entered ? (exploration.found ? '💧 泉水找到啦 · 继续扩建或安一盏小灯' : '🟫 点泥土挖过去　💧 看见泉水点一下它') : '⛏ 点裂纹岩：阿土沿通道去挖　🪨 坚硬基岩保留') : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
+      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? (exploration.entered ? (exploration.found ? '💧 泉水找到啦 · 继续扩建或安一盏小灯' : '🟫 点泥土挖过去　💧 看见泉水点一下它') : '⛏ 点裂纹岩：阿土一镐一镐往下挖　🪨 坚硬基岩保留') : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
+
+      <transition name="card">
+        <div v-if="milestone" class="milestone" role="status">
+          <span class="milestone-emoji">{{ milestone.emoji }}</span>
+          <div class="milestone-text">
+            <strong>{{ milestone.title }}</strong>
+            <small>{{ milestone.detail }}</small>
+          </div>
+        </div>
+      </transition>
 
       <transition name="toast">
         <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
@@ -147,6 +177,29 @@ onBeforeUnmount(() => {
 <style scoped>
 .adventure-action { padding: 11px 14px; min-height: 44px; border-radius: 10px; background: #3c8063; color: #fff8dc; font-size: 14px; font-weight: 700; }
 .adventure-action:disabled { opacity: .65; cursor: wait; }
+.adventure-action.chain { background: #a9702c; box-shadow: 0 3px 0 #7d5119; }
+.adventure-action.chain:active { transform: translateY(2px); box-shadow: 0 1px 0 #7d5119; }
+.milestone {
+  position: absolute;
+  top: 16%;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 22px;
+  border-radius: 16px;
+  background: #fffdf7f5;
+  border: 2px solid #ffd98a;
+  box-shadow: 0 10px 28px #213d302e;
+  pointer-events: none;
+}
+.milestone-emoji { font-size: 30px; }
+.milestone-text { display: flex; flex-direction: column; line-height: 1.35; }
+.milestone-text strong { font-size: 18px; color: #37624a; }
+.milestone-text small { font-size: 12px; color: #6f8478; }
+.card-enter-active, .card-leave-active { transition: opacity 0.3s ease, transform 0.3s ease; }
+.card-enter-from, .card-leave-to { opacity: 0; transform: translateX(-50%) translateY(-12px) scale(0.94); }
 .legacy-import { position: absolute; bottom: 60px; left: 12px; padding: 10px 12px; border-radius: 10px; background: #edf4e9; color: #3c6154; font-size: 12px; }
 .depth-nav { position: absolute; right: 12px; top: 124px; width: 182px; padding: 12px; border-radius: 14px; background: #fffdf7f2; color: #44584c; box-shadow: 0 4px 16px #213d3026; }
 .depth-location { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #61756b; }
@@ -464,6 +517,9 @@ onBeforeUnmount(() => {
 
 @media (max-width: 720px) {
   .app { padding: 8px; gap: 8px; }
+  .milestone { top: 24%; padding: 10px 14px; gap: 8px; max-width: calc(100% - 24px); }
+  .milestone-emoji { font-size: 22px; }
+  .milestone-text strong { font-size: 15px; }
   .top { padding: 8px; gap: 6px; }
   .brand { gap: 6px; flex: none; }
   .brand-text h1 { font-size: 16px; white-space: nowrap; }

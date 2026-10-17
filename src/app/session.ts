@@ -3,7 +3,7 @@ import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
-import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftConnected, shaftFrontier, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
+import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
 import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
 import {
   createIndexedDbStore,
@@ -16,7 +16,7 @@ import {
 import type { DepthView } from '../render/camera'
 import { attachPointerControls } from '../input/pointerControls'
 import { PixiWorldRenderer } from '../render/PixiRenderer'
-import { playWaterClue } from '../render/waterSound'
+import { playBreakthrough, playLayerArrival, playRockHit, playSpringFound, playWaterClue } from '../render/waterSound'
 
 export interface SessionHooks {
   /** 状态提示（儿童可读的短句） */
@@ -26,11 +26,26 @@ export interface SessionHooks {
   onBuild?(state: BuildState): void
   onView?(view: DepthView): void
   onExploration?(state: ExplorationUI): void
+  /** 一次性里程碑（突破岩层 / 抵达第二层 / 发现泉水）：界面弹一张大卡片 */
+  onMilestone?(card: Milestone): void
 }
 
 export interface ExplorationUI {
   clue: boolean; upgraded: boolean; connected: boolean; entered: boolean; found: boolean
   traveling: boolean; downstairs: boolean; lampMode: boolean; canImport: boolean
+  /** 已经学会亲自委托：可以一次挖到洞底 */
+  canChain: boolean
+  /** 连续施工进行中 */
+  chaining: boolean
+  /** 从当前工作面到洞底还剩几段岩 */
+  remaining: number
+}
+
+/** 里程碑卡片：只用来庆祝，不承载操作 */
+export interface Milestone {
+  emoji: string
+  title: string
+  detail: string
 }
 
 export interface BuildState {
@@ -80,6 +95,8 @@ export interface GameSession {
   /** 把当前任务目标居中（"带我去看看"，只移动画面） */
   focusTarget(): void
   upgradeTool(): void
+  /** 连续施工：从当前梯段一路挖到洞底（学会两次委托之后可用） */
+  digToBottom(): void
   travel(): void
   toggleLamp(): void
   importLegacy(): Promise<void>
@@ -87,6 +104,19 @@ export interface GameSession {
 }
 
 const SAVE_DEBOUNCE_MS = 350
+/** 施工看门狗：画面连续这么久没有新帧 = 动画真的被冻住了（切后台 / 窗口被遮挡 / 帧被冻结） */
+const ORDER_CHECK_MS = 800
+const ORDER_STALL_MS = 3000
+/** 即使画面还在动，一趟委托也不该拖这么久；超过就说明这一趟异常了 */
+const ORDER_HARD_CAP_MS = 20000
+/** 同一句话在这么短时间内不重复弹，避免连点时刷屏 */
+const MESSAGE_REPEAT_MS = 2500
+
+/** 一次进行中的施工委托（走路或挥镐） */
+interface Order {
+  kind: 'travel' | 'swing'
+  startedAt: number
+}
 
 /** 按环境挑选存储：浏览器用 IndexedDB，失败时降级为内存（不会白屏） */
 function pickStore(): SaveStore {
@@ -139,6 +169,20 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let lampMode = false
   let canImport = true
   let importing = false
+  /** 进行中的施工委托；切后台或超时用它安全收尾（不重复挖、不锁死操作） */
+  let order: Order | null = null
+  let orderTimer: number | undefined
+  /** 连续施工：一次委托从当前梯段一路挖到洞底 */
+  let chaining = false
+  let lastMessage = ''
+  let lastMessageAt = 0
+  /** 切后台打断委托后，回到前台补一句提示 */
+  let resumeHint = ''
+  /** 看门狗判据：画面最近一次出新帧的时刻与帧数 */
+  let lastFrameCount = 0
+  let lastFrameAt = 0
+  /** 有改动还没落盘（回到前台时补写一次，避免后台定时器被节流） */
+  let savePending = false
 
   const pushBuild = (): void => {
     // 本阶段只开放第一间睡眠舱：建成后收起工具，避免没人使用的空舱造成误解。
@@ -211,6 +255,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   const persist = async (): Promise<void> => {
     if (saveBlocked || importing) return
+    savePending = false
     try {
       await store.save(serialize(world))
     } catch {
@@ -219,10 +264,77 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   }
 
   const scheduleSave = (): void => {
+    savePending = true
     window.clearTimeout(saveTimer)
     saveTimer = window.setTimeout(() => {
       void persist()
     }, SAVE_DEBOUNCE_MS)
+  }
+
+  /** 同一句话短时间内不重复弹：连点同一个目标只提示一次。 */
+  const notify = (message: string, kind?: 'info' | 'warning'): void => {
+    const now = Date.now()
+    if (message === lastMessage && now - lastMessageAt < MESSAGE_REPEAT_MS) return
+    lastMessage = message
+    lastMessageAt = now
+    hooks.onMessage(message, kind)
+  }
+
+  const remainingSegments = (): number => {
+    const x = world.exploration.shaftX
+    return x === null ? 0 : shaftRemainingSegments(world, x)
+  }
+
+  const endOrder = (): void => {
+    window.clearTimeout(orderTimer)
+    orderTimer = undefined
+    order = null
+  }
+
+  /**
+   * 安全取消进行中的委托：世界保持原样，阿土回到记录的位置，输入立即解锁。
+   * 用于切后台、画面被冻住、这一趟异常拖太久——绝不重复挖，也不会永久锁定操作。
+   */
+  const abortOrder = (message?: string): void => {
+    if (!order) return
+    const interruptedChain = chaining
+    chaining = false
+    endOrder()
+    traveling = false
+    renderer.cancelExplorationAnimation()
+    renderer.refreshExploration()
+    pushProgress()
+    if (message) notify(interruptedChain ? `${message}（还剩 ${remainingSegments()} 段）` : message)
+  }
+
+  /**
+   * 演出看门狗：只要画面还在出新帧就继续等（慢一点没关系），
+   * 连续 3 秒没有新帧才判定"卡住了"，立刻安全收尾。
+   */
+  const watchdogTick = (): void => {
+    if (!order) return
+    const now = Date.now()
+    if (renderer.frames !== lastFrameCount) {
+      lastFrameCount = renderer.frames
+      lastFrameAt = now
+    }
+    const stalled = now - lastFrameAt >= ORDER_STALL_MS
+    const tooLong = now - order.startedAt >= ORDER_HARD_CAP_MS
+    if (!stalled && !tooLong) {
+      orderTimer = window.setTimeout(watchdogTick, ORDER_CHECK_MS)
+      return
+    }
+    abortOrder('⏸ 阿土停下来了，再点一次就好。')
+  }
+
+  /** 演出开始：记下起点与当前帧数，看门狗随后判断画面有没有真的卡住。 */
+  const beginOrder = (kind: Order['kind']): void => {
+    endOrder()
+    const now = Date.now()
+    order = { kind, startedAt: now }
+    lastFrameCount = renderer.frames
+    lastFrameAt = now
+    orderTimer = window.setTimeout(watchdogTick, ORDER_CHECK_MS)
   }
 
   const pushProgress = (): void => {
@@ -249,6 +361,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       clue: world.exploration.clueFound, upgraded: world.exploration.pickaxeUpgraded,
       connected: shaftConnected(world), entered: world.exploration.entered, found: world.exploration.springFound,
       traveling, downstairs: world.exploration.explorer?.y === 21, lampMode, canImport: canImport && !saveBlocked,
+      canChain: shaftChainReady(world), chaining, remaining: remainingSegments(),
     })
     pushBuild()
 
@@ -303,48 +416,111 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     const e = world.exploration
     if (!e.pickaxeUpgraded) {
       if (tile !== TILE.WEAK_ROCK) return false
-      if (!world.pods.length) { hooks.onMessage('先给伙伴安好小床，再来听岩壁里的水声。'); return true }
+      if (!world.pods.length) { notify('先给伙伴安好小床，再来听岩壁里的水声。'); return true }
       if (e.clueFound) {
-        if (e.shaftX !== cell.x) { hooks.onMessage('先顺着刚才发现水汽的裂纹探索吧，换上小铁镐就能挖了。'); return true }
+        if (e.shaftX !== cell.x) { notify('先顺着刚才发现水汽的裂纹探索吧，换上小铁镐就能挖了。'); return true }
         playWaterClue()
-        hooks.onMessage('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
+        notify('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
         return true
       }
       const route = moleRoute(world, { x: cell.x, y: HOME_FLOOR_Y - 1 })
-      if (!route) { hooks.onMessage('先挖通裂纹上方的泥土，让阿土能走到这里。'); return true }
+      if (!route) { notify('先挖通裂纹上方的泥土，让阿土能走到这里。'); return true }
       moveExplorer(route, () => {
         if (!inspectCrack(world, cell.x, HOME_FLOOR_Y)) return
         playWaterClue()
         renderer.playBurst((cell.x + 0.5) * TILE_SIZE, (HOME_FLOOR_Y - 0.5) * TILE_SIZE, { color: 0xaee5e0, count: 10, speed: 42, ring: true, ringRadius: 26 })
-        hooks.onMessage('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
+        renderer.playMoleReaction('滴答…水在下面！')
+        notify('💧 滴答！裂纹里透出凉凉的水汽。换小铁镐试试！')
       })
       return true
     }
     if (!e.clueFound || e.shaftX !== cell.x) {
-      hooks.onMessage('这一轮先挖通刚才那条裂纹吧，另一条以后再探索。')
+      notify('这一轮先挖通刚才那条裂纹吧，另一条以后再探索。')
       return true
     }
-    const target = shaftFrontier(world, cell.x)
-    if (!target) {
-      hooks.onMessage(shaftConnected(world) ? '梯道已经通到洞底啦，点“沿梯子下去”吧。' : '先挖通裂纹上方的泥土，让阿土能走到梯口。')
+    if (shaftConnected(world)) {
+      notify('梯道已经通到洞底啦，点“沿梯子下去”吧。')
       return true
     }
+    if (shaftFrontier(world, cell.x) === null) {
+      notify('先挖通裂纹上方的泥土，让阿土能走到梯口。')
+      return true
+    }
+    // 学会了两次委托之后，一次点击就一口气挖到洞底（按钮和点击都通）。
+    if (shaftChainReady(world)) { startChain(); return true }
+    const target = shaftFrontier(world, cell.x)!
     const route = moleRoute(world, { x: target.x, y: target.y - 1 })
-    if (!route) { hooks.onMessage('先挖通上面的泥土，阿土才有路走近裂纹。'); return true }
-    orderBreak(route, target)
+    if (!route) { notify('先挖通上面的泥土，阿土才有路走近裂纹。'); return true }
+    orderBreak(route, target, true)
     return true
   }
 
+  /**
+   * 连续施工：一次委托从当前梯段一路挖到洞底。
+   * 每一段仍然是真实走位 + 挥镐 + 梯子接长，只是不再需要一段一点；
+   * 演出中任何一次中断（切后台 / 超时）都会安全取消，回来再点一次接着挖。
+   */
+  const startChain = (): void => {
+    const x = world.exploration.shaftX
+    if (chaining || x === null || shaftConnected(world)) return
+    chaining = true
+    renderer.followShaft(x)
+    notify(`⛏ 阿土开工！一口气挖到洞底（还剩 ${remainingSegments()} 段）`)
+    chainStep()
+  }
+
+  const chainStep = (): void => {
+    const x = world.exploration.shaftX
+    if (!chaining || x === null) return
+    const target = shaftConnected(world) ? null : shaftFrontier(world, x)
+    if (!target) { chaining = false; traveling = false; pushProgress(); return }
+    const route = moleRoute(world, { x: target.x, y: target.y - 1 })
+    if (!route) { chaining = false; traveling = false; notify('先挖通上面的泥土，阿土才有路走近裂纹。'); pushProgress(); return }
+    orderBreak(route, target, false, chainStep)
+  }
+
+  /** 落镐：世界真正改变的那一下（挖开一格、梯子接长一段、记录撤销）。 */
+  const breakSegment = (target: Cell): void => {
+    const result = dig(world, target.x, target.y)
+    if (!result.ok) {
+      notify(describeDigFailure(result))
+      renderer.refreshExploration()
+      return
+    }
+    canImport = false
+    history.record({ kind: 'dig', x: target.x, y: target.y, tile: result.tile ?? TILE.WEAK_ROCK })
+    renderer.refreshTerrain([target])
+    renderer.refreshExploration()
+    scheduleSave()
+    pushProgress()
+    const x = world.exploration.shaftX ?? target.x
+    if (shaftConnected(world)) {
+      // 突破反馈：水声更近、洞口冒凉风、镜头一次拉出整条梯子，并弹出里程碑卡片
+      playBreakthrough()
+      playWaterClue()
+      renderer.playBreakthrough(x)
+      renderer.playMoleReaction('通啦！下面有水！')
+      notify('💧 哗啦——水声就在下面！梯道通到洞底啦，点“沿梯子下去”。')
+      hooks.onMilestone?.({ emoji: '⛏', title: '岩层打通啦！', detail: '梯道一直通到洞底 · 点「沿梯子下去」' })
+    } else {
+      playRockHit()
+      notify(`⛏ 岩壁破开一块，小梯子又接好一节（还剩 ${remainingSegments()} 段）。`)
+    }
+  }
+
   const handleTap = (cell: Cell): void => {
-    if (traveling) { hooks.onMessage('阿土正在沿通道赶过去，马上就好！'); return }
+    if (traveling) {
+      notify(chaining ? '阿土正在一口气往下挖，马上就好！' : '阿土正在沿通道赶过去，马上就好！')
+      return
+    }
     if (lampMode) {
       if (cell.y < 19 || cell.y > 21 || !canPlaceWallLamp(world, cell.x)) {
-        hooks.onMessage('先挖出三格高的空地，避开泉水和梯子，再点这里安壁灯。'); return
+        notify('先挖出三格高的空地，避开泉水和梯子，再点这里安壁灯。'); return
       }
       world.exploration.lamps.push({ x: cell.x, y: 19 })
       history.record({ kind: 'lamp', x: cell.x, y: 19 })
       renderer.refreshExploration(); scheduleSave(); pushProgress()
-      hooks.onMessage('🏮 新地方亮起一盏小壁灯！还能继续选位置。')
+      notify('🏮 新地方亮起一盏小壁灯！还能继续选位置。')
       return
     }
     if (building) {
@@ -360,12 +536,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     // 2) 露面的泉水 = 出动目标：阿土自己沿挖通的通道走到水边
     if (isSpringTarget(cell) && springVisible(world)) {
       const route = moleRoute(world, { x: LANDMARKS.spring.x, y: 21 })
-      if (!route) { hooks.onMessage('先挖开脚边的泥土，让阿土能走到水声那边。'); return }
+      if (!route) { notify('先挖开脚边的泥土，让阿土能走到水声那边。'); return }
       moveExplorer(route, () => {
         world.exploration.springFound = true
-        playWaterClue()
-        renderer.playBurst((LANDMARKS.spring.x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0xa5efdd, count: 28, ring: true })
-        hooks.onMessage('🎉 找到天然泉水啦！这里也能成为我们的家！')
+        // 第一次发现泉水：水花 + 光环 + 蹦一下 + 上升的四音，并弹里程碑卡片
+        playSpringFound()
+        renderer.playSpringDiscovery()
+        renderer.playMoleReaction('找到水啦！')
+        notify('🎉 找到天然泉水啦！这里也能成为我们的家！')
+        hooks.onMilestone?.({ emoji: '💧', title: '发现地下泉水！', detail: '第 2 层 · 泉水层从此成为新家园' })
       })
       return
     }
@@ -451,7 +630,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     traveling = true
     pushProgress()
     renderer.focusOn((route[Math.floor(route.length / 2)].x + 0.5) * TILE_SIZE, (route[Math.floor(route.length / 2)].y + 0.5) * TILE_SIZE)
+    beginOrder('travel')
     renderer.playExplorationTravel(route, () => {
+      // 已经被中断（切后台 / 超时 / 看门狗）：这一趟不算数，世界保持原样。
+      if (!order) return
+      endOrder()
       world.exploration.explorer = { ...route[route.length - 1] }
       traveling = false
       onArrived?.()
@@ -460,44 +643,31 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   }
 
   /**
-   * 施工委托：阿土沿真实通道走到梯段，挥镐落下去时才改世界。
-   * 走路和挥镐期间都收紧输入，避免隔空多挖或演出中改地图。
+   * 一次破岩委托：阿土沿真实通道走到梯段上方，挥镐，落镐那一刻才改世界。
+   * 走路和挥镐期间都收紧输入，避免隔空多挖或演出中改地图；
+   * next 只在连续施工时给出——那一段挖完立刻接着委托下一段。
    */
-  const orderBreak = (route: Cell[], target: Cell): void => {
+  const orderBreak = (route: Cell[], target: Cell, follow: boolean, next?: () => void): void => {
     traveling = true
     pushProgress()
-    renderer.focusOn((route[Math.floor(route.length / 2)].x + 0.5) * TILE_SIZE, (route[Math.floor(route.length / 2)].y + 0.5) * TILE_SIZE)
+    if (follow) renderer.followShaft(target.x)
+    beginOrder('travel')
     renderer.playExplorationTravel(route, () => {
+      if (!order) return
+      endOrder()
       world.exploration.explorer = { ...route[route.length - 1] }
+      beginOrder('swing')
       renderer.playRockBreak(target, () => {
-        const result = dig(world, target.x, target.y)
-        traveling = false
-        if (!result.ok) {
-          hooks.onMessage(describeDigFailure(result))
-          renderer.refreshExploration(); pushProgress()
-          return
-        }
-        canImport = false
-        history.record({ kind: 'dig', x: target.x, y: target.y, tile: result.tile ?? TILE.WEAK_ROCK })
-        renderer.refreshTerrain([target])
-        renderer.refreshExploration()
-        scheduleSave()
-        pushProgress()
-        const x = world.exploration.shaftX ?? target.x
-        if (shaftConnected(world)) {
-          // 突破反馈：水声更近、凉风水汽从洞口冒出来，下面透出一线微光
-          playWaterClue()
-          renderer.playBurst((x + 0.5) * TILE_SIZE, 21.5 * TILE_SIZE, { color: 0xa5efdd, count: 22, speed: 60, ring: true, ringRadius: 70 })
-          renderer.playBurst((x + 0.5) * TILE_SIZE, 18.4 * TILE_SIZE, { color: 0xbfeef0, count: 12, speed: 26, gravity: -14 })
-          hooks.onMessage('💧 哗啦——水声就在下面！梯道通到洞底啦，点“沿梯子下去”。')
-        } else {
-          hooks.onMessage('⛏ 岩壁破开一块，小梯子又往下接好一节！')
-        }
+        if (!order) return
+        endOrder()
+        breakSegment(target)
+        if (next) next()
+        else { traveling = false; pushProgress() }
       })
     })
   }
 
-  const detachPointer = attachPointerControls(renderer.canvasElement, {
+  const pointer = attachPointerControls(renderer.canvasElement, {
     onTap: (screen) => {
       if (renderer.isOverview) {
         hooks.onMessage('这是家园全景，点“回到家园”就能继续挖掘和建造。')
@@ -525,12 +695,38 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     onZoom: (delta, anchor) => renderer.zoomBy(delta, anchor),
   })
 
+  /**
+   * 切后台 / 回到前台：
+   * - 切成后台时先把没播完的委托安全取消（世界不变、输入解锁），再落盘一份一致的存档；
+   * - 回到前台时补一句提示，并立刻检查有没有超时卡住的演出。
+   */
   const onVisibilityChange = (): void => {
-    if (document.visibilityState === 'hidden') void persist()
+    if (document.visibilityState === 'hidden') {
+      pointer.reset()
+      if (order) {
+        resumeHint = chaining
+          ? `⏸ 阿土停在梯道里等你 · 点「一路挖到底」接着挖（还剩 ${remainingSegments()} 段）`
+          : '⏸ 阿土停下来等你，回来再点一次就好。'
+      }
+      abortOrder()
+      void persist()
+      return
+    }
+    // 回到前台：立刻检查有没有卡住的演出，并把后台期间没落盘的改动补写一次。
+    watchdogTick()
+    if (savePending) void persist()
+    if (resumeHint) {
+      const hint = resumeHint
+      resumeHint = ''
+      notify(hint)
+    }
   }
   const onPageHide = (): void => { void persist() }
+  /** 窗口失焦不会停帧，只把指针手势复位，避免拖到一半的拖动卡住下一次点击。 */
+  const onWindowBlur = (): void => { pointer.reset() }
   document.addEventListener('visibilitychange', onVisibilityChange)
   window.addEventListener('pagehide', onPageHide)
+  window.addEventListener('blur', onWindowBlur)
 
   return {
     setBuildMode: (active) => {
@@ -616,23 +812,33 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     upgradeTool: () => {
       if (traveling || !upgradePickaxe(world)) return
       renderer.refreshExploration(); scheduleSave(); pushProgress()
-      hooks.onMessage('⛏ 小铁镐准备好啦！点带裂纹的岩石，我会沿梯道一块块挖下去。')
+      notify('⛏ 小铁镐准备好啦！点带裂纹的岩石：前两块你来指挥，之后可以点「一路挖到底」。')
+    },
+    digToBottom: () => {
+      if (traveling || !shaftChainReady(world)) return
+      startChain()
     },
     travel: () => {
       if (traveling || !shaftConnected(world) || !world.exploration.explorer) return
       lampMode = false
       const down = world.exploration.explorer.y !== 21
       const route = walkingRoute(world, world.exploration.explorer, { x: world.exploration.shaftX!, y: down ? 21 : 11 })
-      if (!route) { hooks.onMessage('通道还没连好，先检查梯子和地面。'); return }
+      if (!route) { notify('通道还没连好，先检查梯子和地面。'); return }
       moveExplorer(route, () => {
-        if (down) { world.exploration.entered = true; renderer.focusWater(); hooks.onMessage('🪜 到第二层啦！水声从土壁那边传来……') }
-        else { renderer.focusHome(); hooks.onMessage('⌂ 顺着梯子回到家啦！') }
+        if (down) {
+          world.exploration.entered = true
+          renderer.focusWater()
+          renderer.playMoleReaction('到啦！水就在那边。')
+          playLayerArrival()
+          notify('🪜 到第二层啦！水声从土壁那边传来……')
+          hooks.onMilestone?.({ emoji: '🪜', title: '抵达第 2 层 · 泉水层', detail: '冷色的洞壁和苔藓 · 挖到水边就能安家' })
+        } else { renderer.focusHome(); notify('⌂ 顺着梯子回到家啦！') }
       })
     },
     toggleLamp: () => {
       if (!world.exploration.springFound || traveling) return
       lampMode = !lampMode; building = false; candidate = null; pushProgress()
-      hooks.onMessage(lampMode ? '🏮 点挖空的泉水层洞壁，安一盏小灯。再点工具可以收起。' : '⛏ 继续自由挖掘吧。')
+      notify(lampMode ? '🏮 点挖空的泉水层洞壁，安一盏小灯。再点工具可以收起。' : '⛏ 继续自由挖掘吧。')
     },
     importLegacy: async () => {
       if (!canImport || saveBlocked || traveling || importing) return
@@ -654,10 +860,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     },
     destroy: () => {
       window.clearTimeout(saveTimer)
+      endOrder()
       void persist()
       document.removeEventListener('visibilitychange', onVisibilityChange)
       window.removeEventListener('pagehide', onPageHide)
-      detachPointer()
+      window.removeEventListener('blur', onWindowBlur)
+      pointer.detach()
       renderer.destroy()
     },
   }

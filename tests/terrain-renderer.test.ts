@@ -5,6 +5,7 @@ import { dig } from '../src/core/dig'
 import { createDigHistory } from '../src/core/history'
 import { collectCrystal, repairCore } from '../src/core/interact'
 import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE, type SleepPod } from '../src/core/world'
+import { inspectCrack, moleRoute, shaftFrontier, upgradePickaxe } from '../src/core/exploration'
 import { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrainTextures'
 import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
@@ -260,6 +261,46 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     for (let i = 0; i < 5; i++) view.tick({ deltaMS: 100 } as Ticker)
     expect(view.crystalFeedback.view.visible).toBe(false)
     expect(JSON.stringify(world)).toBe(snapshot)
+  })
+
+  it('探索演出可以安全取消：没落镐就不改世界，重新委托才真的挖开', () => {
+    const w = world
+    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
+    expect(placePod(w, 12, 10)).not.toBeNull()
+    for (let x = 26; x <= 27; x++) dig(w, x, 11)
+    expect(inspectCrack(w, 27, 12)).toBe(true)
+    expect(upgradePickaxe(w)).toBe(true)
+    renderer.refresh()
+    const target = shaftFrontier(w, 27)!
+    // 让阿土从大厅地面出发，走一段真实的长路
+    w.exploration.explorer = { x: 18, y: 11 }
+    const route = moleRoute(w, { x: target.x, y: target.y - 1 })!
+    expect(route.length).toBe(10)
+    const snapshot = JSON.stringify(w)
+    const arrived = vi.fn()
+    renderer.playExplorationTravel(route, arrived)
+    expect(renderer.explorationAnimating).toBe(true)
+    for (let i = 0; i < 2; i++) view.tick({ deltaMS: 100 } as Ticker)
+    // 走到一半被切后台 / 超时：不"到达"、不改世界
+    renderer.cancelExplorationAnimation()
+    expect(renderer.explorationAnimating).toBe(false)
+    for (let i = 0; i < 20; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(arrived).not.toHaveBeenCalled()
+    expect(JSON.stringify(w)).toBe(snapshot)
+    // 挥镐到一半取消：落镐回调不触发，世界保持原样
+    const struck = vi.fn()
+    renderer.playRockBreak(target, struck)
+    for (let i = 0; i < 3; i++) view.tick({ deltaMS: 100 } as Ticker)
+    renderer.cancelExplorationAnimation()
+    for (let i = 0; i < 20; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(struck).not.toHaveBeenCalled()
+    expect(JSON.stringify(w)).toBe(snapshot)
+    // 玩家再点一次：落镐后照常挖开一格，演出自己收尾
+    renderer.playRockBreak(target, struck)
+    for (let i = 0; i < 8; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(struck).toHaveBeenCalledTimes(1)
+    expect(renderer.explorationAnimating).toBe(false)
   })
 
   it('安装动画结束才启动和点灯；任务及存档立即完成，载入已完成世界不重播', () => {

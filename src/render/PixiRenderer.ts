@@ -14,6 +14,7 @@ import {
   type WorldState,
 } from '../core/world'
 import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from './terrainTextures'
+import { SHAFT_LAST_Y, shaftFrontier } from '../core/exploration'
 import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTexture } from './energyCoreTexture'
 import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
@@ -283,6 +284,7 @@ export class PixiWorldRenderer {
   private cameraTween: CameraTween | null = null
   private viewport: Viewport
   private elapsed = 0
+  private frameCount = 0
   /** 0 = 全黑，1 = 灯火通明（修复能源核心后平滑过渡） */
   private lightLevel = 0
   /** 机器启动动画剩余时间（快速闪烁） */
@@ -377,6 +379,81 @@ export class PixiWorldRenderer {
 
   refreshExploration(): void { if (this.world) this.explorationScene.refresh(this.world) }
   playExplorationTravel(points: Cell[], done: () => void): void { this.explorationScene.travel(points, done) }
+
+  /** 是否有正在播出的探索演出（走路 / 挥镐）。 */
+  get explorationAnimating(): boolean {
+    return this.explorationScene.animating
+  }
+
+  /** 累计帧数：会话层用它区分"画面被冻住"和"只是慢"。 */
+  get frames(): number {
+    return this.frameCount
+  }
+
+  /**
+   * 安全中断探索演出（切后台 / 窗口长时间失焦 / 演出超时）：
+   * 只清动作并把阿土放回世界记录的位置，不回调、不改世界。
+   */
+  cancelExplorationAnimation(): void {
+    this.explorationScene.cancel()
+  }
+
+  /** 阿土的一句反应（蹦一下 + 嘴边短句）：纯画面，不锁输入。 */
+  playMoleReaction(text: string): void {
+    this.explorationScene.react(text)
+  }
+
+  /**
+   * 岩层打通：镜头一次拉到能看全整条梯子的构图，凉风从洞底一路冒上来。
+   * 只影响画面，世界数据早已由会话层写好了。
+   */
+  playBreakthrough(x: number): void {
+    const zoom = clampZoom(Math.min(1.2, Math.max(0.9, this.viewport.height / (13 * TILE_SIZE))))
+    this.cameraTween = {
+      from: { ...this.camera },
+      to: centerOn((x + 0.5) * TILE_SIZE, 16.4 * TILE_SIZE, this.viewport, zoom),
+      elapsed: 0,
+      duration: 0.9,
+    }
+    for (let y = SHAFT_LAST_Y; y >= STRATA.home.bottom; y--) {
+      this.playBurst((x + 0.5) * TILE_SIZE, (y + 0.6) * TILE_SIZE, { color: 0xbfeef0, count: 5, speed: 22, gravity: -16 })
+    }
+    this.playBurst((x + 0.5) * TILE_SIZE, (SHAFT_LAST_Y + 0.7) * TILE_SIZE, {
+      color: 0xa5efdd, count: 24, speed: 62, ring: true, ringRadius: 84,
+    })
+  }
+
+  /** 首次发现泉水：水花、两层光环、上飘的水汽，镜头轻轻推近水边。 */
+  playSpringDiscovery(): void {
+    const x = (LANDMARKS.spring.x + 0.5) * TILE_SIZE
+    const y = 22 * TILE_SIZE - 7
+    this.playBurst(x, y, { color: 0xd9fdf6, count: 26, speed: 118, ring: true, ringRadius: 46 })
+    this.playBurst(x, y - 2, { color: 0x9fe6e6, count: 16, speed: 56, gravity: -34 })
+    this.playBurst(x, y - 6, { color: 0xfffdf2, count: 12, speed: 34, gravity: -18 })
+    this.rings.push({ x, y, age: 0, life: 1.1, maxRadius: 150, color: 0xa5efdd })
+    this.cameraTween = {
+      from: { ...this.camera },
+      to: centerOn(x, y - 30, this.viewport, clampZoom(Math.max(1.05, this.camera.zoom))),
+      elapsed: -0.15,
+      duration: 0.9,
+    }
+  }
+
+  /**
+   * 一次委托破岩：镜头平滑下移到那段梯子（不硬切），连续施工时也用它跟着走。
+   * 玩家的平移 / 缩放会取消补间，镜头永远听玩家的。
+   */
+  followShaft(x: number): void {
+    const frontier = this.world ? shaftFrontier(this.world, x) : null
+    const targetY = frontier ? frontier.y : SHAFT_LAST_Y
+    this.overview = false
+    this.cameraTween = {
+      from: { ...this.camera },
+      to: centerOn((x + 0.5) * TILE_SIZE, (targetY + 0.5) * TILE_SIZE - 20, this.viewport, Math.max(0.9, this.camera.zoom)),
+      elapsed: 0,
+      duration: 0.55,
+    }
+  }
 
   /**
    * 破岩演出：阿土在梯段上挥镐，落镐瞬间回调（由会话层改世界并落地反馈）。
@@ -633,6 +710,7 @@ export class PixiWorldRenderer {
   private readonly tick = (ticker: Ticker): void => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
     this.elapsed += dt
+    this.frameCount += 1
     this.syncViewport()
     if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
     this.updateCameraTween(dt)
