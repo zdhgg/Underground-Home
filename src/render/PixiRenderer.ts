@@ -22,7 +22,7 @@ import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type
 import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE, BEDS_PER_POD } from '../core/build'
-import { partnerAt, waitingPartners } from '../core/partners'
+import { partnerAt, partnersWilling } from '../core/partners'
 import { foundRelics } from '../core/relics'
 import { drawRelic } from './relicProps'
 import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
@@ -977,8 +977,9 @@ export class PixiWorldRenderer {
     this.friends = []
     const world = this.world
     if (!world) return
-    const waiting = waitingPartners(world)
-    const total = world.pods.length * BEDS_PER_POD + waiting
+    // 只渲染真的愿意来的伙伴：床位可能比人先建好（空床位留给还没来的朋友），
+    // 但绝不能凭空画出一个人来。
+    const total = partnersWilling(world)
     for (let i = 0; i < total; i++) {
       const pod = i < world.pods.length * BEDS_PER_POD ? world.pods[Math.floor(i / BEDS_PER_POD)] : null
       const bedIndex = i % BEDS_PER_POD

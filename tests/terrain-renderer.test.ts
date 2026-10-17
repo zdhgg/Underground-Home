@@ -512,6 +512,16 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.friends.every((friend) => friend.pose === 'rest')).toBe(true)
   })
 
+  it('水还没找到就建了第二间床：只渲染三位伙伴，空一个床位等小泉', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
+    expect(placePod(next, 7, 10)).not.toBeNull()
+    renderer.setWorld(next)
+    expect(view.friends).toHaveLength(3)
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'rest'])
+  })
+
   it('找到水之后大厅里多出两位等床的新朋友', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
