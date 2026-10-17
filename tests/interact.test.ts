@@ -4,6 +4,12 @@ import { dig } from '../src/core/dig'
 import { LANDMARKS, TILE, createInitialWorld, tileAt } from '../src/core/world'
 
 describe('能源石互动（收集）', () => {
+  it('落地入口处虽然已经挖空，也不能隔着泥土收走未发现的能源石', () => {
+    const world = createInitialWorld()
+    expect(world.tiles[9][15]).toBe(TILE.EMPTY)
+    expect(collectCrystal(world, 15, 9)).toMatchObject({ ok: false, reason: 'not-revealed' })
+    expect(world.progress.crystalCollected).toBe(false)
+  })
   it('还没挖开时不能收集（泥土盖着）', () => {
     const world = createInitialWorld()
     const result = collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)

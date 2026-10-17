@@ -35,7 +35,7 @@ export function collectCrystal(world: WorldState, x: number, y: number): Interac
   const base = { kind: 'collect-crystal' as const, x, y }
   if (world.progress.crystalCollected) return { ...base, ok: false, reason: 'already-collected' }
   if (!inRect(LANDMARKS.crystalZone, x, y)) return { ...base, ok: false, reason: 'wrong-place' }
-  if (world.tiles[y][x] !== TILE.EMPTY) return { ...base, ok: false, reason: 'not-revealed' }
+  if (world.tiles[LANDMARKS.crystal.y][LANDMARKS.crystal.x] !== TILE.EMPTY || world.tiles[y][x] !== TILE.EMPTY) return { ...base, ok: false, reason: 'not-revealed' }
   world.progress.crystalCollected = true
   return { ...base, ok: true }
 }

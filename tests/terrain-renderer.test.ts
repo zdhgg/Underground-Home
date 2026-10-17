@@ -123,13 +123,13 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   })
 
   it('64px PNG 换入空精灵后仍为32×32，锚点和网格不变', () => {
-    const cell = view.tileSprites[9][16]
+    const cell = view.tileSprites[9][14]
     for (const sprite of [cell.base, ...cell.edges.filter((edge) => edge.visible)]) {
       expect(sprite.width).toBe(TILE_SIZE)
       expect(sprite.height).toBe(TILE_SIZE)
       expect(sprite.anchor.x).toBe(0)
       expect(sprite.anchor.y).toBe(0)
-      expect([sprite.x, sprite.y]).toEqual([16 * TILE_SIZE, 9 * TILE_SIZE])
+      expect([sprite.x, sprite.y]).toEqual([14 * TILE_SIZE, 9 * TILE_SIZE])
     }
   })
 
@@ -153,14 +153,14 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   })
 
   it('土岩实心交界不画洞边；挖掘交界后两种材质各用自己的叠图', () => {
-    expect(view.tileSprites[10][7].edges.some((edge) => edge.visible)).toBe(false)
-    expect(view.tileSprites[10][8].edges.some((edge) => edge.visible)).toBe(false)
-    expect(dig(world, 8, 10).ok).toBe(true)
-    renderer.refreshTerrain([{ x: 8, y: 10 }])
-    expect(view.tileSprites[10][7].edges[1].visible).toBe(true)
-    expect(view.tileSprites[10][7].edges[1].texture).toBe(art.rockEdges.right)
-    expect(view.tileSprites[10][9].edges[3].visible).toBe(true)
-    expect(view.tileSprites[10][9].edges[3].texture).toBe(art.soilEdges.left)
+    expect(view.tileSprites[10][1].edges.some((edge) => edge.visible)).toBe(false)
+    expect(view.tileSprites[10][2].edges.some((edge) => edge.visible)).toBe(false)
+    expect(dig(world, 2, 10).ok).toBe(true)
+    renderer.refreshTerrain([{ x: 2, y: 10 }])
+    expect(view.tileSprites[10][1].edges[1].visible).toBe(true)
+    expect(view.tileSprites[10][1].edges[1].texture).toBe(art.rockEdges.right)
+    expect(view.tileSprites[10][3].edges[3].visible).toBe(true)
+    expect(view.tileSprites[10][3].edges[3].texture).toBe(art.soilEdges.left)
   })
 
   it('挖掘、撤销恢复四周边缘与原贴图，且清除已挖格的悬停框', () => {
@@ -339,17 +339,45 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(JSON.stringify(world)).toBe(snapshot)
   })
 
+  it('点亮核心只解除暖窝层黑暗，第二层始终保留独立遮罩', () => {
+    view.lightLevel = 1
+    view.drawLighting()
+    expect(view.darkness.context.instructions).toHaveLength(1)
+    expect(view.darkness.context.fillStyle.alpha).toBe(0.43)
+    const bounds = view.darkness.getLocalBounds()
+    expect(bounds.y).toBe(12 * TILE_SIZE)
+    expect(bounds.height).toBe((world.height - 12) * TILE_SIZE)
+    expect(view.tileSprites[17][8].base.tint).not.toBe(view.tileSprites[10][8].base.tint)
+  })
+
+  it('向下镜头可取消，返回家园恢复操作视角，全景覆盖地表到基岩', () => {
+    const onView = vi.fn()
+    renderer.onViewChanged = onView
+    renderer.focusWater()
+    for (let i = 0; i < 10; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(onView).toHaveBeenLastCalledWith({ layer: 'water', overview: false })
+    renderer.focusOverview()
+    expect(renderer.isOverview).toBe(true)
+    renderer.focusHome()
+    expect(renderer.isOverview).toBe(false)
+    expect(view.cameraTween).toBeNull()
+    expect(onView).toHaveBeenLastCalledWith({ layer: 'home', overview: false })
+    renderer.focusWater()
+    renderer.panBy(0, 20)
+    expect(view.cameraTween).toBeNull()
+  })
+
   describe('睡眠舱入场与休息', () => {
   function carvedWorld() {
     const next = createInitialWorld()
     next.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
-    for (let y = 8; y < 10; y++) for (let x = 12; x < 15; x++) dig(next, x, y)
+    for (let y = 10; y < 12; y++) for (let x = 12; x < 15; x++) dig(next, x, y)
     return next
   }
 
   it('载入带睡眠舱的存档时伙伴直接睡在床上，不重播入场', () => {
     const saved = carvedWorld()
-    const pod = placePod(saved, 12, 8)!
+    const pod = placePod(saved, 12, 10)!
     renderer.setWorld(saved)
     const beds = bedSlots(pod)
     expect(view.podEntrance).toBeNull()
@@ -367,7 +395,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     const next = carvedWorld()
     renderer.setWorld(next)
     const beforeY = view.friends[0].view.y
-    placePod(next, 12, 8)
+    placePod(next, 12, 10)
     renderer.refreshPods()
     expect(view.podEntrance).toBeNull()
     expect(view.friends[0].pose).toBe('idle')
@@ -378,7 +406,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调', () => {
     const next = carvedWorld()
     renderer.setWorld(next)
-    const pod = placePod(next, 12, 8)!
+    const pod = placePod(next, 12, 10)!
     renderer.refreshPods()
     let posesAtSettle: string[] = []
     const settled = vi.fn(() => {

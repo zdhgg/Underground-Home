@@ -10,7 +10,8 @@ import {
   serialize,
   type SaveStore,
 } from '../core/persistence'
-import { LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
+import { LANDMARKS, TILE, TILE_SIZE, createInitialWorld, isPreviewLayer, type Cell, type Rect } from '../core/world'
+import type { DepthView } from '../render/camera'
 import { attachPointerControls } from '../input/pointerControls'
 import { PixiWorldRenderer } from '../render/PixiRenderer'
 
@@ -20,6 +21,7 @@ export interface SessionHooks {
   /** 任务进度与引导变化（小鼹鼠面板 + 徽章） */
   onProgress(progress: SessionProgress): void
   onBuild?(state: BuildState): void
+  onView?(view: DepthView): void
 }
 
 export interface BuildState {
@@ -36,12 +38,14 @@ const BUILD_MESSAGES: Record<BuildFailure, string> = {
   reserved: '入口和能源核心旁边要留出位置。', overlap: '这里已经有一张小床啦。',
   soil: '先切回挖掘，挖出一块能放下小床的空地。', support: '小床下面要有泥土或岩石托住，不能悬空。',
   access: '小床的门要通到家里，也要给伙伴和核心留条路。',
+  'locked-layer': '泉水层还没有开放，回暖窝层安小床吧。',
 }
 
 /** 预览旁边的短提示：孩子不用低头看底部面板也能判断 */
 const BUILD_SHORT_HINTS: Record<BuildFailure, string> = {
   power: '先修好能源核心', bounds: '太靠边了', reserved: '这里要留空',
   overlap: '已经有小床', soil: '先挖空这块', support: '小床要落地', access: '门要通到家里',
+  'locked-layer': '这一层还没开放',
 }
 
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
@@ -60,6 +64,8 @@ export interface GameSession {
   confirmBuild(): void
   zoomBy(delta: number): void
   centerOnHome(): void
+  lookDown(): void
+  showOverview(): void
   /** 撤销最近一次挖掘（挖错保护；能源石被挖开后不可再被埋回去） */
   undo(): void
   /** 把当前任务目标居中（"带我去看看"，只移动画面） */
@@ -87,6 +93,8 @@ function describeDigFailure(result: DigResult): string {
   switch (result.reason) {
     case 'rock':
       return '🪨 这是坚硬岩石，以后升级工具才能挖开'
+    case 'locked-layer':
+      return '💧 下面好像有水声！泉水层还没开放，先回暖窝层建设吧。'
     case 'empty':
       return '这里已经挖空啦，拖动画布看看别处吧'
     case 'sky':
@@ -100,6 +108,7 @@ function describeDigFailure(result: DigResult): string {
 
 export async function createGameSession(host: HTMLElement, hooks: SessionHooks): Promise<GameSession> {
   const renderer = await PixiWorldRenderer.create(host)
+  renderer.onViewChanged = (view) => hooks.onView?.(view)
   const store = pickStore()
   const history = createWorldHistory()
 
@@ -110,6 +119,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let hoverBuild: Cell | null = null
   /** 伙伴是否已经在床上休息；不写入存档，重新载入时由第一间睡眠舱推导 */
   let resting = false
+  let saveBlocked = false
 
   const pushBuild = (): void => {
     // 本阶段只开放第一间睡眠舱：建成后收起工具，避免没人使用的空舱造成误解。
@@ -122,7 +132,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     const hoverAnchor = hoverBuild ? podAnchorFromPointer(hoverBuild) : null
     const previewPoint = building ? candidate ?? hoverAnchor : null
     const previewResult = previewPoint ? canPlacePod(world, previewPoint.x, previewPoint.y) : null
-    const selectedResult = candidate ? canPlacePod(world, candidate.x, candidate.y) : null
+    const selectedResult = candidate ? previewResult : null
     const previewHint = previewResult
       ? previewResult.ok ? '可以建 ✓' : BUILD_SHORT_HINTS[previewResult.reason]
       : ''
@@ -155,7 +165,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     })
   }
 
-  // 优先恢复存档；损坏反馈；v1 / v2 自动迁移到含睡眠舱的 v3。
+  // 只恢复独立原型存档；失败时保留原数据，禁止本次会话覆盖。
   try {
     const raw = await store.load()
     if (raw !== null && raw !== undefined) {
@@ -165,17 +175,20 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         resting = world.pods.length > 0
         hooks.onMessage('💾 已恢复上次的进度')
       } else {
-        hooks.onMessage(`存档读取失败（${result.error}），已开始新的第一夜`, 'warning')
+        saveBlocked = true
+        hooks.onMessage(`原型存档读取失败（${result.error}），本次临时试玩，不覆盖原档`, 'warning')
       }
     }
   } catch {
-    hooks.onMessage('存档读取失败，已开始新的第一夜', 'warning')
+    saveBlocked = true
+    hooks.onMessage('原型存档无法读取，本次临时试玩，刷新后可能不保留', 'warning')
   }
 
   renderer.setWorld(world)
   renderer.focusHome()
 
   const persist = async (): Promise<void> => {
+    if (saveBlocked) return
     try {
       await store.save(serialize(world))
     } catch {
@@ -203,7 +216,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         ? '小床安好啦！伙伴准备钻进被窝……'
         : mission
           ? mission.speech
-          : '伙伴睡得好香！你还可以继续挖空间，把家变得更大。',
+          : '伙伴睡得好香！你可以继续扩建暖窝层，也可以点“向下看看”，听听岩层深处的水声。',
       outcome: mission ? mission.outcome : '',
       done: pendingRest ? Math.max(0, summary.done - 1) : summary.done,
       total: summary.total,
@@ -229,6 +242,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   /** 悬停时的指针形状：可互动区域用 pointer，可挖泥土用 crosshair */
   const pickCursor = (cell: Cell | null): string => {
     if (!cell) return 'default'
+    if (isPreviewLayer(cell.y)) return 'not-allowed'
     if (inRect(LANDMARKS.generatorZone, cell)) return 'pointer'
     if (inRect(LANDMARKS.crystalZone, cell) && !world.progress.crystalCollected) return 'pointer'
     return world.tiles[cell.y][cell.x] === TILE.SOIL ? 'crosshair' : 'default'
@@ -312,15 +326,25 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   const detachPointer = attachPointerControls(renderer.canvasElement, {
     onTap: (screen) => {
+      if (renderer.isOverview) {
+        hooks.onMessage('这是家园全景，点“回到家园”就能继续挖掘和建造。')
+        return
+      }
       const cell = renderer.tileAtScreen(screen)
       if (cell) handleTap(cell)
     },
     onPanBy: (delta) => renderer.panBy(delta.x, delta.y),
     onHover: (screen) => {
+      if (renderer.isOverview) {
+        renderer.setHoverCell(null)
+        renderer.setCursor('default')
+        return
+      }
       const cell = screen ? renderer.tileAtScreen(screen) : null
       renderer.setHoverCell(building ? null : cell)
       renderer.setCursor(building ? 'copy' : pickCursor(cell))
       if (building) {
+        if (hoverBuild?.x === cell?.x && hoverBuild?.y === cell?.y) return
         hoverBuild = cell
         pushBuild()
       }
@@ -331,8 +355,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   const onVisibilityChange = (): void => {
     if (document.visibilityState === 'hidden') void persist()
   }
+  const onPageHide = (): void => { void persist() }
   document.addEventListener('visibilitychange', onVisibilityChange)
-  window.addEventListener('pagehide', onVisibilityChange)
+  window.addEventListener('pagehide', onPageHide)
 
   return {
     setBuildMode: (active) => {
@@ -368,7 +393,23 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       })
     },
     zoomBy: (delta) => renderer.zoomBy(delta),
-    centerOnHome: () => renderer.focusHome(),
+    centerOnHome: () => { renderer.focusHome() },
+    lookDown: () => {
+      building = false
+      candidate = null
+      hoverBuild = null
+      pushBuild()
+      renderer.setHoverCell(null)
+      renderer.focusWater()
+    },
+    showOverview: () => {
+      building = false
+      candidate = null
+      hoverBuild = null
+      pushBuild()
+      renderer.setHoverCell(null)
+      renderer.focusOverview()
+    },
     undo: () => {
       // LIFO：优先撤销最近建设 / 挖掘，保护能源石、设施及唯一通路。
       const restored = history.undo(world)
@@ -389,13 +430,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     focusTarget: () => {
       const guide = guideHighlight(world)
       const rect = guide.kind === 'none' && world.progress.coreRepaired && world.pods.length === 0
-        ? { x: 11, y: 7, w: 6, h: 5 } : guide.kind === 'none' ? LANDMARKS.shelter : guide.rect
+        ? LANDMARKS.buildSuggestion : guide.kind === 'none' ? LANDMARKS.shelter : guide.rect
       renderer.focusOn((rect.x + rect.w / 2) * TILE_SIZE, (rect.y + rect.h / 2) * TILE_SIZE)
     },
     destroy: () => {
       window.clearTimeout(saveTimer)
+      void persist()
       document.removeEventListener('visibilitychange', onVisibilityChange)
-      window.removeEventListener('pagehide', onVisibilityChange)
+      window.removeEventListener('pagehide', onPageHide)
       detachPointer()
       renderer.destroy()
     },
