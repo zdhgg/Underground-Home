@@ -89,6 +89,8 @@ interface TerrainProbe {
     inEntrance: boolean
     podId: number | null
     nameLabel: { text: string } | null
+    hidden: boolean
+    tailGlow: { alpha: number } | null
   }[]
   refreshPods(): void
   refreshFriends(arrivingPodId?: number | null): void
@@ -412,6 +414,52 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     renderer.focusWater()
     renderer.panBy(0, 20)
     expect(view.cameraTween).toBeNull()
+  })
+
+  describe('点亮与阿灯', () => {
+    it('还没点亮：阿灯缩在角落，只有尾光、没有名字；阿土照常站在大厅', () => {
+      renderer.setWorld(createInitialWorld())
+      expect(view.friends).toHaveLength(2)
+      const [atu, adeng] = view.friends
+      expect(atu.hidden).toBe(false)
+      expect(atu.nameLabel?.text).toBe('阿土')
+      expect(adeng.hidden).toBe(true)
+      expect(adeng.nameLabel).toBeNull()
+      expect(adeng.tailGlow).not.toBeNull()
+      expect(adeng.view.alpha).toBeLessThan(0.8)
+      // 她躲在右边角落，和阿土分开
+      expect(adeng.view.x).toBeGreaterThan(atu.view.x)
+    })
+
+    it('点亮之后：阿灯从角落飞出来，落地后有名字、不再躲着', () => {
+      const world = createInitialWorld()
+      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: false }
+      renderer.setWorld(world)
+      const adeng = view.friends[1]
+      expect(adeng.hidden).toBe(true)
+      const cornerX = adeng.view.x
+
+      world.progress.coreRepaired = true
+      renderer.playRepairCelebration()
+      // 安装 0.7s + 延迟 0.7s + 飞行 1.25s，留足帧数
+      for (let i = 0; i < 220; i++) view.tick({ deltaMS: 16 } as Ticker)
+
+      expect(adeng.hidden).toBe(false)
+      expect(adeng.view.x).not.toBeCloseTo(cornerX, 0)
+      expect(adeng.view.alpha).toBeCloseTo(1, 2)
+      expect(adeng.nameLabel?.text).toBe('阿灯')
+      expect(adeng.tailGlow).toBeNull()
+    })
+
+    it('已点亮的存档直接站着，不重播飞出来的演出', () => {
+      const world = createInitialWorld()
+      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+      renderer.setWorld(world)
+      const adeng = view.friends[1]
+      expect(adeng.hidden).toBe(false)
+      expect(adeng.nameLabel?.text).toBe('阿灯')
+      expect(view.podEntrance).toBeNull()
+    })
   })
 
   describe('睡眠舱入场与休息', () => {

@@ -130,6 +130,12 @@ interface FriendSprite {
   spot: { x: number; y: number }
   /** 还没入住时头顶的名字标签；住进床里就销毁 */
   nameLabel: Text | null
+  /** 伙伴名字：重建与"飞出来"时都要用 */
+  partnerName: string
+  /** 还没点亮时，阿灯缩在角落——不站大厅、不弹跳、没有名字 */
+  hidden: boolean
+  /** 角落里的尾光（只有躲着的时候有） */
+  tailGlow: Graphics | null
 }
 
 interface RoutePoint {
@@ -147,6 +153,15 @@ interface PodTraveller {
   lengths: number[]
   total: number
   settled: boolean
+}
+
+/** 点亮之后阿灯从角落飞回大厅：一条拱形补间，落地后才有名字 */
+interface LampReveal {
+  friend: FriendSprite
+  elapsed: number
+  duration: number
+  from: { x: number; y: number }
+  to: { x: number; y: number }
 }
 
 interface PodEntrance {
@@ -216,6 +231,12 @@ const IDLE_SPOTS = [
 ] as const
 /** 伙伴配色，和 core/partners 的名单同序：阿土（土绿）、阿灯（淡紫）、小满（浅粉）、小泉（沙黄） */
 const FRIEND_COLORS = [0xa8ba8e, 0xb9a7e0, 0xe9b6a7, 0xe5cf95] as const
+
+/** 还没点亮时，阿灯缩在大厅右下角，贴着岩壁 */
+const LAMP_CORNER = { x: 25.4, y: 10 } as const
+/** 灯亮之后等一小会儿，再让她飞出来 */
+const LAMP_REVEAL_DELAY = 0.7
+const LAMP_REVEAL_DURATION = 1.25
 
 const REPAIR_CONFETTI_ANCHORS = [
   { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
@@ -315,6 +336,9 @@ export class PixiWorldRenderer {
   /** 等灯光亮到一定程度后触发一次庆祝 */
   private pendingCelebration = false
   private celebrationTime = 0
+  /** 灯亮之后阿灯飞出来的补间与它的延迟 */
+  private lampReveal: LampReveal | null = null
+  private lampRevealDelay = 0
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
@@ -388,6 +412,8 @@ export class PixiWorldRenderer {
     this.spinUp = 0
     this.pendingCelebration = false
     this.celebrationTime = 0
+    this.lampReveal = null
+    this.lampRevealDelay = 0
     this.cameraTween = null
     this.world = world
     this.lightLevel = world.progress.coreRepaired ? 1 : 0
@@ -731,6 +757,8 @@ export class PixiWorldRenderer {
     })
     this.spinUp = 1.2
     this.pendingCelebration = true
+    // 灯亮之后，躲在角落的阿灯会飞出来——这是点亮这件事的情感落点。
+    if (this.friends.some((friend) => friend.hidden)) this.lampRevealDelay = LAMP_REVEAL_DELAY
   }
 
   /** 初始 / 回家视角：一眼看到避难所、能源核心和左侧的能源石区 */
@@ -986,12 +1014,15 @@ export class PixiWorldRenderer {
       const spot = IDLE_SPOTS[i % IDLE_SPOTS.length]
       const standing = friendWalkY(world, { x: Math.floor(spot.x), y: spot.y })
       const partner = partnerAt(i)
+      // 阿灯还没点亮时缩在角落：这是"点亮"的情感落点，不是一步任务。
+      const hiding = !world.progress.coreRepaired && partner.id === 'adeng'
       const bodyColor = FRIEND_COLORS[i % FRIEND_COLORS.length]
       const view = new Container()
       const body = new Graphics()
       const friend: FriendSprite = {
         view, body, bodyColor, baseY: standing, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
         podId: pod ? pod.id : null, spot: { x: spot.x, y: standing }, nameLabel: null,
+        partnerName: partner.name, hidden: hiding, tailGlow: null,
       }
       // 已经入住的伙伴接着睡；正在入场的这一对站在原地等演出开始。
       if (pod && pod.id !== arrivingPodId) {
@@ -1000,26 +1031,46 @@ export class PixiWorldRenderer {
         friend.pose = 'rest'
         view.position.set(bed.x, bed.y)
         view.scale.set(FRIEND_REST_SCALE)
+      } else if (hiding) {
+        const cornerY = friendWalkY(world, { x: Math.floor(LAMP_CORNER.x), y: LAMP_CORNER.y })
+        friend.baseY = cornerY
+        friend.spot = { x: LAMP_CORNER.x, y: cornerY }
+        view.position.set(LAMP_CORNER.x * TILE_SIZE, cornerY)
+        view.scale.set(0.82)
+        view.alpha = 0.68
       } else {
         view.position.set(spot.x * TILE_SIZE, standing)
-        // 还站着等床的伙伴带名字：孩子得知道"是谁在等"，而不是"一个球在等"。
-        const label = new Text({
-          text: partner.name,
-          style: {
-            fontFamily: LABEL_FONT, fontSize: 10, fontWeight: '600',
-            fill: 0xf7f2e4, stroke: { color: 0x1a2a2e, width: 3 },
-          },
-        })
-        label.anchor.set(0.5)
-        label.position.set(0, -FRIEND_RADIUS - 12)
-        friend.nameLabel = label
       }
       paintFriend(body, bodyColor, friend.pose)
       view.addChild(body)
-      if (friend.nameLabel) view.addChild(friend.nameLabel)
+      if (hiding) {
+        // 只露一点点尾光：让玩家看见"角落里有个东西"，但看不清是谁。
+        const glow = new Graphics()
+        glow.circle(0, 7, 3.4).fill({ color: 0xffe9a8, alpha: 0.75 })
+        friend.tailGlow = glow
+        view.addChild(glow)
+      } else if (friend.pose !== 'rest') {
+        this.createNameLabel(friend)
+      }
       this.friendsLayer.addChild(view)
       this.friends.push(friend)
     }
+  }
+
+  /** 站着的伙伴头顶挂名字：孩子得知道"是谁在等"，而不是"一个球在等"。 */
+  private createNameLabel(friend: FriendSprite): void {
+    if (friend.nameLabel) return
+    const label = new Text({
+      text: friend.partnerName,
+      style: {
+        fontFamily: LABEL_FONT, fontSize: 10, fontWeight: '600',
+        fill: 0xf7f2e4, stroke: { color: 0x1a2a2e, width: 3 },
+      },
+    })
+    label.anchor.set(0.5)
+    label.position.set(0, -FRIEND_RADIUS - 12)
+    friend.nameLabel = label
+    friend.view.addChild(label)
   }
 
   /** 伙伴躺下后不再需要名字标签 */
@@ -1029,15 +1080,86 @@ export class PixiWorldRenderer {
     friend.nameLabel = null
   }
 
+  /**
+   * 点亮之后，阿灯从角落飞回大厅。
+   * 这是"点亮"这件事的情感落点：玩家不是完成了一步任务，是把一个怕黑的朋友请了出来。
+   */
+  private advanceLampReveal(dt: number): void {
+    if (this.lampRevealDelay > 0) {
+      this.lampRevealDelay -= dt
+      if (this.lampRevealDelay <= 0) this.startLampReveal()
+    }
+    const reveal = this.lampReveal
+    if (!reveal) return
+    reveal.elapsed += dt
+    const t = Math.min(1, reveal.elapsed / reveal.duration)
+    const ease = 1 - Math.pow(1 - t, 3)
+    const friend = reveal.friend
+    friend.view.x = reveal.from.x + (reveal.to.x - reveal.from.x) * ease
+    // 拱形：飞到半路稍微抬高一点，像真的在飞
+    friend.view.y = reveal.from.y + (reveal.to.y - reveal.from.y) * ease - Math.sin(t * Math.PI) * 34
+    friend.view.scale.set(0.82 + 0.18 * ease)
+    friend.view.alpha = 0.68 + 0.32 * ease
+    if (Math.floor(reveal.elapsed / 0.12) !== Math.floor((reveal.elapsed - dt) / 0.12)) {
+      this.playBurst(friend.view.x, friend.view.y + 4, { color: 0xffe6a2, count: 2, speed: 16, gravity: -12 })
+    }
+    if (t >= 1) {
+      this.finishLampReveal()
+      this.playBurst(reveal.to.x, reveal.to.y - 10, { color: 0xfff0c0, count: 8, speed: 38, ring: true, ringRadius: 20 })
+    }
+  }
+
+  /** 让阿灯直接落地：补间被打断时（比如玩家马上开始建床）用，别让她停在半空。 */
+  private finishLampReveal(): void {
+    const reveal = this.lampReveal
+    if (!reveal) return
+    const friend = reveal.friend
+    friend.view.position.set(reveal.to.x, reveal.to.y)
+    friend.view.scale.set(1)
+    friend.view.alpha = 1
+    friend.baseY = reveal.to.y
+    if (friend.tailGlow) {
+      friend.tailGlow.destroy()
+      friend.tailGlow = null
+    }
+    this.createNameLabel(friend)
+    this.lampReveal = null
+  }
+
+  private startLampReveal(): void {
+    const world = this.world
+    if (!world) return
+    const friend = this.friends.find((item) => item.hidden)
+    if (!friend) return
+    const spot = IDLE_SPOTS[1]
+    const to = { x: spot.x * TILE_SIZE, y: friendWalkY(world, { x: Math.floor(spot.x), y: spot.y }) }
+    friend.hidden = false
+    this.lampReveal = {
+      friend,
+      elapsed: 0,
+      duration: LAMP_REVEAL_DURATION,
+      from: { x: friend.view.x, y: friend.view.y },
+      to,
+    }
+  }
+
   private updateFriends(dt: number): void {
     this.advancePodEntrance(dt)
+    this.advanceLampReveal(dt)
     const repaired = this.world?.progress.coreRepaired ?? false
     if (this.celebrationTime > 0) this.celebrationTime = Math.max(0, this.celebrationTime - dt)
     const celebrating = this.celebrationTime > 0
     for (const friend of this.friends) {
       if (friend.inEntrance) continue
+      // 正在飞出来的阿灯由补间驱动，别被呼吸动画覆盖
+      if (this.lampReveal?.friend === friend) continue
       if (friend.pose === 'rest' && friend.bed) {
         friend.view.y = friend.bed.y + Math.sin(this.elapsed * 2 + friend.phase) * 1.2
+        continue
+      }
+      // 躲在角落：只有尾光一闪一闪，不弹跳、不站起来
+      if (friend.hidden) {
+        if (friend.tailGlow) friend.tailGlow.alpha = 0.35 + 0.3 * Math.sin(this.elapsed * 3 + friend.phase)
         continue
       }
       const bounce = celebrating
@@ -1056,6 +1178,8 @@ export class PixiWorldRenderer {
   playPodEntrance(pod: SleepPod, onSettled: () => void): void {
     const world = this.world
     if (!world || this.friends.length === 0) return
+    // 阿灯可能还在飞：先让她落地，免得和入场演出打架。
+    this.finishLampReveal()
     this.podEntrance = null
     const beds = bedSlots(pod)
     const mates = this.friends.filter((friend) => friend.podId === pod.id)

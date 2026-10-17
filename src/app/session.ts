@@ -687,7 +687,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         renderer.playRepairCelebration()
         scheduleSave()
         pushProgress()
-        hooks.onMessage('💡 轰隆隆——家园亮起来啦！🎉')
+        hooks.onMessage('💡 轰隆隆——家园亮起来啦！角落里好像有个小光点……')
         return
       }
       if (result.reason === 'need-crystal') {
