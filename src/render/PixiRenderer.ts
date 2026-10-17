@@ -15,6 +15,7 @@ import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from '.
 import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTexture } from './energyCoreTexture'
 import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
+import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -33,7 +34,6 @@ const COLORS = {
   caveDeep: 0x22313a,
   skyTop: 0x46586a,
   skyBottom: 0x83808b,
-  wood: 0xc7a173,
   machineCore: 0x5d6f78,
   machineCoreInner: 0x33474f,
   coreReady: 0xffc978,
@@ -155,6 +155,8 @@ export class PixiWorldRenderer {
   private readonly backdrop = new Graphics()
   private readonly wind = new Graphics()
   private readonly landmarkLayer = new Container()
+  private readonly shelterFixtures: Container
+  private readonly lampFixtures: Sprite[]
   private readonly glowLayer = new Container()
   private readonly friendsLayer = new Container()
   private readonly darkness = new Graphics()
@@ -190,8 +192,8 @@ export class PixiWorldRenderer {
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
-    const [textures, energyCoreTexture, crystalTexture] = await Promise.all([
-      loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(),
+    const [textures, energyCoreTexture, crystalTexture, fixtureTextures] = await Promise.all([
+      loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(), loadShelterFixtureTextures(),
     ])
     const app = new Application()
     await app.init({
@@ -203,7 +205,7 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture)
+    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures)
   }
 
   private constructor(
@@ -211,7 +213,11 @@ export class PixiWorldRenderer {
     private readonly textures: TerrainTextures,
     private readonly energyCoreTexture: Texture,
     private readonly crystalTexture: Texture,
+    fixtureTextures: ShelterFixtureTextures,
   ) {
+    const fixtures = createShelterFixtures(fixtureTextures)
+    this.shelterFixtures = fixtures.view
+    this.lampFixtures = fixtures.lamps
     this.crystalFeedback = new CrystalFeedback(crystalTexture)
     this.viewport = { width: app.screen.width, height: app.screen.height }
     // 地形：底色 → 洞穴背景 → 瓦片与边缘
@@ -223,6 +229,7 @@ export class PixiWorldRenderer {
     this.worldLayer.addChild(
       this.terrainLayer,
       this.wind,
+      this.shelterFixtures,
       this.landmarkLayer,
       this.friendsLayer,
       this.darkness,
@@ -538,16 +545,15 @@ export class PixiWorldRenderer {
     }
 
     // 修复后：大厅顶部的灯一盏一盏依次亮起
-    if (this.lightLevel > 0.02) {
-      for (let i = 0; i < 7; i++) {
-        const on = clamp01((this.lightLevel - i * 0.075) / 0.22)
-        if (on <= 0.01) continue
-        const flicker = 0.85 + 0.15 * Math.sin(this.elapsed * (2.6 + i * 0.37) + i * 1.7)
-        const lx = (17.1 + i * 1.15) * TILE_SIZE
-        const ly = 7.35 * TILE_SIZE
-        lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * on * flicker })
-        lampG.circle(lx, ly, 3.5 + 1.5 * on).fill({ color: COLORS.lampCore, alpha: 0.95 * on })
-      }
+    for (const [i, { x: lx, y: ly }] of LAMP_LOCATIONS.entries()) {
+      const on = this.lightLevel > 0.02 ? clamp01((this.lightLevel - i * 0.075) / 0.22) : 0
+      // 浅色灯罩在未通电时压暗，随原有点亮进度恢复，不修改光照时序。
+      const shade = Math.round(255 * (0.4 + 0.6 * on))
+      this.lampFixtures[i].tint = shade * 0x010101
+      if (on <= 0.01) continue
+      const flicker = 0.85 + 0.15 * Math.sin(this.elapsed * (2.6 + i * 0.37) + i * 1.7)
+      lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * on * flicker })
+      lampG.circle(lx, ly, 3.5 + 1.5 * on).fill({ color: COLORS.lampCore, alpha: 0.95 * on })
     }
   }
 
@@ -804,17 +810,6 @@ export class PixiWorldRenderer {
     const world = this.world
     if (!world) return
     const T = TILE_SIZE
-
-    // 竖井里的木梯（结构层，受黑暗影响）
-    const ladder = new Graphics()
-    const ladderX = (LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * T
-    const ladderTop = LANDMARKS.shaft.y * T
-    const ladderBottom = (LANDMARKS.shaft.y + LANDMARKS.shaft.h + 1) * T
-    ladder.moveTo(ladderX - 9, ladderTop).lineTo(ladderX - 9, ladderBottom)
-    ladder.moveTo(ladderX + 9, ladderTop).lineTo(ladderX + 9, ladderBottom)
-    for (let y = ladderTop + 8; y < ladderBottom; y += 11) ladder.moveTo(ladderX - 9, y).lineTo(ladderX + 9, y)
-    ladder.stroke({ width: 3, color: COLORS.wood, alpha: 0.9 })
-    this.landmarkLayer.addChild(ladder)
 
     // 能源核心：机身（结构层）
     const installing = this.crystalFeedback.installing

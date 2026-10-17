@@ -9,6 +9,7 @@ import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrain
 import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
 import { loadCrystalTexture } from '../src/render/crystalTexture'
 import type { CrystalFeedback } from '../src/render/CrystalFeedback'
+import { LAMP_LOCATIONS, loadShelterFixtureTextures } from '../src/render/shelterFixtures'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -37,6 +38,10 @@ vi.mock('../src/render/crystalTexture', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/crystalTexture')>(),
   loadCrystalTexture: vi.fn(),
 }))
+vi.mock('../src/render/shelterFixtures', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/shelterFixtures')>(),
+  loadShelterFixtureTextures: vi.fn(),
+}))
 
 function texture(size = 64): Texture {
   return new Texture({ source: new TextureSource({ width: size, height: size }) })
@@ -62,6 +67,11 @@ interface TerrainProbe {
   lightLevel: number
   spinUp: number
   cameraTween: unknown
+  shelterFixtures: Container
+  worldLayer: Container
+  darkness: Graphics
+  lamps: Graphics
+  drawLighting(): void
   tick(ticker: Ticker): void
   updateTerrainCell(x: number, y: number): void
 }
@@ -80,6 +90,10 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       source: new TextureSource({ width: 1536, height: 1024 }),
     }))
     vi.mocked(loadCrystalTexture).mockResolvedValue(texture(1254))
+    vi.mocked(loadShelterFixtureTextures).mockResolvedValue({
+      ladder: new Texture({ source: new TextureSource({ width: 1024, height: 1536 }) }),
+      lamp: texture(1254),
+    })
     renderer = await PixiWorldRenderer.create({ appendChild: vi.fn() } as unknown as HTMLElement)
     view = renderer as unknown as TerrainProbe
     world = createInitialWorld()
@@ -266,5 +280,45 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.cameraTween).toBeNull()
     expect(view.crystalFeedback.installing).toBe(false)
     expect(view.spinUp).toBeGreaterThan(0)
+  })
+
+  it('梯架和7盏未通电灯具位于原坐标、黑暗遮罩之下，刷新复用静态精灵', () => {
+    const fixtures = [...view.shelterFixtures.children] as Sprite[]
+    expect(fixtures).toHaveLength(8)
+    const [ladder, ...lamps] = fixtures
+    expect([ladder.x, ladder.y]).toEqual([(LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * TILE_SIZE, LANDMARKS.shaft.y * TILE_SIZE])
+    expect(ladder.height).toBe((LANDMARKS.shaft.h + 1) * TILE_SIZE)
+    expect(ladder.scale.x).toBe(ladder.scale.y)
+    lamps.forEach((lamp, i) => {
+      expect(lamp.visible).toBe(true)
+      expect(lamp.tint).toBe(0x666666)
+      expect([lamp.x, lamp.y]).toEqual([LAMP_LOCATIONS[i].x, LAMP_LOCATIONS[i].y])
+      expect(lamp.scale.x).toBe(lamp.scale.y)
+    })
+    expect(view.worldLayer.getChildIndex(view.shelterFixtures)).toBeLessThan(view.worldLayer.getChildIndex(view.darkness))
+    view.drawLighting()
+    expect(view.lamps.context.instructions).toHaveLength(0)
+    renderer.refresh()
+    expect(view.shelterFixtures.children).toEqual(fixtures)
+  })
+
+  it('顶灯仍按原顺序逐盏点亮，光晕与PNG灯芯位置一致且不重建灯具', () => {
+    const fixtures = [...view.shelterFixtures.children]
+    const snapshot = JSON.stringify(world)
+    view.lightLevel = 0.2
+    view.drawLighting()
+    expect(view.lamps.context.instructions).toHaveLength(6) // 前3盏：每盏光晕+灯芯
+    const lampSprites = view.shelterFixtures.children.slice(1) as Sprite[]
+    expect(lampSprites[0].tint).toBeGreaterThan(lampSprites[3].tint)
+    expect(lampSprites[6].tint).toBe(0x666666)
+    view.lightLevel = 1
+    view.drawLighting()
+    expect(view.lamps.context.instructions).toHaveLength(14)
+    expect(lampSprites.every((lamp) => lamp.tint === 0xffffff)).toBe(true)
+    view.lightLevel = 0
+    view.drawLighting()
+    expect(lampSprites.every((lamp) => lamp.tint === 0x666666)).toBe(true)
+    expect(view.shelterFixtures.children).toEqual(fixtures)
+    expect(JSON.stringify(world)).toBe(snapshot)
   })
 })

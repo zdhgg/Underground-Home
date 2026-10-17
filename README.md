@@ -36,6 +36,8 @@ npm test         # Vitest 单元测试
 
 能源石已接入透明 PNG，补充收集上浮和进入核心槽口的短暂演出；挖掘、任务和存档判定保持不变。详见 [能源石与安装反馈验收](docs/acceptance/crystal-v1/README.md)。
 
+入口梯架与7盏顶灯已接入透明PNG，保留原位置、黑暗遮罩及逐盏点亮时序。详见 [梯架与顶灯美术验收](docs/acceptance/fixtures-v1/README.md)。
+
 ```
 src/
   core/              纯逻辑（无 DOM / PixiJS 依赖，可单测）
