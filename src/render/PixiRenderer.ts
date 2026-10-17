@@ -132,6 +132,8 @@ interface FriendSprite {
   nameLabel: Text | null
   /** 伙伴名字：重建与"飞出来"时都要用 */
   partnerName: string
+  /** 物种 id：决定画什么特征（大爪子 / 尾灯 / 长耳朵 / 胡须） */
+  partnerId: string
   /** 还没点亮时，阿灯缩在角落——不站大厅、不弹跳、没有名字 */
   hidden: boolean
   /** 角落里的尾光（只有躲着的时候有） */
@@ -261,20 +263,133 @@ function friendWallOffset(world: WorldState, cell: Cell): number {
   return 0
 }
 
-function paintFriend(body: Graphics, color: number, pose: FriendPose): void {
+/**
+ * 四个伙伴共用一套圆身体，靠两三个特征区分物种：
+ * 鼹鼠=大爪子+小圆眼镜，萤火虫=尾灯+翅膀，兔子=一立一耷的长耳朵+门牙，水獭=胡须+扁尾巴。
+ * 碰撞体积仍然是 FRIEND_RADIUS，特征只是画在身体上的装饰，不影响判定。
+ */
+function paintFriend(body: Graphics, color: number, pose: FriendPose, partnerId: string): void {
   body.clear()
-  body.circle(0, 0, FRIEND_RADIUS).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
-  body.circle(-7, -10, 5).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
-  body.circle(7, -10, 5).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
   if (pose === 'rest') {
-    // 被子盖住下半身，只露出头和闭上的眼睛
-    body.roundRect(-12, -2, 24, 12, 5).fill(0xfff2d8).stroke({ width: 1.5, color: 0xa9886b })
-    body.moveTo(-6, -5).lineTo(-2, -5).moveTo(2, -5).lineTo(6, -5).stroke({ width: 2, color: 0x403c38 })
-  } else {
-    body.circle(-4, -2, 1.8).fill(0x403c38)
-    body.circle(4, -2, 1.8).fill(0x403c38)
-    body.circle(0, 4, 2.6).fill(0xd98a82)
+    paintResting(body, color, partnerId)
+    return
   }
+  paintBackFeatures(body, color, partnerId)
+  body.circle(0, 0, FRIEND_RADIUS).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+  paintFace(body, partnerId)
+  paintFrontFeatures(body, color, partnerId)
+}
+
+/** 画在身体之前：耳朵、尾巴、翅膀——根部要被身体压住 */
+function paintBackFeatures(body: Graphics, color: number, partnerId: string): void {
+  const outline = { width: 1.8, color: FRIEND_OUTLINE }
+  if (partnerId === 'xiaoman') {
+    // 兔子：左耳立着、右耳耷下来，外加一团圆尾巴
+    body.ellipse(-5, -20, 4.5, 10).fill(color).stroke(outline)
+    body.ellipse(-5, -20, 2, 6).fill(0xf7d5cc)
+    body.ellipse(9, -15, 9, 4.5).fill(color).stroke(outline)
+    body.ellipse(9, -15, 5, 2).fill(0xf7d5cc)
+    body.circle(13, 8, 3.6).fill(0xfdf6ec).stroke({ width: 1.2, color: FRIEND_OUTLINE })
+    return
+  }
+  if (partnerId === 'xiaoquan') {
+    // 水獭：小圆耳朵 + 又粗又扁的尾巴
+    body.circle(-8, -10, 4).fill(color).stroke(outline)
+    body.circle(8, -10, 4).fill(color).stroke(outline)
+    body.ellipse(-14, 9, 6, 3.5).fill(color).stroke({ width: 1.4, color: FRIEND_OUTLINE })
+    return
+  }
+  if (partnerId === 'adeng') {
+    // 萤火虫：半透明小翅膀 + 两根触角
+    body.ellipse(-11, -8, 7, 4).fill({ color: 0xf4f0ff, alpha: 0.55 })
+    body.ellipse(11, -8, 7, 4).fill({ color: 0xf4f0ff, alpha: 0.55 })
+    body.moveTo(-4, -12).lineTo(-7, -19).stroke({ width: 1.2, color: FRIEND_OUTLINE })
+    body.moveTo(4, -12).lineTo(7, -19).stroke({ width: 1.2, color: FRIEND_OUTLINE })
+    body.circle(-7, -19, 1.5).fill(0xffe9a8)
+    body.circle(7, -19, 1.5).fill(0xffe9a8)
+    return
+  }
+  // 鼹鼠：耳朵很小，几乎藏在毛里
+  body.circle(-9, -9, 3).fill(color).stroke(outline)
+  body.circle(9, -9, 3).fill(color).stroke(outline)
+}
+
+function paintFace(body: Graphics, partnerId: string): void {
+  const ink = 0x2f2a26
+  if (partnerId === 'atu') {
+    // 鼹鼠：小圆眼镜——他视力不好，挖洞靠鼻子
+    body.circle(-5, -3, 4.2).stroke({ width: 1.4, color: 0x3a4a44 })
+    body.circle(5, -3, 4.2).stroke({ width: 1.4, color: 0x3a4a44 })
+    body.moveTo(-0.8, -3).lineTo(0.8, -3).stroke({ width: 1.4, color: 0x3a4a44 })
+    body.circle(-5, -3, 1.3).fill(ink)
+    body.circle(5, -3, 1.3).fill(ink)
+    return
+  }
+  if (partnerId === 'adeng') {
+    // 萤火虫：一双大眼睛
+    body.circle(-4, -2, 2.4).fill(ink)
+    body.circle(4, -2, 2.4).fill(ink)
+    body.circle(-4.8, -3, 0.8).fill(0xffffff)
+    body.circle(3.2, -3, 0.8).fill(0xffffff)
+    return
+  }
+  if (partnerId === 'xiaoman') {
+    // 兔子：眼睛 + 两颗门牙
+    body.circle(-4, -2, 1.9).fill(ink)
+    body.circle(4, -2, 1.9).fill(ink)
+    body.roundRect(-2.8, 5, 2.4, 3.6, 1).fill(0xffffff).stroke({ width: 0.8, color: 0xb8a89a })
+    body.roundRect(0.4, 5, 2.4, 3.6, 1).fill(0xffffff).stroke({ width: 0.8, color: 0xb8a89a })
+    return
+  }
+  // 水獭：圆眼睛 + 小鼻子
+  body.circle(-4, -2, 1.9).fill(ink)
+  body.circle(4, -2, 1.9).fill(ink)
+  body.circle(0, 2.5, 1.8).fill(0x5a4a3a)
+}
+
+/** 把颜色压暗一档：爪子、尾巴这类"同色但更深"的部件用它，换角色配色时不会打架 */
+function shade(color: number, factor: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * factor)
+  const g = Math.round(((color >> 8) & 0xff) * factor)
+  const b = Math.round((color & 0xff) * factor)
+  return (r << 16) | (g << 8) | b
+}
+
+/** 画在身体之后：爪子、尾灯、胡须 */
+function paintFrontFeatures(body: Graphics, color: number, partnerId: string): void {
+  if (partnerId === 'atu') {
+    // 鼹鼠：两只大爪子 + 粉色鼻尖
+    const paw = shade(color, 0.72)
+    body.ellipse(-14, 9, 5, 6).fill(paw).stroke({ width: 1.5, color: FRIEND_OUTLINE })
+    body.ellipse(14, 9, 5, 6).fill(paw).stroke({ width: 1.5, color: FRIEND_OUTLINE })
+    body.circle(0, 3.5, 2).fill(0xd98a82)
+    return
+  }
+  if (partnerId === 'adeng') {
+    // 萤火虫：尾巴上的灯（一小圈光晕 + 灯芯）
+    body.circle(0, 12, 6).fill({ color: 0xffe9a8, alpha: 0.28 })
+    body.circle(0, 12, 3.2).fill(0xffe9a8).stroke({ width: 1, color: 0xd8b96a })
+    return
+  }
+  if (partnerId === 'xiaoquan') {
+    // 水獭：四根胡须
+    for (const [x1, y1, x2, y2] of [[-3, 3, -12, 1], [-3, 5, -12, 6], [3, 3, 12, 1], [3, 5, 12, 6]] as const) {
+      body.moveTo(x1, y1).lineTo(x2, y2).stroke({ width: 1, color: 0x6a5a3a })
+    }
+  }
+}
+
+/** 睡着时只露出一个特征，孩子仍然认得出是谁 */
+function paintResting(body: Graphics, color: number, partnerId: string): void {
+  if (partnerId === 'xiaoman') {
+    body.ellipse(-5, -20, 4.2, 9).fill(color).stroke({ width: 1.8, color: FRIEND_OUTLINE })
+  } else if (partnerId === 'adeng') {
+    body.circle(0, 13, 3).fill({ color: 0xffe9a8, alpha: 0.8 })
+  }
+  body.circle(0, 0, FRIEND_RADIUS).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+  // 被子盖住下半身，只露出头和闭上的眼睛
+  body.roundRect(-12, -2, 24, 12, 5).fill(0xfff2d8).stroke({ width: 1.5, color: 0xa9886b })
+  body.moveTo(-6, -5).lineTo(-2, -5).moveTo(2, -5).lineTo(6, -5).stroke({ width: 2, color: 0x403c38 })
 }
 
 /**
@@ -1022,7 +1137,7 @@ export class PixiWorldRenderer {
       const friend: FriendSprite = {
         view, body, bodyColor, baseY: standing, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
         podId: pod ? pod.id : null, spot: { x: spot.x, y: standing }, nameLabel: null,
-        partnerName: partner.name, hidden: hiding, tailGlow: null,
+        partnerName: partner.name, partnerId: partner.id, hidden: hiding, tailGlow: null,
       }
       // 已经入住的伙伴接着睡；正在入场的这一对站在原地等演出开始。
       if (pod && pod.id !== arrivingPodId) {
@@ -1041,7 +1156,7 @@ export class PixiWorldRenderer {
       } else {
         view.position.set(spot.x * TILE_SIZE, standing)
       }
-      paintFriend(body, bodyColor, friend.pose)
+      paintFriend(body, bodyColor, friend.pose, friend.partnerId)
       view.addChild(body)
       if (hiding) {
         // 只露一点点尾光：让玩家看见"角落里有个东西"，但看不清是谁。
@@ -1219,7 +1334,7 @@ export class PixiWorldRenderer {
       })
       friend.inEntrance = true
       friend.pose = 'walk'
-      paintFriend(friend.body, friend.bodyColor, 'walk')
+      paintFriend(friend.body, friend.bodyColor, 'walk', friend.partnerId)
     })
     if (travellers.length !== moving.length || travellers.length === 0) {
       this.settleFriendsInBed(moving.map((friend, i) => ({ friend, bed: beds[i % BEDS_PER_POD] })))
@@ -1239,7 +1354,7 @@ export class PixiWorldRenderer {
       friend.view.scale.set(FRIEND_REST_SCALE)
       friend.view.position.set(bed.x, bed.y)
       this.clearNameLabel(friend)
-      paintFriend(friend.body, friend.bodyColor, 'rest')
+      paintFriend(friend.body, friend.bodyColor, 'rest', friend.partnerId)
     }
   }
 
@@ -1265,7 +1380,7 @@ export class PixiWorldRenderer {
           friend.bed = { x: last.x, y: last.y }
           friend.view.position.set(last.x, last.y)
           this.clearNameLabel(friend)
-          paintFriend(friend.body, friend.bodyColor, 'rest')
+          paintFriend(friend.body, friend.bodyColor, 'rest', friend.partnerId)
         }
         continue
       }
@@ -1294,7 +1409,7 @@ export class PixiWorldRenderer {
       }
       if (friend.pose !== pose) {
         friend.pose = pose
-        paintFriend(friend.body, friend.bodyColor, pose)
+        paintFriend(friend.body, friend.bodyColor, pose, friend.partnerId)
       }
       friend.view.position.set(x, y)
     }

@@ -91,6 +91,7 @@ interface TerrainProbe {
     nameLabel: { text: string } | null
     hidden: boolean
     tailGlow: { alpha: number } | null
+    partnerId: string
   }[]
   refreshPods(): void
   refreshFriends(arrivingPodId?: number | null): void
@@ -449,6 +450,19 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       expect(adeng.view.alpha).toBeCloseTo(1, 2)
       expect(adeng.nameLabel?.text).toBe('阿灯')
       expect(adeng.tailGlow).toBeNull()
+    })
+
+    it('每个伙伴带着自己的物种 id：画出来的不是同一个球', () => {
+      const world = createInitialWorld()
+      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+      renderer.setWorld(world)
+      expect(view.friends.map((friend) => friend.partnerId)).toEqual(['atu', 'adeng'])
+      for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
+      placePod(world, 12, 10)
+      renderer.refreshPods()
+      renderer.refreshFriends()
+      // 建好床小满就来，此时大厅里有三位：阿土、阿灯、小满
+      expect(view.friends.map((friend) => friend.partnerId)).toEqual(['atu', 'adeng', 'xiaoman'])
     })
 
     it('已点亮的存档直接站着，不重播飞出来的演出', () => {
