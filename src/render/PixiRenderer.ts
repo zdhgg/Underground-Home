@@ -3,6 +3,7 @@ import {
   LANDMARKS,
   MAP_HEIGHT,
   MAP_WIDTH,
+  STRATA,
   SURFACE_Y,
   TILE,
   TILE_SIZE,
@@ -20,6 +21,7 @@ import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type
 import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE } from '../core/build'
+import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -29,6 +31,9 @@ import {
   panCamera,
   screenToWorld,
   zoomAt,
+  overviewCamera,
+  cameraDepth,
+  type DepthView,
   type Camera,
   type Viewport,
 } from './camera'
@@ -235,6 +240,9 @@ function paintFriend(body: Graphics, color: number, pose: FriendPose): void {
  * 不包含任何游戏规则；挖掘 / 互动判定由 core 决定后再通知本层刷新。
  */
 export class PixiWorldRenderer {
+  onViewChanged?: (view: DepthView) => void
+  private overview = false
+  get isOverview(): boolean { return this.overview }
   private readonly worldLayer = new Container()
   /** 地形层：底色 + 洞穴背景 + 瓦片精灵池（最底层） */
   private readonly terrainLayer = new Container()
@@ -324,6 +332,7 @@ export class PixiWorldRenderer {
       this.friendsLayer,
       this.darkness,
       this.glowLayer,
+      createStrataLabels(),
       this.lamps,
       this.highlightGfx,
       this.effects,
@@ -530,6 +539,7 @@ export class PixiWorldRenderer {
 
   /** 初始 / 回家视角：一眼看到避难所、能源核心和左侧的能源石区 */
   focusHome(): void {
+    this.overview = false
     this.cancelCameraTween()
     const zoom = clampZoom(Math.min(1.55, Math.max(0.9, this.viewport.width / 920)))
     const centerX = 17.8 * TILE_SIZE
@@ -540,18 +550,24 @@ export class PixiWorldRenderer {
 
   /** 把某个世界坐标居中（"带我去看看"） */
   focusOn(worldX: number, worldY: number): void {
+    this.overview = false
     this.cancelCameraTween()
-    this.camera = centerOn(worldX, worldY, this.viewport, this.camera.zoom)
+    this.camera = centerOn(worldX, worldY, this.viewport, Math.max(1, this.camera.zoom))
     this.applyCamera()
   }
 
   panBy(dxScreen: number, dyScreen: number): void {
+    if (this.overview) return
     this.cancelCameraTween()
     this.camera = panCamera(this.camera, dxScreen, dyScreen, this.viewport)
     this.applyCamera()
   }
 
   zoomBy(deltaZoom: number, anchor?: { x: number; y: number }): void {
+    if (this.overview) {
+      if (deltaZoom > 0) this.focusHome()
+      return
+    }
     this.cancelCameraTween()
     const point = anchor ?? { x: this.viewport.width / 2, y: this.viewport.height / 2 }
     this.camera = zoomAt(this.camera, deltaZoom, point, this.viewport)
@@ -570,6 +586,18 @@ export class PixiWorldRenderer {
   setHoverCell(cell: Cell | null): void {
     this.hoverCell = cell
     this.redrawHover()
+  }
+
+  focusWater(): void {
+    this.overview = false
+    this.cameraTween = { from: { ...this.camera }, to: centerOn(STRATA.water.focus.x * TILE_SIZE, STRATA.water.focus.y * TILE_SIZE, this.viewport, 1), elapsed: 0, duration: 0.8 }
+  }
+
+  focusOverview(): void {
+    this.cancelCameraTween()
+    this.overview = true
+    this.camera = overviewCamera(this.viewport)
+    this.applyCamera()
   }
 
   destroy(): void {
@@ -601,13 +629,14 @@ export class PixiWorldRenderer {
     const height = this.app.screen.height
     if (width === this.viewport.width && height === this.viewport.height) return
     this.viewport = { width, height }
-    this.camera = clampCamera(this.camera, this.viewport)
+    this.camera = this.overview ? overviewCamera(this.viewport) : clampCamera(this.camera, this.viewport)
     this.applyCamera()
   }
 
   private applyCamera(): void {
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
+    this.onViewChanged?.(cameraDepth(this.camera, this.viewport, this.overview))
   }
 
   private computeRepairShowcase(): Camera {
@@ -667,7 +696,7 @@ export class PixiWorldRenderer {
     // 未点亮时的地下昏暗 + 能源核心周围的微弱暖光
     const darkAlpha = 0.42 * (1 - this.lightLevel)
     if (darkAlpha > 0.01) {
-      g.rect(0, SURFACE_Y * TILE_SIZE, WORLD_PIXEL_WIDTH, WORLD_PIXEL_HEIGHT - SURFACE_Y * TILE_SIZE).fill({
+      g.rect(0, SURFACE_Y * TILE_SIZE, WORLD_PIXEL_WIDTH, (STRATA.seal.top - SURFACE_Y) * TILE_SIZE).fill({
         color: 0x0a1620,
         alpha: darkAlpha,
       })
@@ -678,6 +707,10 @@ export class PixiWorldRenderer {
       g.circle(gx, gy, 190).fill({ color: COLORS.warmGlow, alpha: warm * 0.4 })
       g.circle(gx, gy, 100).fill({ color: COLORS.warmGlow, alpha: warm * 0.5 })
     }
+
+    // 第二层尚无照明，核心只点亮暖窝层；泉光仍穿透黑暗。
+    g.rect(0, STRATA.seal.top * TILE_SIZE, WORLD_PIXEL_WIDTH, (MAP_HEIGHT - STRATA.seal.top) * TILE_SIZE)
+      .fill({ color: 0x071827, alpha: 0.43 })
 
     // 修复后：大厅顶部的灯一盏一盏依次亮起
     for (const [i, { x: lx, y: ly }] of LAMP_LOCATIONS.entries()) {
@@ -781,7 +814,7 @@ export class PixiWorldRenderer {
       const bounce = celebrating
         ? Math.abs(Math.sin(this.elapsed * 6 + friend.phase)) * 16
         : repaired
-          ? Math.abs(Math.sin(this.elapsed * 3 + friend.phase)) * 10
+          ? Math.sin(this.elapsed * 2 + friend.phase) * 0.8
           : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
       friend.view.y = friend.baseY - bounce
     }
@@ -994,6 +1027,7 @@ export class PixiWorldRenderer {
     })
     bg.position.set(0, SURFACE_Y * TILE_SIZE)
     this.terrainLayer.addChild(bg)
+    this.terrainLayer.addChild(createStrataBackdrop(this.textures.caveBg))
   }
 
   /** 一次性建好瓦片精灵池：每格 = 1 张基础贴图 + 4 张方向边缘叠图 */
@@ -1044,6 +1078,8 @@ export class PixiWorldRenderer {
     }
 
     cell.base.visible = true
+    cell.base.tint = terrainTint(y)
+    for (const edge of cell.edges) edge.tint = terrainTint(y)
     const baseTexture = this.pickVariant(tile, x, y)
     if (cell.base.texture !== baseTexture) cell.base.texture = baseTexture
 
@@ -1131,8 +1167,9 @@ export class PixiWorldRenderer {
     const spring = new Graphics()
     const springX = (LANDMARKS.spring.x + 0.5) * T
     const springY = (LANDMARKS.spring.y + 0.5) * T
-    spring.ellipse(springX, springY, 26, 18).fill({ color: COLORS.water, alpha: 0.5 })
-    spring.circle(springX, springY, 48).fill({ color: COLORS.water, alpha: 0.12 })
+    spring.ellipse(springX, springY + 18, 90, 15).fill({ color: COLORS.water, alpha: 0.35 })
+    spring.ellipse(springX, springY + 16, 65, 7).stroke({ color: 0xa7e4ed, alpha: 0.7, width: 2 })
+    spring.circle(springX, springY, 66).fill({ color: COLORS.water, alpha: 0.09 })
     this.springGlow = spring
     this.glowLayer.addChild(spring)
 

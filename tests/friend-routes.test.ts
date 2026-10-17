@@ -8,7 +8,7 @@ import { FRIEND_HOME_CELLS, findEntranceRoute } from '../src/render/friendRoutes
 function readyWorld() {
   const world = createInitialWorld()
   world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
-  for (let y = 8; y < 10; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
+  for (let y = 10; y < 12; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
   return world
 }
 
@@ -21,7 +21,7 @@ function rightPocketWorld() {
 describe('伙伴入场路径', () => {
   it('左右两处睡眠舱都能从避难所地面走到舱门', () => {
     const left = readyWorld()
-    const leftPod = placePod(left, 12, 8)!
+    const leftPod = placePod(left, 12, 10)!
     const right = rightPocketWorld()
     const rightPod = placePod(right, 26, 10)!
     for (const [world, pod] of [[left, leftPod], [right, rightPod]] as const) {
@@ -35,7 +35,7 @@ describe('伙伴入场路径', () => {
 
   it('路径只走空洞格，不穿能源核心或舱体', () => {
     const world = readyWorld()
-    const pod = placePod(world, 12, 8)!
+    const pod = placePod(world, 12, 10)!
     const route = findEntranceRoute(world, FRIEND_HOME_CELLS[0], pod)!
     expect(route[0]).toEqual(FRIEND_HOME_CELLS[0])
     route.forEach((cell, index) => {
@@ -49,15 +49,15 @@ describe('伙伴入场路径', () => {
     })
   })
 
-  it('横向行走都落在地面上，垂直段贴着左壁爬上舱门层', () => {
+  it('一层共用地板，伙伴沿地面进入左舱，不爬墙也不悬浮', () => {
     const world = readyWorld()
-    const pod = placePod(world, 12, 8)!
+    const pod = placePod(world, 12, 10)!
     const route = findEntranceRoute(world, FRIEND_HOME_CELLS[0], pod)!
     const horizontal = route.filter((cell, index) => index > 0 && route[index - 1].y === cell.y)
     expect(horizontal.length).toBeGreaterThan(0)
     for (const cell of horizontal) expect(world.tiles[cell.y + 1][cell.x]).not.toBe(TILE.EMPTY)
     const vertical = route.filter((cell, index) => index > 0 && route[index - 1].y !== cell.y)
-    expect(vertical.some((cell) => cell.x === 17 && cell.y === 10)).toBe(true)
+    expect(vertical).toHaveLength(0)
   })
 
   it('床铺在舱内，门朝向决定床头靠哪边', () => {

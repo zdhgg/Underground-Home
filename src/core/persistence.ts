@@ -13,6 +13,8 @@ import { canPlacePod } from './build'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
+/** 双层原型始终隔离，包括生产构建；绝不打开正式版 underground-home 数据库。 */
+export const PROTOTYPE_DB_NAME = 'underground-home-depth-prototype-v2'
 
 /** 落盘格式：带版本号，便于迁移 */
 export interface SavePayload {
@@ -57,7 +59,7 @@ interface BaseWorldData {
   tiles: TileType[][]
 }
 
-/** 校验 v1 / v2 / v3 共有的地图数据；返回可读错误或规整后的数据 */
+/** 校验共有地图数据；仅接受当前蓝图尺寸，正式旧地图不在原型中迁移。 */
 function validateBaseWorld(world: unknown): { ok: true; data: BaseWorldData } | { ok: false; error: string } {
   if (typeof world !== 'object' || world === null) return { ok: false, error: '存档缺少世界数据' }
   const raw = world as { width?: unknown; height?: unknown; dugCount?: unknown; tiles?: unknown }
@@ -108,7 +110,7 @@ function validateProgress(progress: unknown): WorldProgress | null {
 
 /**
  * 反序列化并严格校验：任何损坏的存档都返回可读错误，由调用方回退到新世界（不白屏）。
- * v1（P0 时期）没有进度位，会自动迁移：
+ * 相同蓝图下的 v1 字段格式没有进度位，会自动补齐：
  * "能源石是否已发现"可从地图推导（该格是否已被挖空），其余从 false 开始。
  */
 export function deserialize(raw: unknown): LoadResult {
@@ -188,7 +190,7 @@ export function createMemoryStore(): SaveStore {
 }
 
 /** 极小的 IndexedDB 封装（无第三方依赖）；环境不支持时由调用方降级 */
-export function createIndexedDbStore(dbName = 'underground-home', storeName = 'saves'): SaveStore {
+export function createIndexedDbStore(dbName = PROTOTYPE_DB_NAME, storeName = 'saves'): SaveStore {
   const openDb = (): Promise<IDBDatabase> =>
     new Promise((resolve, reject) => {
       const request = indexedDB.open(dbName, 1)
@@ -208,7 +210,9 @@ export function createIndexedDbStore(dbName = 'underground-home', storeName = 's
       return await new Promise<T>((resolve, reject) => {
         const tx = db.transaction(storeName, mode)
         const request = run(tx.objectStore(storeName))
-        request.onsuccess = () => resolve(request.result)
+        tx.oncomplete = () => resolve(request.result)
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB 事务中止'))
+        tx.onerror = () => reject(tx.error ?? new Error('IndexedDB 事务失败'))
         request.onerror = () => reject(request.error ?? new Error('IndexedDB 操作失败'))
       })
     } finally {

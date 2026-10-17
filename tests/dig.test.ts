@@ -10,16 +10,16 @@ describe('挖掘规则', () => {
     expect(tileAt(world, 13, 9)).toBe(TILE.EMPTY)
     expect(world.dugCount).toBe(1)
     expect(tileAt(world, 12, 9)).toBe(TILE.SOIL) // 相邻格不受影响
-    expect(tileAt(world, 13, 8)).toBe(TILE.SOIL)
+    expect(tileAt(world, 13, 10)).toBe(TILE.SOIL)
   })
 
   it('坚硬岩石不可挖', () => {
     const world = createInitialWorld()
-    const result = canDig(world, 5, 9)
+    const result = canDig(world, 1, 9)
     expect(result.ok).toBe(false)
     expect(result.reason).toBe('rock')
-    expect(dig(world, 5, 9).ok).toBe(false)
-    expect(tileAt(world, 5, 9)).toBe(TILE.ROCK)
+    expect(dig(world, 1, 9).ok).toBe(false)
+    expect(tileAt(world, 1, 9)).toBe(TILE.ROCK)
   })
 
   it('已经挖空的格子不能重复挖', () => {
@@ -46,7 +46,7 @@ describe('挖掘规则', () => {
   it('失败时世界数据保持不变', () => {
     const world = createInitialWorld()
     const snapshot = JSON.stringify(world.tiles)
-    dig(world, 5, 9) // 岩石
+    dig(world, 1, 9) // 岩石
     dig(world, -3, 9) // 越界
     dig(world, 21, 9) // 已挖空
     expect(JSON.stringify(world.tiles)).toBe(snapshot)

@@ -1,9 +1,9 @@
-import { LANDMARKS, SURFACE_Y, TILE, isInside, type Cell, type Rect, type SleepPod, type WorldState } from './world'
+import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type Cell, type Rect, type SleepPod, type WorldState } from './world'
 
 export const POD_SIZE = { w: 3, h: 2 } as const
 // 核心机身宽于可点击区，留出完整外壳占地，避免示意舱压住现有PNG。
 const CORE_FOOTPRINT: Rect = { x: 19, y: 8, w: 5, h: 3 }
-export type BuildFailure = 'power' | 'bounds' | 'reserved' | 'overlap' | 'soil' | 'support' | 'access'
+export type BuildFailure = 'power' | 'bounds' | 'reserved' | 'overlap' | 'soil' | 'support' | 'access' | 'locked-layer'
 export type Placement = { ok: true; door: SleepPod['door'] } | { ok: false; reason: BuildFailure }
 export const contains = (rect: Rect, x: number, y: number): boolean => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h
 export const podRect = (pod: Cell): Rect => ({ ...pod, ...POD_SIZE })
@@ -46,6 +46,7 @@ function accessPreserved(world: WorldState, seen: Set<number>): boolean {
 export function canPlacePod(world: WorldState, x: number, y: number, preferredDoor?: SleepPod['door']): Placement {
   if (!world.progress.coreRepaired) return { ok: false, reason: 'power' }
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < SURFACE_Y || x + POD_SIZE.w > world.width || y + POD_SIZE.h >= world.height) return { ok: false, reason: 'bounds' }
+  if (isPreviewLayer(y + POD_SIZE.h - 1)) return { ok: false, reason: 'locked-layer' }
   const rect = podRect({ x, y })
   if ([CORE_FOOTPRINT, LANDMARKS.shaft].some((area) => overlaps(rect, area))) return { ok: false, reason: 'reserved' }
   if (world.pods.some((pod) => overlaps(rect, podRect(pod)))) return { ok: false, reason: 'overlap' }

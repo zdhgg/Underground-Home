@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { createGameSession, type BuildState, type GameSession, type SessionProgress } from './app/session'
+import { STRATA } from './core/world'
+import type { DepthView } from './render/camera'
 
 const stageEl = ref<HTMLElement | null>(null)
 const session = shallowRef<GameSession | null>(null)
@@ -17,6 +19,7 @@ const progress = ref<SessionProgress>({
   finished: false,
 })
 const build = ref<BuildState>({ available: false, active: false, selected: false, valid: false, message: '', count: 0 })
+const view = ref<DepthView>({ layer: 'home', overview: false })
 
 let toastTimer: number | undefined
 
@@ -40,6 +43,7 @@ onMounted(async () => {
         progress.value = next
       },
       onBuild: (next) => { build.value = next },
+      onView: (next) => { view.value = next },
     })
   } catch {
     fatalError.value = '渲染初始化失败：当前浏览器可能不支持 WebGL，请换用新版浏览器打开。'
@@ -74,7 +78,7 @@ onBeforeUnmount(() => {
       <div ref="stageEl" class="stage-canvas" />
       <div v-if="fatalError" class="fatal">{{ fatalError }}</div>
 
-      <section class="mole" :class="{ 'mole-done': progress.finished }">
+      <section v-if="!view.overview" class="mole" :class="{ 'mole-done': progress.finished }">
         <div class="mole-head">
           <span class="mole-face">🐹</span>
           <div class="mole-name">
@@ -90,11 +94,24 @@ onBeforeUnmount(() => {
       <div class="zoom">
         <button type="button" aria-label="放大" @click="session?.zoomBy(0.12)">＋</button>
         <button type="button" aria-label="缩小" @click="session?.zoomBy(-0.12)">－</button>
-        <button type="button" aria-label="回到家园" @click="session?.centerOnHome()">⌂</button>
       </div>
 
+      <nav class="depth-nav" aria-label="地下楼层">
+        <p class="depth-location" role="status">{{ view.overview ? '正在看 · 整体剖面' : `正在看 · ${STRATA[view.layer].name}` }}</p>
+        <button type="button" :aria-current="!view.overview && view.layer === 'home' ? 'location' : undefined" @click="session?.centerOnHome()">
+          <span>⌂ 回到家园</span><small>第 1 层 · 暖窝层</small>
+        </button>
+        <div class="depth-seal">▥ 坚硬岩层</div>
+        <button type="button" class="water-destination" :aria-current="!view.overview && view.layer === 'water' ? 'location' : undefined" @click="session?.lookDown()">
+          <span>↓ 向下看看</span><small>第 2 层 · 泉水层 · 未开放</small>
+        </button>
+        <button type="button" class="overview-button" :aria-pressed="view.overview" @click="session?.showOverview()">⊞ 家园全景</button>
+        <small class="depth-hint">{{ view.overview ? '全景只看不挖 · 回家继续建设' : view.layer === 'water' ? '先听听水声，以后再来探索' : '拖动画面，也能慢慢向下看' }}</small>
+      </nav>
+      <span class="prototype-note">双层试玩 · 独立存档</span>
+
       <button type="button" class="undo" @click="session?.undo()">↶ 撤销</button>
-      <section v-if="build.available" class="build-tools" aria-label="建设工具">
+      <section v-if="build.available && !view.overview && view.layer === 'home'" class="build-tools" aria-label="建设工具">
         <div class="build-buttons">
           <button type="button" :aria-pressed="!build.active" @click="session?.setBuildMode(false)">⛏ 挖掘</button>
           <button type="button" :aria-pressed="build.active" @click="session?.setBuildMode(!build.active)">🛏 睡眠舱</button>
@@ -107,7 +124,7 @@ onBeforeUnmount(() => {
         <p v-if="build.active" role="status">{{ build.message }}</p>
         <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
-      <div class="legend">🟫 泥土可挖　🪨 灰色岩石暂不可挖</div>
+      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : view.layer === 'water' ? '💧 泉水层仅供观察，暂不能挖掘和建设' : '🟫 暖窝层泥土可挖　🪨 岩石暂不可挖' }}</div>
 
       <transition name="toast">
         <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
@@ -122,6 +139,18 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.depth-nav { position: absolute; right: 12px; top: 124px; width: 182px; padding: 12px; border-radius: 14px; background: #fffdf7f2; color: #44584c; box-shadow: 0 4px 16px #213d3026; }
+.depth-location { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #61756b; }
+.depth-nav button { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; min-height: 48px; border-radius: 9px; background: #edf0e9; color: #3c6154; text-align: left; }
+.depth-nav button[aria-current], .depth-nav button[aria-pressed="true"] { background: #d9ebd9; box-shadow: inset 3px 0 #4a8b65; }
+.depth-nav button span { font-size: 14px; font-weight: 700; }
+.depth-nav small { font-size: 10px; }
+.depth-nav .water-destination { background: #e5edf0; color: #3f6576; }
+.depth-nav .water-destination[aria-current] { box-shadow: inset 3px 0 #56889a; background: #d7e8ee; }
+.depth-seal { padding: 8px 10px; margin-left: 9px; border-left: 2px dotted #9dabb0; font-size: 11px; color: #76858b; }
+.depth-nav .overview-button { margin-top: 8px; min-height: 36px; font-size: 12px; background: transparent; border: 1px solid #d3ddcf; }
+.depth-hint { display: block; margin-top: 10px; line-height: 1.5; color: #76858b; }
+.prototype-note { position: absolute; top: 13px; left: 50%; transform: translateX(-50%); color: #dce6dd; font-size: 11px; background: #1c2a32b3; padding: 5px 10px; border-radius: 8px; pointer-events: none; }
 .build-tools {
   position: absolute;
   bottom: 72px;
@@ -425,6 +454,22 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 720px) {
+  .app { padding: 8px; gap: 8px; }
+  .top { padding: 8px; gap: 6px; }
+  .brand { gap: 6px; flex: none; }
+  .brand-text h1 { font-size: 16px; white-space: nowrap; }
+  .brand-text small, .logo, .scope { display: none; }
+  .mission { padding: 7px; gap: 4px; font-size: 11px; min-width: 0; }
+  .mission-count { padding: 2px 5px; }
+  .depth-nav { top: auto; right: 12px; bottom: 72px; width: calc(100% - 24px); padding: 7px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+  .depth-nav button { padding: 7px; min-height: 48px; }
+  .depth-nav button span { font-size: 12px; }
+  .depth-nav small { font-size: 9px; }
+  .depth-nav .overview-button { margin: 0; }
+  .depth-location { font-size: 10px; grid-column: 1 / -1; margin: 0 0 3px; }
+  .depth-seal, .depth-hint, .prototype-note { display: none; }
+  .build-tools { bottom: 174px; }
+  .legend { max-width: calc(100% - 120px); font-size: 10px; }
   .bottom {
     flex-direction: column;
     align-items: flex-start;

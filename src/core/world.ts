@@ -17,14 +17,29 @@ export type TileType = (typeof TILE)[keyof typeof TILE]
 
 /** 地图尺寸（瓦片数）与瓦片像素尺寸 */
 export const MAP_WIDTH = 44
-export const MAP_HEIGHT = 29
+export const MAP_HEIGHT = 28
 export const TILE_SIZE = 32
 
 /** 地表行：y < SURFACE_Y 为天空，y >= SURFACE_Y 为地层 */
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 3
+export const WORLD_VERSION = 4
+
+/** 同一张剖面上的空间分带；第二层本阶段只可观察。 */
+export const STRATA = {
+  home: { id: 'home', name: '第 1 层 · 暖窝层', top: 4, bottom: 12, focus: { x: 22, y: 10 } },
+  seal: { id: 'seal', name: '坚硬岩层', top: 12, bottom: 15, focus: { x: 22, y: 13.5 } },
+  water: { id: 'water', name: '第 2 层 · 泉水层', top: 15, bottom: 28, focus: { x: 22, y: 20 } },
+} as const
+/** 一层是一个可居住层高。两翼净高3格，共用y=12的实心地板。 */
+export const HOME_ROOM_TOP = 9
+export const HOME_FLOOR_Y = STRATA.home.bottom
+export type StratumId = keyof typeof STRATA
+export function stratumAt(y: number): StratumId {
+  return y < STRATA.seal.top ? 'home' : y < STRATA.water.top ? 'seal' : 'water'
+}
+export const isPreviewLayer = (y: number): boolean => y >= STRATA.water.top
 
 export interface SleepPod extends Cell {
   id: number
@@ -58,7 +73,9 @@ export const LANDMARKS = {
   /** 能源核心互动区（点按修复的容错范围） */
   generatorZone: { x: 19, y: 8, w: 4, h: 3 },
   /** 地下泉水（隐约可见，P3 使用） */
-  spring: { x: 31, y: 15 },
+  spring: { x: 26, y: 21 },
+  /** 建造引导只是可选区域，不限制玩家选址。 */
+  buildSuggestion: { x: 10, y: 9, w: 7, h: 3 },
 } as const satisfies Record<string, Rect | Cell>
 
 /** 第一夜的进度位：全部单调，不因撤销回退 */
@@ -89,12 +106,9 @@ export interface WorldState {
  * 避免玩家误挖整张地图，同时给自由建设留出空间。
  */
 const SOFT_POCKETS: readonly Rect[] = [
-  { x: 8, y: 7, w: 9, h: 6 }, // 左侧：能源石与睡眠舱区
-  { x: 26, y: 7, w: 9, h: 10 }, // 右侧：泉水与温室区
-  { x: 14, y: 12, w: 4, h: 4 }, // 中部下层
-  { x: 9, y: 13, w: 5, h: 2 }, // 软土边缘，留给后续自由搭建
-  { x: 25, y: 12, w: 2, h: 4 },
-  { x: 32, y: 17, w: 3, h: 2 },
+  { x: 2, y: HOME_ROOM_TOP, w: 15, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 左翼横向扩建，不再纵向掏成高洞
+  { x: 26, y: HOME_ROOM_TOP, w: 16, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 右翼与大厅共用同一地板
+  { x: 3, y: 17, w: 38, h: 6 }, // 低矮的第二层天然洞与待探索边缘
 ]
 
 /**
@@ -104,7 +118,11 @@ const SOFT_POCKETS: readonly Rect[] = [
 const CARVED_CAVES: readonly Rect[] = [
   { x: 17, y: 7, w: 9, h: 5 },
   { x: 21, y: 4, w: 2, h: 4 },
-  { x: 15, y: 9, w: 2, h: 1 },
+  { x: 15, y: 9, w: 2, h: 3 }, // 大厅左门落地连通，不必爬墙上床
+  // 天然洞穴，不与暖窝层连通；轮廓保留不规则的顶、底和岩柱。
+  { x: 11, y: 18, w: 21, h: 4 },
+  { x: 7, y: 19, w: 4, h: 3 },
+  { x: 32, y: 19, w: 5, h: 3 },
 ]
 
 /** 创建第一夜初始世界 */

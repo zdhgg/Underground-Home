@@ -1,4 +1,4 @@
-import { MAP_HEIGHT, MAP_WIDTH, TILE_SIZE } from '../core/world'
+import { MAP_HEIGHT, MAP_WIDTH, TILE_SIZE, stratumAt, type StratumId } from '../core/world'
 
 /** 相机：记录视口左上角对应的世界坐标（像素）与缩放 */
 export interface Camera {
@@ -83,4 +83,15 @@ export function centerOn(
 ): Camera {
   const z = clampZoom(zoom)
   return clampCamera({ x: worldX - viewport.width / z / 2, y: worldY - viewport.height / z / 2, zoom: z }, viewport)
+}
+
+/** 全景为观察模式，可低于操作缩放下限；返回楼层后恢复可点击尺寸。 */
+export function overviewCamera(viewport: Viewport): Camera {
+  const zoom = Math.min(viewport.width / (WORLD_PIXEL_WIDTH + 80), viewport.height / (WORLD_PIXEL_HEIGHT + 64), 0.85)
+  return clampCamera({ x: (WORLD_PIXEL_WIDTH - viewport.width / zoom) / 2, y: (WORLD_PIXEL_HEIGHT - viewport.height / zoom) / 2, zoom }, viewport)
+}
+
+export interface DepthView { layer: StratumId; overview: boolean }
+export function cameraDepth(camera: Camera, viewport: Viewport, overview = false): DepthView {
+  return { layer: stratumAt((camera.y + viewport.height / camera.zoom / 2) / TILE_SIZE), overview }
 }
