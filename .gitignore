@@ -14,5 +14,8 @@ Thumbs.db
 npm-debug.log*
 *.local
 
+# 门户管理系统启动时生成的端口配置
+.env
+
 # AI 工作区数据（不进版本库）
 .workbuddy/
