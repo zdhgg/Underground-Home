@@ -5,6 +5,8 @@ import { collectCrystal, repairCore } from '../core/interact'
 import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
 import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
+import { canBuildMorePods, waitingPartners } from '../core/partners'
+import { relicAt, relicSummary } from '../core/relics'
 import {
   createIndexedDbStore,
   createMemoryStore,
@@ -80,6 +82,8 @@ export interface SessionProgress {
   done: number
   total: number
   finished: boolean
+  /** 暖窝层挖到的旧避难所遗物（不占设施格，也不进任务链） */
+  relics: { found: number; total: number }
 }
 
 /** 组合根：把 world / rules / missions / persistence / render / input 装配成一次游戏会话 */
@@ -185,8 +189,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let savePending = false
 
   const pushBuild = (): void => {
-    // 本阶段只开放第一间睡眠舱：建成后收起工具，避免没人使用的空舱造成误解。
-    const available = world.progress.coreRepaired && world.pods.length === 0
+    // 床位数量由"愿意搬进来的伙伴"决定：一开始两位老住户=1 间舱；
+    // 找到水之后另外两位朋友才肯来，于是多出第 2 间舱——永远不出现没人住的空舱。
+    const available = world.progress.coreRepaired && canBuildMorePods(world)
     if (!available && building) {
       building = false
       candidate = null
@@ -208,7 +213,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
     let message = '点一下想放小床的地面，看看预览。'
     if (!available) {
-      message = '小床已经安好啦。'
+      message = world.progress.coreRepaired
+        ? '小床都安好啦。找到水，才会有新朋友愿意搬来。'
+        : '先修好能源核心，再安小床。'
     } else if (!building) {
       message = '先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面。'
     } else if (candidate && selectedResult) {
@@ -339,8 +346,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   const pushProgress = (): void => {
     const summary = missionSummary(world)
-    // 建成后到入睡前仍显示“睡眠舱”这一步；伙伴真正躺下才显示完成与庆祝。
-    const pendingRest = world.pods.length > 0 && !resting
+    const chainDone = summary.done >= summary.total
+    // 第一间舱建成后到伙伴真正躺下之前，仍显示“睡眠舱”这一步；
+    // 第二间舱（找到水之后）不再让计数回退，直接走探索引导的最后一步。
+    const pendingRest = !chainDone && world.pods.length > 0 && !resting
     const mission = pendingRest
       ? FIRST_NIGHT_MISSIONS[FIRST_NIGHT_MISSIONS.length - 1]
       : currentMission(world)
@@ -350,13 +359,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         ? '小床安好啦！伙伴准备钻进被窝……'
         : mission
           ? mission.speech
-          : '伙伴睡得好香！你可以继续扩建暖窝层，也可以点“向下看看”，听听岩层深处的水声。',
+          : '伙伴说：有水真好！我们想一直住在这儿。',
       outcome: mission ? mission.outcome : '',
       done: pendingRest ? Math.max(0, summary.done - 1) : summary.done,
       total: summary.total,
-      finished: !pendingRest && summary.done >= summary.total,
+      finished: !pendingRest && chainDone,
+      relics: relicSummary(world),
     })
-    if (summary.done === summary.total && !pendingRest) hooks.onProgress(explorationGuide(world))
+    if (chainDone && !pendingRest) hooks.onProgress({ ...explorationGuide(world), relics: relicSummary(world) })
     hooks.onExploration?.({
       clue: world.exploration.clueFound, upgraded: world.exploration.pickaxeUpgraded,
       connected: shaftConnected(world), entered: world.exploration.entered, found: world.exploration.springFound,
@@ -374,7 +384,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         y: guide.rect.y * TILE_SIZE,
         width: guide.rect.w * TILE_SIZE,
         height: guide.rect.h * TILE_SIZE,
-        tone: guide.kind === 'repair' ? 'amber' : 'cyan',
+        tone: guide.kind === 'dig' || guide.kind === 'collect' ? 'cyan' : 'amber',
       })
     }
   }
@@ -543,8 +553,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         playSpringFound()
         renderer.playSpringDiscovery()
         renderer.playMoleReaction('找到水啦！')
-        notify('🎉 找到天然泉水啦！这里也能成为我们的家！')
-        hooks.onMilestone?.({ emoji: '💧', title: '发现地下泉水！', detail: '第 2 层 · 泉水层从此成为新家园' })
+        // 有了水，另外两位朋友才肯搬来——他们先在大厅等着，安好新床就会住进去。
+        renderer.refreshFriends()
+        notify(`🎉 找到天然泉水啦！还有 ${waitingPartners(world)} 位朋友说：有水就搬来住！`)
+        hooks.onMilestone?.({ emoji: '💧', title: '发现地下泉水！', detail: '两位新朋友愿意搬来 · 回暖窝层给他们安新床' })
       })
       return
     }
@@ -619,7 +631,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     renderer.refreshExploration()
     scheduleSave()
     pushProgress()
-    if (revealedNow) {
+    const relic = relicAt(cell.x, cell.y)
+    if (relic) {
+      // 埋着的旧避难所遗物：挖开就有发现，摆在这一格上，不进任务链。
+      renderer.refreshRelics()
+      renderer.playBurst((cell.x + 0.5) * TILE_SIZE, (cell.y + 0.5) * TILE_SIZE, { color: 0xffe6ad, count: 14, speed: 66, ring: true, ringRadius: 26 })
+      hooks.onMessage(`${relic.emoji} 挖到「${relic.name}」！${relic.hint}`)
+    } else if (revealedNow) {
       hooks.onMessage('💎 能源石露出来了！')
     } else if (result.tile === TILE.WEAK_ROCK) {
       hooks.onMessage(shaftConnected(world) ? '🪜 梯道接到洞底啦！点“沿梯子下去”。' : '⛏ 裂纹岩挖开啦！小梯子也接好了一段。')
@@ -752,11 +770,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       hoverBuild = null
       resting = false
       // 只刷新舱体：保留伙伴当前站位，随后沿真实通道播放入场。
+      // 新舱的两位（找到水之后搬来的朋友）先在大厅等着，再由入场演出带进被窝。
       renderer.refreshPods()
+      renderer.refreshFriends(pod.id)
       renderer.playBurst((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
       scheduleSave()
       pushProgress()
-      hooks.onMessage('🛏️ 小床安好啦！伙伴准备钻进被窝……')
+      hooks.onMessage(world.pods.length > 1 ? '🛏️ 新朋友的小床安好啦！' : '🛏️ 小床安好啦！伙伴准备钻进被窝……')
       renderer.playPodEntrance(pod, () => {
         resting = true
         renderer.playPodCelebration(pod)
@@ -797,6 +817,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       else {
         renderer.refreshTerrain([restored])
         renderer.playDigEffect(restored)
+        // 撤销到遗物那一格时，道具跟着埋回土里。
+        renderer.refreshRelics()
       }
       renderer.refreshExploration()
       scheduleSave()

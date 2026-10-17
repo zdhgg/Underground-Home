@@ -152,11 +152,23 @@ export function canPlaceWallLamp(world: WorldState, x: number): boolean {
     && !world.exploration.lamps.some((lamp) => lamp.x === x)
 }
 
+/**
+ * 大厅地面到梯口的地面通道是否还在。
+ * 发现裂纹时靠它判定"阿土走得到"，再建设施之后也要靠它——否则重新载入时通路校验会失败。
+ */
+export function hallToShaftRouteIntact(world: WorldState): boolean {
+  const x = world.exploration.shaftX
+  if (!world.exploration.clueFound || x === null) return true
+  const top = { x, y: HALL_START_Y }
+  return HALL_STARTS.some((startX) => canStand(world, startX, HALL_START_Y)
+    && !!walkingRoute(world, { x: startX, y: HALL_START_Y }, top))
+}
+
 export function explorationAccessIntact(world: WorldState): boolean {
   const e = world.exploration
   if (!e.clueFound || e.shaftX === null) return true
+  if (!hallToShaftRouteIntact(world)) return false
   const top = { x: e.shaftX, y: HALL_START_Y }
-  if (!HALL_STARTS.some((x) => canStand(world, x, HALL_START_Y) && walkingRoute(world, { x, y: HALL_START_Y }, top))) return false
   if (!e.entered) return true
   if (!shaftConnected(world) || !e.explorer || !walkingRoute(world, top, e.explorer)) return false
   return (!e.springFound || !!walkingRoute(world, top, LANDMARKS.spring))

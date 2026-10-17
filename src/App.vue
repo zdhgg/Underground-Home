@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
 import { createGameSession, type BuildState, type ExplorationUI, type GameSession, type Milestone, type SessionProgress } from './app/session'
 import { STRATA } from './core/world'
 import type { DepthView } from './render/camera'
@@ -17,12 +17,23 @@ const progress = ref<SessionProgress>({
   done: 0,
   total: 4,
   finished: false,
+  relics: { found: 0, total: 3 },
 })
 const build = ref<BuildState>({ available: false, active: false, selected: false, valid: false, message: '', count: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
 const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
+
+/** 画面左下角的一行提示：跟着当前能做的事走 */
+const legendHint = computed(() => {
+  if (view.value.overview) return '一张连续剖面 · 家园会一层一层向下生长'
+  if (exploration.value.lampMode) return '🏮 壁灯选址中 · 点空洞安灯，再点工具收起'
+  if (!exploration.value.upgraded) return '🟫 泥土可挖　🪨 找找有裂纹的岩壁'
+  if (!exploration.value.entered) return '⛏ 点裂纹岩：阿土一镐一镐往下挖　🪨 坚硬基岩保留'
+  if (!exploration.value.found) return '🟫 点泥土挖过去　💧 看见泉水点一下它'
+  return '💧 泉水找到啦 · 新朋友要来住，回暖窝层安张床'
+})
 
 let toastTimer: number | undefined
 let milestoneTimer: number | undefined
@@ -98,7 +109,7 @@ onBeforeUnmount(() => {
           <span class="mole-face">🐹</span>
           <div class="mole-name">
             <strong>小鼹鼠 阿土</strong>
-            <small>{{ progress.finished ? '泉水层 · 新家园的起点' : '你的地下向导' }}</small>
+            <small>{{ progress.finished ? '家越来越大啦' : '你的地下向导' }}</small>
           </div>
           <button type="button" class="ghost" @click="session?.focusTarget()">👀 带我去看看</button>
         </div>
@@ -150,7 +161,10 @@ onBeforeUnmount(() => {
         <p v-if="build.active" role="status">{{ build.message }}</p>
         <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
-      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? (exploration.entered ? (exploration.found ? '💧 泉水找到啦 · 继续扩建或安一盏小灯' : '🟫 点泥土挖过去　💧 看见泉水点一下它') : '⛏ 点裂纹岩：阿土一镐一镐往下挖　🪨 坚硬基岩保留') : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
+      <div class="legend">
+        <span>{{ legendHint }}</span>
+        <span v-if="progress.relics.found" class="relic-count">🧰 遗物 {{ progress.relics.found }}/{{ progress.relics.total }}</span>
+      </div>
 
       <transition name="card">
         <div v-if="milestone" class="milestone" role="status">
@@ -169,7 +183,7 @@ onBeforeUnmount(() => {
 
     <footer class="bottom">
       <span>点泥土挖一格 · 点裂纹岩让阿土去挖 · 拖动平移 · 挖错点右下角撤销</span>
-      <span class="scope">点亮家园 → 安好小床 → 听水声，向下探索</span>
+      <span class="scope">点亮家园 → 安好小床 → 找到水 → 接新朋友来住</span>
     </footer>
   </div>
 </template>
@@ -459,6 +473,10 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   background: #fffaf1e8;
   border: 1px solid #e9d8b9;
   border-radius: 10px;
@@ -467,6 +485,10 @@ onBeforeUnmount(() => {
   font-weight: 700;
   color: #526052;
   pointer-events: none;
+}
+
+.relic-count {
+  color: #8a6a33;
 }
 
 .toast {

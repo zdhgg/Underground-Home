@@ -85,8 +85,10 @@ interface TerrainProbe {
     pose: string
     bed: { x: number; y: number } | null
     inEntrance: boolean
+    podId: number | null
   }[]
   refreshPods(): void
+  refreshFriends(arrivingPodId?: number | null): void
   playPodEntrance(pod: SleepPod, onSettled: () => void): void
   playPodCelebration(pod: SleepPod): void
   drawLighting(): void
@@ -480,6 +482,59 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(settled).toHaveBeenCalledTimes(1)
     expect(view.podEntrance).toBeNull()
     expect(view.friends.every((friend) => friend.pose === 'rest')).toBe(true)
+  })
+
+  it('找到水之后大厅里多出两位等床的新朋友', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.springFound = true
+    renderer.setWorld(next)
+    expect(view.friends).toHaveLength(4)
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'idle', 'idle'])
+  })
+
+  it('第二间舱的入场只搬新舱那两位，老住户继续睡在自己的床上', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.springFound = true
+    renderer.setWorld(next)
+    for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
+    const second = placePod(next, 7, 10)!
+    renderer.refreshPods()
+    renderer.refreshFriends(second.id)
+    // 入场前：新舱两位站在大厅，老住户还在床上
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'idle', 'idle'])
+    const firstBedX = view.friends[0].view.x
+
+    const settled = vi.fn()
+    renderer.playPodEntrance(second, settled)
+    for (let i = 0; i < 240; i++) view.tick({ deltaMS: 16 } as Ticker)
+    expect(settled).toHaveBeenCalledTimes(1)
+    const beds = bedSlots(second)
+    expect(view.friends[0].view.x).toBeCloseTo(firstBedX, 5)
+    view.friends.slice(2).forEach((friend, i) => {
+      expect(friend.pose).toBe('rest')
+      expect(Math.abs(friend.view.x - beds[i].x)).toBeLessThanOrEqual(0.001)
+    })
+  })
+
+  it('两间舱的存档重新载入：四位伙伴各自睡在自己的舱里', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.springFound = true
+    for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
+    placePod(next, 7, 10)
+    renderer.setWorld(next)
+    expect(view.podEntrance).toBeNull()
+    expect(view.podLayer.children).toHaveLength(2)
+    expect(view.friends).toHaveLength(4)
+    const first = bedSlots(next.pods[0])
+    const second = bedSlots(next.pods[1])
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'rest', 'rest'])
+    expect(view.friends[0].view.x).toBeCloseTo(first[0].x, 5)
+    expect(view.friends[1].view.x).toBeCloseTo(first[1].x, 5)
+    expect(view.friends[2].view.x).toBeCloseTo(second[0].x, 5)
+    expect(view.friends[3].view.x).toBeCloseTo(second[1].x, 5)
   })
   })
 })

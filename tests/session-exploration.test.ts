@@ -12,6 +12,8 @@ const harness = vi.hoisted(() => {
     canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
+    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(),
+    playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
     playBurst: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
     // 累计帧数：看门狗用它判断画面是不是真的冻住了
@@ -288,7 +290,8 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.springFound).toBe(true)
     expect(harness.renderer.playSpringDiscovery).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
-    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ done: 5, finished: true })
+    // 水找到之后还有最后一步：新朋友要床位——所以此时探索主线还不算走完
+    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ done: 5, total: 6, finished: false })
     session.toggleLamp(); tap(25, 19)
     expect(w.exploration.lamps).toEqual([{ x: 25, y: 19 }])
     session.undo()

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { placePod } from '../src/core/build'
 import { dig } from '../src/core/dig'
+import { inspectCrack, upgradePickaxe } from '../src/core/exploration'
 import { createDigHistory } from '../src/core/history'
 import { collectCrystal, repairCore } from '../src/core/interact'
 import {
@@ -73,6 +75,13 @@ describe('第一夜任务链', () => {
     expect(world.progress.crystalFound).toBe(true)
   })
 
+  it('找到水之后高亮回到暖窝层：新朋友要床位（而不是指向第二层）', () => {
+    const world = reachedSpringWorld()
+    const guide = guideHighlight(world)
+    expect(guide.kind).toBe('build')
+    if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.buildSuggestion)
+  })
+
   it('每个任务都带有儿童可读的引导文案（说什么 / 做什么 / 会怎样）', () => {
     for (const mission of FIRST_NIGHT_MISSIONS) {
       expect(mission.speech.length).toBeGreaterThan(0)
@@ -82,3 +91,20 @@ describe('第一夜任务链', () => {
     expect(getMissionProgress(createInitialWorld())).toHaveLength(4)
   })
 })
+
+/** 已经点亮家园、安好小床、挖通梯道、抵达第二层并找到泉水 */
+function reachedSpringWorld() {
+  const world = createInitialWorld()
+  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
+  placePod(world, 12, 10)
+  for (let x = 26; x <= 27; x++) dig(world, x, 11)
+  inspectCrack(world, 27, 12)
+  upgradePickaxe(world)
+  for (let y = 12; y < 19; y++) if (world.tiles[y][27] !== TILE.EMPTY) dig(world, 27, y)
+  world.exploration.entered = true
+  for (let x = 23; x >= 18; x--) dig(world, x, 21)
+  world.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
+  world.exploration.springFound = true
+  return world
+}

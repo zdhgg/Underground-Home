@@ -21,7 +21,10 @@ import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
 import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
 import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
-import { POD_SIZE } from '../core/build'
+import { POD_SIZE, BEDS_PER_POD } from '../core/build'
+import { waitingPartners } from '../core/partners'
+import { foundRelics } from '../core/relics'
+import { drawRelic } from './relicProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import { ExplorationScene } from './explorationScene'
 import {
@@ -120,6 +123,10 @@ interface FriendSprite {
   bed: { x: number; y: number } | null
   /** 入场演出正在驱动时，跳过站立 / 呼吸动画 */
   inEntrance: boolean
+  /** 自己的床位属于哪一间舱；还没有床（在大厅等新朋友）时为 null */
+  podId: number | null
+  /** 站在大厅时用的落脚点，重建后用它重算 baseY */
+  spot: { x: number; y: number }
 }
 
 interface RoutePoint {
@@ -200,6 +207,13 @@ const ENTRANCE_PREPARE_DELAY = 0.45
 const ENTRANCE_STAGGER = 0.3
 const ENTRANCE_SEGMENT_TIME = 0.22
 
+/** 还没上床的伙伴站在大厅的位置（y 是脚下的格子行） */
+const IDLE_SPOTS = [
+  { x: 18.6, y: 11 }, { x: 23.9, y: 11 }, { x: 17.2, y: 11 }, { x: 25.3, y: 11 },
+] as const
+/** 伙伴配色：前两位是原来的老住户，后两位是找到水之后才搬来的新朋友 */
+const FRIEND_COLORS = [0xa8ba8e, 0xe9b6a7, 0xb9a7e0, 0xe5cf95] as const
+
 const REPAIR_CONFETTI_ANCHORS = [
   { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
   { x: 23.9 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
@@ -253,6 +267,8 @@ export class PixiWorldRenderer {
   private readonly backdrop = new Graphics()
   private readonly wind = new Graphics()
   private readonly landmarkLayer = new Container()
+  /** 挖出来的旧避难所遗物：摆在发现的那一格上 */
+  private readonly relicLayer = new Container()
   private readonly shelterFixtures: Container
   private readonly lampFixtures: Sprite[]
   private readonly glowLayer = new Container()
@@ -334,6 +350,7 @@ export class PixiWorldRenderer {
       this.wind,
       this.shelterFixtures,
       this.landmarkLayer,
+      this.relicLayer,
       this.podLayer,
       this.friendsLayer,
       this.darkness,
@@ -372,9 +389,23 @@ export class PixiWorldRenderer {
   refresh(): void {
     this.refreshTerrain()
     this.rebuildLandmarks()
+    this.refreshRelics()
     this.refreshPods()
     this.rebuildFriends()
     this.refreshExploration()
+  }
+
+  /** 只重建伙伴精灵：建成 / 撤销睡眠舱、找到水出现新朋友时调用 */
+  refreshFriends(arrivingPodId: number | null = null): void {
+    this.rebuildFriends(arrivingPodId)
+  }
+
+  /** 只重建遗物道具：挖到遗物、或撤销把遗物埋回去之后调用 */
+  refreshRelics(): void {
+    for (const child of this.relicLayer.removeChildren()) child.destroy({ children: true })
+    const world = this.world
+    if (!world) return
+    for (const relic of foundRelics(world)) this.relicLayer.addChild(drawRelic(relic))
   }
 
   refreshExploration(): void { if (this.world) this.explorationScene.refresh(this.world) }
@@ -869,38 +900,46 @@ export class PixiWorldRenderer {
 
   // ---------- 内部：伙伴与特效 ----------
 
-  private rebuildFriends(): void {
+  /**
+   * 重建伙伴：伙伴由"床位 + 还在等的朋友"推导，每间舱睡两位。
+   * arrivingPodId 的两位先在原地（大厅）等着，由入场演出把他们带进被窝；
+   * 其余已入住的伙伴直接恢复成休息状态（重新载入时就是这个路径）。
+   */
+  private rebuildFriends(arrivingPodId: number | null = null): void {
     this.podEntrance = null
     for (const child of this.friendsLayer.removeChildren()) child.destroy({ children: true })
     this.friends = []
     const world = this.world
     if (!world) return
-    const pod = world.pods[0]
-    const beds = pod ? bedSlots(pod) : null
-    const spots = [
-      { x: 18.6 * TILE_SIZE, y: friendWalkY(world, { x: 18, y: 11 }) },
-      { x: 23.9 * TILE_SIZE, y: friendWalkY(world, { x: 23, y: 11 }) },
-    ]
-    spots.forEach((spot, i) => {
-      const bodyColor = i === 0 ? 0xa8ba8e : 0xe9b6a7
+    const waiting = waitingPartners(world)
+    const total = world.pods.length * BEDS_PER_POD + waiting
+    for (let i = 0; i < total; i++) {
+      const pod = i < world.pods.length * BEDS_PER_POD ? world.pods[Math.floor(i / BEDS_PER_POD)] : null
+      const bedIndex = i % BEDS_PER_POD
+      const spot = IDLE_SPOTS[i % IDLE_SPOTS.length]
+      const standing = friendWalkY(world, { x: Math.floor(spot.x), y: spot.y })
+      const bodyColor = FRIEND_COLORS[i % FRIEND_COLORS.length]
       const view = new Container()
       const body = new Graphics()
       const friend: FriendSprite = {
-        view, body, bodyColor, baseY: spot.y, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
+        view, body, bodyColor, baseY: standing, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
+        podId: pod ? pod.id : null, spot: { x: spot.x, y: standing },
       }
-      if (beds) {
-        friend.bed = beds[i]
+      // 已经入住的伙伴接着睡；正在入场的这一对站在原地等演出开始。
+      if (pod && pod.id !== arrivingPodId) {
+        const bed = bedSlots(pod)[bedIndex]
+        friend.bed = bed
         friend.pose = 'rest'
-        view.position.set(friend.bed.x, friend.bed.y)
+        view.position.set(bed.x, bed.y)
         view.scale.set(FRIEND_REST_SCALE)
       } else {
-        view.position.set(spot.x, spot.y)
+        view.position.set(spot.x * TILE_SIZE, standing)
       }
       paintFriend(body, bodyColor, friend.pose)
       view.addChild(body)
       this.friendsLayer.addChild(view)
       this.friends.push(friend)
-    })
+    }
   }
 
   private updateFriends(dt: number): void {
@@ -924,16 +963,20 @@ export class PixiWorldRenderer {
   }
 
   /**
-   * 第一间睡眠舱的一次性入场：沿真实空洞格走到舱门，再钻进被窝。
-   * 只在建成时调用；重新载入时 rebuildFriends 会直接恢复成休息状态。
+   * 一间睡眠舱的一次性入场：该舱的两位伙伴沿真实空洞格走到舱门，再钻进被窝。
+   * 只搬这一间舱的两位，其他舱的伙伴继续睡；重新载入时 rebuildFriends 直接恢复成休息状态。
    */
   playPodEntrance(pod: SleepPod, onSettled: () => void): void {
     const world = this.world
     if (!world || this.friends.length === 0) return
     this.podEntrance = null
     const beds = bedSlots(pod)
+    const mates = this.friends.filter((friend) => friend.podId === pod.id)
+    // 未知舱（路径兜底 / 早期存档）：把这间舱当作"还没上床的伙伴"的去处，别让人卡在半路。
     const travellers: PodTraveller[] = []
-    this.friends.forEach((friend, i) => {
+    const moving = mates.length ? mates : this.friends.filter((friend) => friend.bed === null)
+    moving.forEach((friend, i) => {
+      const bed = beds[i % BEDS_PER_POD]
       const from = { x: Math.floor(friend.view.x / TILE_SIZE), y: Math.floor(friend.view.y / TILE_SIZE) }
       const route = findEntranceRoute(world, from, pod)
       if (!route) return
@@ -949,7 +992,7 @@ export class PixiWorldRenderer {
           y: pose === 'climb' ? (cell.y + 0.5) * TILE_SIZE : friendWalkY(world, cell),
         })
       })
-      points.push({ x: beds[i].x, y: beds[i].y, pose: 'enter' })
+      points.push({ x: bed.x, y: bed.y, pose: 'enter' })
       const lengths = [0]
       for (let j = 1; j < points.length; j++) {
         lengths.push(lengths[j - 1] + Math.hypot(points[j].x - points[j - 1].x, points[j].y - points[j - 1].y))
@@ -967,8 +1010,8 @@ export class PixiWorldRenderer {
       friend.pose = 'walk'
       paintFriend(friend.body, friend.bodyColor, 'walk')
     })
-    if (travellers.length !== this.friends.length) {
-      this.settleFriendsInBed(beds)
+    if (travellers.length !== moving.length || travellers.length === 0) {
+      this.settleFriendsInBed(moving.map((friend, i) => ({ friend, bed: beds[i % BEDS_PER_POD] })))
       onSettled()
       return
     }
@@ -976,16 +1019,16 @@ export class PixiWorldRenderer {
   }
 
   /** 路径异常时的兜底：直接放到床上，避免伙伴卡住 */
-  private settleFriendsInBed(beds: { x: number; y: number }[]): void {
+  private settleFriendsInBed(pairs: { friend: FriendSprite; bed: { x: number; y: number } }[]): void {
     this.podEntrance = null
-    this.friends.forEach((friend, i) => {
+    for (const { friend, bed } of pairs) {
       friend.inEntrance = false
       friend.pose = 'rest'
-      friend.bed = beds[i]
+      friend.bed = bed
       friend.view.scale.set(FRIEND_REST_SCALE)
-      friend.view.position.set(beds[i].x, beds[i].y)
+      friend.view.position.set(bed.x, bed.y)
       paintFriend(friend.body, friend.bodyColor, 'rest')
-    })
+    }
   }
 
   private advancePodEntrance(dt: number): void {

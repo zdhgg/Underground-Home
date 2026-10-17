@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { createInitialWorld, TILE, LANDMARKS, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
-import { canRestoreDig, placePod } from '../src/core/build'
+import { canRestoreDig, placePod, canPlacePod } from '../src/core/build'
 import { createWorldHistory } from '../src/core/history'
 import { canPlaceWallLamp, canStand, inspectCrack, moleRoute, shaftChainReady, shaftConnected, shaftDugSegments, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
 import { deserialize, serialize } from '../src/core/persistence'
 import { explorationGuide, guideHighlight } from '../src/core/missions'
+import { waitingPartners } from '../src/core/partners'
 
 function readyWorld(podX = 12): WorldState {
   const w = createInitialWorld()
@@ -31,6 +32,10 @@ function enter(w: WorldState): void {
   expect(walkingRoute(w, w.exploration.explorer!, { x: w.exploration.shaftX!, y: 21 })).not.toBeNull()
   w.exploration.entered = true
   w.exploration.explorer = { x: w.exploration.shaftX!, y: 21 }
+}
+/** 把一块矩形挖成空地（已经是空地的格子跳过），用于布置第二间舱 */
+function carve(w: WorldState, fromX: number, toX: number, fromY: number, toY: number): void {
+  for (let y = fromY; y <= toY; y++) for (let x = fromX; x <= toX; x++) if (w.tiles[y][x] === TILE.SOIL) dig(w, x, y)
 }
 
 describe('首次突破岩层闭环', () => {
@@ -163,7 +168,26 @@ describe('首次突破岩层闭环', () => {
     w.exploration.lamps.push({ x: 30, y: 19 })
     loaded = deserialize(serialize(w))
     expect(loaded.ok && loaded.world).toEqual(w)
-    expect(explorationGuide(w)).toMatchObject({ done: 5, total: 5, finished: true })
+    // 找到水之后还有最后一步：两位新朋友要床位，第一层还要再建一间舱
+    expect(waitingPartners(w)).toBe(2)
+    expect(explorationGuide(w)).toMatchObject({ done: 5, total: 6, finished: false })
+    carve(w, 5, 14, 9, 11)
+    const second = placePod(w, 7, 10)
+    expect(second).not.toBeNull()
+    expect(second?.door).toBe('left')
+    expect(waitingPartners(w)).toBe(0)
+    expect(explorationGuide(w)).toMatchObject({ done: 6, total: 6, finished: true })
+    expect(deserialize(serialize(w)).ok).toBe(true)
+  })
+  it('梯道用起来之后，新睡眠舱不能截断大厅到梯口的地面通道', () => {
+    const w = readyWorld()
+    openShaft(w)
+    // 右翼地面被舱体截断：阿土就走不到梯口了，规则层必须直接拒绝
+    carve(w, 24, 26, 10, 11)
+    expect(canPlacePod(w, 24, 10)).toMatchObject({ ok: false, reason: 'access' })
+    // 同一块空地上，挪到左翼（舱门通大厅）就能建
+    carve(w, 5, 14, 9, 11)
+    expect(canPlacePod(w, 7, 10).ok).toBe(true)
   })
   it('拒绝伪造解锁、断开的已使用梯道、未知字段和非法站位', () => {
     const w = readyWorld()

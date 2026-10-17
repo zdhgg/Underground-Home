@@ -1,7 +1,9 @@
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type Cell, type Rect, type SleepPod, type WorldState } from './world'
-import { explorationAccessIntact, explorationProtects, isShaftColumn } from './exploration'
+import { explorationAccessIntact, explorationProtects, hallToShaftRouteIntact, isShaftColumn } from './exploration'
 
 export const POD_SIZE = { w: 3, h: 2 } as const
+/** 双人舱：一间舱睡两位伙伴，床位数量决定还能安几间舱 */
+export const BEDS_PER_POD = 2
 // 核心机身宽于可点击区，留出完整外壳占地，避免示意舱压住现有PNG。
 const CORE_FOOTPRINT: Rect = { x: 19, y: 8, w: 5, h: 3 }
 export type BuildFailure = 'power' | 'bounds' | 'reserved' | 'overlap' | 'soil' | 'support' | 'access' | 'locked-layer'
@@ -44,6 +46,21 @@ function accessPreserved(world: WorldState, seen: Set<number>): boolean {
   return [coreAccess, ...world.pods.map(podDoor)].every(({ x, y }) => seen.has(y * world.width + x))
 }
 
+/**
+ * 候选舱不能截断"大厅地面 → 梯口"的地面通道。
+ * 梯道一旦用起来，这条通道就是必需通路：存档载入时会做同样的校验，
+ * 所以建成时才拦住，玩家不会遇到"存了却读不回来"。
+ */
+function shaftRouteKeptWith(world: WorldState, rect: Rect): boolean {
+  if (!world.exploration.clueFound) return true
+  world.pods.push({ id: 0, x: rect.x, y: rect.y, door: 'left' })
+  try {
+    return hallToShaftRouteIntact(world)
+  } finally {
+    world.pods.pop()
+  }
+}
+
 export function canPlacePod(world: WorldState, x: number, y: number, preferredDoor?: SleepPod['door']): Placement {
   if (!world.progress.coreRepaired) return { ok: false, reason: 'power' }
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < SURFACE_Y || x + POD_SIZE.w > world.width || y + POD_SIZE.h >= world.height) return { ok: false, reason: 'bounds' }
@@ -58,6 +75,7 @@ export function canPlacePod(world: WorldState, x: number, y: number, preferredDo
     if (world.tiles[y + dy][x + dx] !== TILE.EMPTY) return { ok: false, reason: 'soil' }
   }
   for (let dx = 0; dx < POD_SIZE.w; dx++) if (world.tiles[y + POD_SIZE.h][x + dx] === TILE.EMPTY) return { ok: false, reason: 'support' }
+  if (!shaftRouteKeptWith(world, rect)) return { ok: false, reason: 'access' }
   const seen = reachable(world, rect)
   if (!accessPreserved(world, seen)) return { ok: false, reason: 'access' }
   for (const door of preferredDoor ? [preferredDoor] : ['left', 'right'] as const) {
