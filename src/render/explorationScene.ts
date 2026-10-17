@@ -153,9 +153,10 @@ export class ExplorationScene {
     }
     for (const lamp of e.lamps) {
       const x = (lamp.x + 0.5) * T, y = (lamp.y + 0.5) * T
-      g.circle(x, y + 10, 44).fill({ color: 0xffd995, alpha: 0.13 })
+      // 通电前只有一点余光；电从第一层送到之后才真正亮起来。
+      g.circle(x, y + 10, world.powerDown ? 62 : 44).fill({ color: 0xffd995, alpha: world.powerDown ? 0.22 : 0.13 })
       g.roundRect(x - 7, y - 6, 14, 20, 4).fill(0x796650).stroke({ width: 2, color: 0xd1ae77 })
-      g.roundRect(x - 4, y - 2, 8, 12, 2).fill(0xffe7a3)
+      g.roundRect(x - 4, y - 2, 8, 12, 2).fill(world.powerDown ? 0xfff3c8 : 0xffe7a3)
     }
     this.drawFog(0)
     this.drawCues()

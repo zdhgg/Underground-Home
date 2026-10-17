@@ -171,15 +171,15 @@ describe('首次突破岩层闭环', () => {
     expect(loaded.ok && loaded.world).toEqual(w)
     // 找到水之后还有三步：引水到家里 → 安顿新朋友 → 种出第一份收成
     expect(waitingPartners(w)).toBe(2)
-    expect(explorationGuide(w)).toMatchObject({ title: '把水引到家里', done: 5, total: 8, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '把水引到家里', done: 5, total: 9, finished: false })
     w.farm.waterSupplied = true
-    expect(explorationGuide(w)).toMatchObject({ title: '安顿新朋友', done: 6, total: 8, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '安顿新朋友', done: 6, total: 9, finished: false })
     carve(w, 5, 14, 9, 11)
     const second = placePod(w, 7, 10)
     expect(second).not.toBeNull()
     expect(second?.door).toBe('left')
     expect(waitingPartners(w)).toBe(0)
-    expect(explorationGuide(w)).toMatchObject({ title: '种出第一份食物', done: 7, total: 8, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '种出第一份食物', done: 7, total: 9, finished: false })
 
     // 种下一槽菜：干三件事长熟一档一档往上走，收一次就完成主线
     expect(placePlanter(w, 5, 11)).not.toBeNull()
@@ -188,7 +188,10 @@ describe('首次突破岩层闭环', () => {
     expect(w.farm.planters[0].growth).toBe(3)
     expect(harvestPlanter(w, 5, 11)).toBe(true)
     expect(w.farm.food).toBe(1)
-    expect(explorationGuide(w)).toMatchObject({ done: 8, total: 8, finished: true })
+    // 收过第一份之后还剩最后一步：把电送到第二层。
+    expect(explorationGuide(w)).toMatchObject({ title: '把家里的电送到下面', done: 8, total: 9, finished: false })
+    w.powerDown = true
+    expect(explorationGuide(w)).toMatchObject({ done: 9, total: 9, finished: true })
     expect(deserialize(serialize(w)).ok).toBe(true)
   })
   it('梯道用起来之后，新睡眠舱不能截断大厅到梯口的地面通道', () => {

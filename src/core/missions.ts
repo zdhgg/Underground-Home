@@ -111,6 +111,8 @@ export function guideHighlight(world: WorldState): GuideHighlight {
     if (!world.farm.waterSupplied) return { kind: 'repair', rect: { ...LANDMARKS.spring, w: 1, h: 1 } }
     // 水到家了：给新朋友安床、在第一层种菜——高亮都指回暖窝层的建造建议区
     if (canBuildMorePods(world) || world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
+    // 第一夜过完了：家里有电，该顺着梯道送到下面去了
+    if (!world.powerDown) return { kind: 'repair', rect: LANDMARKS.generatorZone }
   }
   return { kind: 'none' }
 }
@@ -128,7 +130,8 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   // 在找到水之前，这两步都不算数：那时"没等床的伙伴""没收成"只是还没开始。
   const friendsSettled = e.springFound && waiting === 0
   const harvested = farm.harvests > 0
-  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested].filter(Boolean).length
+  const powered = world.powerDown
+  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested, powered].filter(Boolean).length
   const guide = !e.clueFound
     ? ['给小满找一口水', '小满说：我饿了……可是家里没有水，种不了菜。挖开脚边的泥土，再点一下岩壁上的裂纹——我去听听里面有没有水声。', '有了水，就能种出吃的。']
     : !e.pickaxeUpgraded
@@ -145,6 +148,8 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
                 ? ['安顿新朋友', `家里有水了！${waitingNames}还在等床。回暖窝层挖一块空地，给${waiting > 1 ? '他们' : '他'}安张床吧。`, '朋友住下来，家才热闹。']
                 : !harvested
                   ? ['种出第一份食物', '点「种植槽」，在第一层挖空的地面上摆一个。你每干一件事，它就会长大一档：长熟了再点一下就能收！', '有菜吃，小满就不饿了。']
-                  : ['家越住越大！', '家里有水、有床、有新鲜菜啦。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
-  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 8, finished: friendsSettled && harvested }
+                  : !powered
+                    ? ['把家里的电送到下面', '家里亮堂堂的，可是第二层还是黑的。点「⚡ 把电送到下面」，我把电线顺着梯子铺下去。', '下面的灯也能亮了。']
+                    : ['家越住越大！', '家里有水、有床、有新鲜菜，第二层也亮了。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
+  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 9, finished: friendsSettled && harvested && powered }
 }

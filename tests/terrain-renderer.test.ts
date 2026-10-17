@@ -74,6 +74,10 @@ interface TerrainProbe {
   worldLayer: Container
   darkness: Graphics
   lamps: Graphics
+  powerLine: Graphics
+  powerLevel: number
+  drawLighting(): void
+  drawPowerLine(): void
   podLayer: Container
   farmLayer: Container
   farmFlow: Graphics
@@ -398,6 +402,34 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(bounds.y).toBe(12 * TILE_SIZE)
     expect(bounds.height).toBe((world.height - 12) * TILE_SIZE)
     expect(view.tileSprites[17][8].base.tint).not.toBe(view.tileSprites[10][8].base.tint)
+  })
+
+  it('电送到第二层：遮罩淡下去，电线才出现', () => {
+    const next = createInitialWorld()
+    next.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    next.exploration = {
+      ...next.exploration,
+      clueFound: true,
+      shaftX: 27,
+      explorer: { x: 27, y: 11 },
+      pickaxeUpgraded: true,
+      entered: true,
+    }
+    renderer.setWorld(next)
+    view.lightLevel = 1
+    // 还没送电：第二层是暗的，也没有电线
+    view.powerLevel = 0
+    view.drawLighting()
+    expect(view.darkness.context.fillStyle.alpha).toBe(0.43)
+    view.drawPowerLine()
+    expect(view.powerLine.context.instructions).toHaveLength(0)
+    // 送电之后：第二层只剩一点夜色，电线出现
+    next.powerDown = true
+    view.powerLevel = 1
+    view.drawLighting()
+    expect(view.darkness.context.fillStyle.alpha).toBeCloseTo(0.05, 5)
+    view.drawPowerLine()
+    expect(view.powerLine.context.instructions.length).toBeGreaterThan(0)
   })
 
   it('向下镜头可取消，返回家园恢复操作视角，全景覆盖地表到基岩', () => {

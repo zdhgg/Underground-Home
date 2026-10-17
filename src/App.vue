@@ -21,7 +21,7 @@ const progress = ref<SessionProgress>({
 })
 const build = ref<BuildState>({ podAvailable: false, planterAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
-const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false })
+const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false })
 const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
@@ -130,6 +130,7 @@ onBeforeUnmount(() => {
         <button v-if="exploration.connected" type="button" class="adventure-action" :disabled="exploration.traveling" @click="session?.travel()">{{ exploration.traveling ? '🪜 阿土正在走……' : exploration.downstairs ? '↑ 沿梯子回家' : '↓ 沿梯子下去' }}</button>
         <button v-if="exploration.found" type="button" class="ghost" :aria-pressed="exploration.lampMode" @click="session?.toggleLamp()">{{ exploration.lampMode ? '⛏ 收起壁灯，继续挖掘' : '🏮 安一盏小壁灯' }}</button>
         <button v-if="farm.canSupplyWater" type="button" class="adventure-action water" :disabled="farm.supplying || exploration.traveling" @click="session?.supplyWater()">{{ farm.supplying ? '🚰 阿土在接水管……' : '🚰 把水引到家里' }}</button>
+        <button v-if="farm.canSendPower" type="button" class="adventure-action power" :disabled="farm.powering || exploration.traveling" @click="session?.sendPower()">{{ farm.powering ? '⚡ 阿土在铺电线……' : '⚡ 把电送到下面' }}</button>
         <button v-if="farm.harvested" type="button" class="adventure-action meal" :disabled="farm.food === 0 || exploration.traveling" @click="session?.feed()">{{ farm.food > 0 ? `🍽 请大家吃饭（食物 ${farm.food}）` : '🍽 先收点菜再开饭' }}</button>
       </section>
 
@@ -201,6 +202,7 @@ onBeforeUnmount(() => {
 .adventure-action:disabled { opacity: .65; cursor: wait; }
 .adventure-action.chain { background: #a9702c; box-shadow: 0 3px 0 #7d5119; }
 .adventure-action.water { background: #3f7f9a; box-shadow: 0 3px 0 #2c5c72; }
+.adventure-action.power { background: #5a6fa8; box-shadow: 0 3px 0 #3f4f7a; }
 .adventure-action.meal { background: #a9532c; box-shadow: 0 3px 0 #7d3a19; }
 .adventure-action.chain:active { transform: translateY(2px); box-shadow: 0 1px 0 #7d5119; }
 .milestone {

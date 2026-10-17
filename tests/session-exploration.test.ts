@@ -313,7 +313,7 @@ describe('探索会话与存档集成', () => {
     expect(harness.renderer.playSpringDiscovery).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
     // 找到水之后还没走完：要先把水引到家里，再安顿新朋友、种出第一份收成
-    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水引到家里', done: 5, total: 8, finished: false })
+    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水引到家里', done: 5, total: 9, finished: false })
     session.toggleLamp(); tap(25, 19)
     expect(w.exploration.lamps).toEqual([{ x: 25, y: 19 }])
     session.undo()

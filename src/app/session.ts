@@ -6,6 +6,7 @@ import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight,
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, moleRoute, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute } from '../core/exploration'
 import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect } from '../core/world'
 import { canBuildMorePods, PARTNERS, partnersWilling, waitingPartnerList, waitingPartners } from '../core/partners'
+import { canSendPowerDown, sendPowerDown } from '../core/power'
 import { relicAt, relicSummary } from '../core/relics'
 import {
   canPlacePlanter,
@@ -68,6 +69,12 @@ export interface FarmUI {
   food: number
   /** 已经收过至少一次（喂饭按钮、计数都靠它） */
   harvested: boolean
+  /** 第一夜过完、还没把电送到第二层 */
+  canSendPower: boolean
+  /** 阿土正在铺电线 */
+  powering: boolean
+  /** 电已经送到第二层 */
+  powerDown: boolean
 }
 
 /** 里程碑卡片：只用来庆祝，不承载操作 */
@@ -142,6 +149,8 @@ export interface GameSession {
   supplyWater(): void
   /** 请伙伴吃饭：消耗一份收成，播一段吃饭演出 */
   feed(): void
+  /** 把第一层的电顺着梯道送到第二层 */
+  sendPower(): void
   importLegacy(): Promise<void>
   destroy(): void
 }
@@ -219,6 +228,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let chaining = false
   /** 引水演出进行中（按钮显示"正在接水管……"） */
   let supplying = false
+  let powering = false
   let lastMessage = ''
   let lastMessageAt = 0
   /** 切后台打断委托后，回到前台补一句提示 */
@@ -358,8 +368,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     if (!order) return
     const interruptedChain = chaining
     chaining = false
-    // 引水也是一次委托：被中断时要放开按钮，否则会一直卡在"阿土在接水管……"。
+    // 引水、送电也是一次委托：被中断时要放开按钮，否则会一直卡在"阿土在接水管……"。
     supplying = false
+    powering = false
     endOrder()
     traveling = false
     renderer.cancelExplorationAnimation()
@@ -428,6 +439,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       ripe: ripePlanters(world).length,
       food: world.farm.food,
       harvested: world.farm.harvests > 0,
+      canSendPower: canSendPowerDown(world),
+      powering,
+      powerDown: world.powerDown,
     })
     hooks.onExploration?.({
       clue: world.exploration.clueFound, upgraded: world.exploration.pickaxeUpgraded,
@@ -987,6 +1001,27 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         renderer.playMoleReaction('水到家啦！')
         notify('🚰 水管接好啦！有了水，第一层就能种出吃的。')
         hooks.onMilestone?.({ emoji: '🚰', title: '水到家啦！', detail: '第一层可以种菜了 · 选「种植槽」种下第一棵' })
+      })
+    },
+    sendPower: () => {
+      if (traveling || supplying || powering || !canSendPowerDown(world)) return
+      const from = world.exploration.explorer
+      const shaftX = world.exploration.shaftX
+      if (!from || shaftX === null) return
+      const route = walkingRoute(world, from, { x: shaftX, y: 19 })
+      if (!route) { notify('先让阿土走回梯子那边，再送电。'); return }
+      powering = true
+      pushProgress()
+      moveExplorer(route, () => {
+        sendPowerDown(world)
+        powering = false
+        renderer.playPowerDown()
+        renderer.refreshExploration()
+        renderer.playMoleReaction('电到下面啦！')
+        notify('⚡ 电流顺着梯子下去了，第二层亮起来了！')
+        hooks.onMilestone?.({ emoji: '⚡', title: '第二层通电！', detail: '家里的电送下来了 · 这儿不再是黑的了' })
+        scheduleSave()
+        pushProgress()
       })
     },
     feed: () => {

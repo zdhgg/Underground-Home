@@ -26,7 +26,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 6
+export const WORLD_VERSION = 7
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -126,6 +126,11 @@ export interface WorldState {
   pods: SleepPod[]
   exploration: ExplorationState
   farm: FarmState
+  /**
+   * 第一层的电已经顺着梯道送到第二层。
+   * 核心修好只是"家里有电"，把电送下去之后，第二层才亮得起来。
+   */
+  powerDown: boolean
 }
 
 export interface ExplorationState {
@@ -186,6 +191,7 @@ export function createInitialWorld(): WorldState {
     pods: [],
     exploration: freshExploration(),
     farm: freshFarm(),
+    powerDown: false,
   }
 }
 

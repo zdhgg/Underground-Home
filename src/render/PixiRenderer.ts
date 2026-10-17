@@ -23,6 +23,7 @@ import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE, BEDS_PER_POD } from '../core/build'
 import { partnerAt, partnersWilling } from '../core/partners'
+import { powerLinePath } from '../core/power'
 import { foundRelics } from '../core/relics'
 import { drawRelic } from './relicProps'
 import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
@@ -454,6 +455,12 @@ export class PixiWorldRenderer {
   /** 灯亮之后阿灯飞出来的补间与它的延迟 */
   private lampReveal: LampReveal | null = null
   private lampRevealDelay = 0
+  /** 电线的发光折线（只在通电后出现） */
+  private readonly powerLine = new Graphics()
+  /** 0 = 第二层全黑，1 = 电已经送到 */
+  private powerLevel = 0
+  /** 送电瞬间沿电线跑下去的那颗光点 */
+  private powerSurge = 0
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
@@ -506,6 +513,7 @@ export class PixiWorldRenderer {
       this.explorationScene.view,
       this.lamps,
       this.farmFlow,
+      this.powerLine,
       this.highlightGfx,
       this.effects,
       this.crystalFeedback.view,
@@ -532,6 +540,7 @@ export class PixiWorldRenderer {
     this.cameraTween = null
     this.world = world
     this.lightLevel = world.progress.coreRepaired ? 1 : 0
+    this.powerLevel = world.powerDown ? 1 : 0
     this.refresh()
   }
 
@@ -865,6 +874,26 @@ export class PixiWorldRenderer {
     }
   }
 
+  /**
+   * 电顺着梯道下去：一圈电光从核心出发，沿线爬到第二层那头炸开。
+   * 第二层的黑暗由 powerLevel 自己渐变，这里只负责"看得见电流在动"。
+   */
+  playPowerDown(): void {
+    const world = this.world
+    if (!world) return
+    this.powerSurge = 1.4
+    this.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
+      color: 0xbfefff, count: 12, speed: 70, ring: true, ringRadius: 34,
+    })
+    const path = powerLinePath(world)
+    const tail = path[path.length - 1]
+    if (tail) {
+      this.playBurst((tail.x + 0.5) * TILE_SIZE, (tail.y + 0.5) * TILE_SIZE, {
+        color: 0x9fe6ff, count: 18, speed: 95, ring: true, ringRadius: 46,
+      })
+    }
+  }
+
   private startRepairCelebration(): void {
     this.rebuildLandmarks()
     this.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
@@ -955,6 +984,7 @@ export class PixiWorldRenderer {
     this.updateCameraTween(dt)
     this.drawWind(this.elapsed)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
+    if (this.powerSurge > 0) this.powerSurge = Math.max(0, this.powerSurge - dt)
     this.updateLighting(dt)
     this.drawHighlight()
     this.updateMachineGlow()
@@ -962,6 +992,7 @@ export class PixiWorldRenderer {
     this.updateEffects(dt)
     this.explorationScene.update(dt)
     this.drawFarmFlow()
+    this.drawPowerLine()
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
   }
@@ -1026,6 +1057,13 @@ export class PixiWorldRenderer {
       this.celebrationTime = 2.6
       this.spawnConfetti()
     }
+    // 第二层要等电送下来才亮：比第一层慢一点，像电流真的顺着线爬下去。
+    const powerTarget = this.world?.powerDown ? 1 : 0
+    if (Math.abs(this.powerLevel - powerTarget) < 0.002) {
+      this.powerLevel = powerTarget
+    } else {
+      this.powerLevel += (powerTarget - this.powerLevel) * Math.min(1, dt * 1.1)
+    }
     this.drawLighting()
   }
 
@@ -1051,9 +1089,9 @@ export class PixiWorldRenderer {
       g.circle(gx, gy, 100).fill({ color: COLORS.warmGlow, alpha: warm * 0.5 })
     }
 
-    // 第二层尚无照明，核心只点亮暖窝层；泉光仍穿透黑暗。
+    // 第二层：没送电前很暗；电到了以后只剩一点夜色，泉水与壁灯才能真正亮起来。
     g.rect(0, STRATA.seal.top * TILE_SIZE, WORLD_PIXEL_WIDTH, (MAP_HEIGHT - STRATA.seal.top) * TILE_SIZE)
-      .fill({ color: 0x071827, alpha: 0.43 })
+      .fill({ color: 0x071827, alpha: 0.43 * (1 - this.powerLevel) + 0.05 * this.powerLevel })
 
     // 修复后：大厅顶部的灯一盏一盏依次亮起
     for (const [i, { x: lx, y: ly }] of LAMP_LOCATIONS.entries()) {
@@ -1065,6 +1103,39 @@ export class PixiWorldRenderer {
       const flicker = 0.85 + 0.15 * Math.sin(this.elapsed * (2.6 + i * 0.37) + i * 1.7)
       lampG.circle(lx, ly, 22).fill({ color: COLORS.lamp, alpha: 0.15 * on * flicker })
       lampG.circle(lx, ly, 3.5 + 1.5 * on).fill({ color: COLORS.lampCore, alpha: 0.95 * on })
+    }
+  }
+
+  /**
+   * 电线：从核心下到大厅地面，沿地面走到梯道，再顺着梯子下到第二层。
+   * 没通电就完全不画——没接电的线不该看起来像在供电。
+   */
+  private drawPowerLine(): void {
+    const g = this.powerLine
+    g.clear()
+    const world = this.world
+    if (!world?.powerDown) return
+    const path = powerLinePath(world)
+    if (path.length < 2) return
+    const pulse = 0.5 + 0.5 * Math.sin(this.elapsed * 3.2)
+    const trace = (): void => {
+      for (let i = 1; i < path.length; i++) {
+        const a = path[i - 1]
+        const b = path[i]
+        g.moveTo((a.x + 0.5) * TILE_SIZE, (a.y + 0.5) * TILE_SIZE)
+          .lineTo((b.x + 0.5) * TILE_SIZE, (b.y + 0.5) * TILE_SIZE)
+      }
+    }
+    trace()
+    g.stroke({ width: 6, color: 0x4fc3f7, alpha: 0.1 + 0.06 * pulse })
+    trace()
+    g.stroke({ width: 1.6, color: 0xcfeeff, alpha: 0.4 + 0.3 * pulse })
+    // 送电的一瞬间：一颗白光沿线跑下去
+    if (this.powerSurge > 0) {
+      const t = 1 - this.powerSurge / 1.4
+      const cell = path[Math.min(path.length - 1, Math.floor(t * (path.length - 1)))]
+      g.circle((cell.x + 0.5) * TILE_SIZE, (cell.y + 0.5) * TILE_SIZE, 7)
+        .fill({ color: 0xffffff, alpha: 0.75 })
     }
   }
 

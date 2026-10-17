@@ -41,6 +41,8 @@ export interface SavePayload {
     exploration: ExplorationState
     /** 引水与种植（v6 起） */
     farm: FarmState
+    /** 电是否已送到第二层（v7 起） */
+    powerDown: boolean
   }
 }
 
@@ -57,6 +59,7 @@ export function serialize(world: WorldState): SavePayload {
       pods: world.pods.map((pod) => ({ ...pod })),
       exploration: structuredClone(world.exploration),
       farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
+      powerDown: world.powerDown,
     },
   }
 }
@@ -149,28 +152,33 @@ export function deserialize(raw: unknown): LoadResult {
         pods: [],
         exploration: freshExploration(),
         farm: freshFarm(),
+        powerDown: false,
       },
     }
   }
-  if (payload.version !== 2 && payload.version !== 4 && payload.version !== 5 && payload.version !== WORLD_VERSION) {
-    return err(`存档版本不匹配（存档 v${payload.version}，当前 v${WORLD_VERSION}）`)
+  const version = payload.version
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== WORLD_VERSION) {
+    return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
   const progress = validateProgress((payload.world as { progress?: unknown }).progress)
   if (!progress) return err('存档进度字段无效')
 
-  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [], exploration: freshExploration(), farm: freshFarm() }
-  if (payload.version === 4) {
+  const world: WorldState = {
+    ...base.data, version: WORLD_VERSION, progress, pods: [],
+    exploration: freshExploration(), farm: freshFarm(), powerDown: false,
+  }
+  if (version === 4) {
     // 仅在用户明确复制时调用；旧版第二层从不可操作，替换下部不会损失玩家建设。
     const blueprint = createInitialWorld()
     for (let y = 12; y < MAP_HEIGHT; y++) world.tiles[y] = [...blueprint.tiles[y]]
   }
-  if (payload.version === WORLD_VERSION || payload.version === 5) {
+  if (version >= 5) {
     const exploration = validateExploration((payload.world as { exploration?: unknown }).exploration, world)
     if (!exploration) return err('存档探索进度或梯道无效')
     world.exploration = exploration
   }
-  if (payload.version === WORLD_VERSION || payload.version === 5 || payload.version === 4) {
+  if (version >= 4) {
     const rawPods = (payload.world as { pods?: unknown }).pods
     if (!Array.isArray(rawPods) || rawPods.length > MAP_WIDTH * MAP_HEIGHT) return err('存档睡眠舱数据无效')
     const ids = new Set<number>()
@@ -190,10 +198,17 @@ export function deserialize(raw: unknown): LoadResult {
     if (world.exploration.clueFound && (!world.pods.length || !world.progress.coreRepaired)) return err('存档探索前置建设无效')
     if (!explorationAccessIntact(world)) return err('存档探索通路无效')
   }
-  if (payload.version === WORLD_VERSION) {
+  if (version >= 6) {
     const farm = validateFarm((payload.world as { farm?: unknown }).farm, world)
     if (!farm) return err('存档引水或种植数据无效')
     world.farm = farm
+  }
+  if (version >= 7) {
+    const powerDown = (payload.world as { powerDown?: unknown }).powerDown
+    if (typeof powerDown !== 'boolean') return err('存档供电状态无效')
+    // 核心没修、或者人还没下到第二层，就不可能有"电送到下面"。
+    if (powerDown && !(world.progress.coreRepaired && world.exploration.entered)) return err('存档供电状态无效')
+    world.powerDown = powerDown
   }
 
   return {
