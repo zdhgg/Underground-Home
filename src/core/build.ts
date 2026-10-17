@@ -1,4 +1,5 @@
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type Cell, type Rect, type SleepPod, type WorldState } from './world'
+import { explorationAccessIntact, explorationProtects, isShaftColumn } from './exploration'
 
 export const POD_SIZE = { w: 3, h: 2 } as const
 // 核心机身宽于可点击区，留出完整外壳占地，避免示意舱压住现有PNG。
@@ -46,8 +47,11 @@ function accessPreserved(world: WorldState, seen: Set<number>): boolean {
 export function canPlacePod(world: WorldState, x: number, y: number, preferredDoor?: SleepPod['door']): Placement {
   if (!world.progress.coreRepaired) return { ok: false, reason: 'power' }
   if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < SURFACE_Y || x + POD_SIZE.w > world.width || y + POD_SIZE.h >= world.height) return { ok: false, reason: 'bounds' }
-  if (isPreviewLayer(y + POD_SIZE.h - 1)) return { ok: false, reason: 'locked-layer' }
+  if (isPreviewLayer(y + POD_SIZE.h - 1) && !world.exploration.entered) return { ok: false, reason: 'locked-layer' }
   const rect = podRect({ x, y })
+  if (world.exploration.clueFound && Array.from({ length: 3 }, (_, dx) => x + dx).includes(world.exploration.shaftX ?? -1)) return { ok: false, reason: 'reserved' }
+  if (y >= 15 && (isShaftColumn(x) || isShaftColumn(x + 1) || isShaftColumn(x + 2) || (x <= LANDMARKS.spring.x + 2 && x + 3 > LANDMARKS.spring.x - 2))) return { ok: false, reason: 'reserved' }
+  if (y >= 15) return { ok: false, reason: 'locked-layer' } // 本轮深层自由建设使用不挡路的小壁灯。
   if ([CORE_FOOTPRINT, LANDMARKS.shaft].some((area) => overlaps(rect, area))) return { ok: false, reason: 'reserved' }
   if (world.pods.some((pod) => overlaps(rect, podRect(pod)))) return { ok: false, reason: 'overlap' }
   for (let dy = 0; dy < POD_SIZE.h; dy++) for (let dx = 0; dx < POD_SIZE.w; dx++) {
@@ -74,7 +78,8 @@ export function placePod(world: WorldState, x: number, y: number): SleepPod | nu
 /** 撤销挖掘不能埋住能源石、设施，或堵住家园 / 舱门的唯一通路。 */
 export function canRestoreDig(world: WorldState, x: number, y: number): boolean {
   if (!isInside(world, x, y) || world.tiles[y][x] !== TILE.EMPTY || isPodStructure(world, x, y)) return false
+  if (explorationProtects(world, x, y)) return false
   if (world.progress.crystalFound && x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y) return false
   world.tiles[y][x] = TILE.SOIL
-  try { return accessPreserved(world, reachable(world)) } finally { world.tiles[y][x] = TILE.EMPTY }
+  try { return accessPreserved(world, reachable(world)) && explorationAccessIntact(world) } finally { world.tiles[y][x] = TILE.EMPTY }
 }

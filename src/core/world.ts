@@ -11,6 +11,8 @@ export const TILE = {
   SOIL: 1,
   /** 坚硬岩石：暂不可挖，后期工具升级后解锁 */
   ROCK: 2,
+  /** 有裂纹的薄弱岩脉，小铁镐可以挖。 */
+  WEAK_ROCK: 3,
 } as const
 
 export type TileType = (typeof TILE)[keyof typeof TILE]
@@ -24,9 +26,9 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 4
+export const WORLD_VERSION = 5
 
-/** 同一张剖面上的空间分带；第二层本阶段只可观察。 */
+/** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
   home: { id: 'home', name: '第 1 层 · 暖窝层', top: 4, bottom: 12, focus: { x: 22, y: 10 } },
   seal: { id: 'seal', name: '坚硬岩层', top: 12, bottom: 15, focus: { x: 22, y: 13.5 } },
@@ -73,7 +75,7 @@ export const LANDMARKS = {
   /** 能源核心互动区（点按修复的容错范围） */
   generatorZone: { x: 19, y: 8, w: 4, h: 3 },
   /** 地下泉水（隐约可见，P3 使用） */
-  spring: { x: 26, y: 21 },
+  spring: { x: 18, y: 21 },
   /** 建造引导只是可选区域，不限制玩家选址。 */
   buildSuggestion: { x: 10, y: 9, w: 7, h: 3 },
 } as const satisfies Record<string, Rect | Cell>
@@ -99,7 +101,22 @@ export interface WorldState {
   dugCount: number
   progress: WorldProgress
   pods: SleepPod[]
+  exploration: ExplorationState
 }
+
+export interface ExplorationState {
+  clueFound: boolean
+  pickaxeUpgraded: boolean
+  entered: boolean
+  springFound: boolean
+  /** 选中的真实梯道；发现线索不会自动挖空岩层。 */
+  shaftX: number | null
+  explorer: Cell | null
+  lamps: Cell[]
+}
+export const BREAKTHROUGHS = [27, 16] as const
+export const WATER_FLOOR_Y = 22
+export const freshExploration = (): ExplorationState => ({ clueFound: false, pickaxeUpgraded: false, entered: false, springFound: false, shaftX: null, explorer: null, lamps: [] })
 
 /**
  * 岩层蓝图（软土口袋）：第一夜只开放几处被坚硬岩层包围的可挖区域，
@@ -108,7 +125,7 @@ export interface WorldState {
 const SOFT_POCKETS: readonly Rect[] = [
   { x: 2, y: HOME_ROOM_TOP, w: 15, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 左翼横向扩建，不再纵向掏成高洞
   { x: 26, y: HOME_ROOM_TOP, w: 16, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 右翼与大厅共用同一地板
-  { x: 3, y: 17, w: 38, h: 6 }, // 低矮的第二层天然洞与待探索边缘
+  { x: 3, y: 19, w: 38, h: 3 }, // 连续横向建设带，底面保持实心
 ]
 
 /**
@@ -120,8 +137,8 @@ const CARVED_CAVES: readonly Rect[] = [
   { x: 21, y: 4, w: 2, h: 4 },
   { x: 15, y: 9, w: 2, h: 3 }, // 大厅左门落地连通，不必爬墙上床
   // 天然洞穴，不与暖窝层连通；轮廓保留不规则的顶、底和岩柱。
-  { x: 11, y: 18, w: 21, h: 4 },
-  { x: 7, y: 19, w: 4, h: 3 },
+  { x: 24, y: 18, w: 8, h: 4 },
+  { x: 10, y: 19, w: 7, h: 3 },
   { x: 32, y: 19, w: 5, h: 3 },
 ]
 
@@ -132,6 +149,9 @@ export function createInitialWorld(): WorldState {
   )
   for (const rect of SOFT_POCKETS) fillRect(tiles, rect, TILE.SOIL)
   for (const rect of CARVED_CAVES) fillRect(tiles, rect, TILE.EMPTY)
+  for (const x of BREAKTHROUGHS) for (let y = HOME_FLOOR_Y; y < 19; y++) {
+    if (tiles[y][x] !== TILE.EMPTY) tiles[y][x] = TILE.WEAK_ROCK
+  }
   return {
     version: WORLD_VERSION,
     width: MAP_WIDTH,
@@ -140,6 +160,7 @@ export function createInitialWorld(): WorldState {
     dugCount: 0,
     progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
     pods: [],
+    exploration: freshExploration(),
   }
 }
 

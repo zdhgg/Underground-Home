@@ -23,9 +23,10 @@ describe('初始世界蓝图', () => {
   })
 
   it('瓦片数量锁定蓝图（调整岩层蓝图时同步更新此用例）', () => {
-    expect(countTiles(world, TILE.EMPTY)).toBe(168)
-    expect(countTiles(world, TILE.SOIL)).toBe(204)
-    expect(countTiles(world, TILE.ROCK)).toBe(684)
+    expect(countTiles(world, TILE.EMPTY)).toBe(125)
+    expect(countTiles(world, TILE.SOIL)).toBe(141)
+    expect(countTiles(world, TILE.ROCK)).toBe(777)
+    expect(countTiles(world, TILE.WEAK_ROCK)).toBe(13)
   })
 
   it('避难所大厅与竖井初始已挖空', () => {

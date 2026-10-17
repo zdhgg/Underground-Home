@@ -8,13 +8,19 @@ import {
   type WorldProgress,
   type WorldState,
   type SleepPod,
+  type ExplorationState,
+  createInitialWorld,
+  freshExploration,
+  BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
+import { canStand, explorationAccessIntact, shaftConnected, springVisible, walkingRoute } from './exploration'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
 /** 双层原型始终隔离，包括生产构建；绝不打开正式版 underground-home 数据库。 */
-export const PROTOTYPE_DB_NAME = 'underground-home-depth-prototype-v2'
+export const LEGACY_DB_NAME = 'underground-home-depth-prototype-v2'
+export const PROTOTYPE_DB_NAME = 'underground-home-spring-playtest-v1'
 
 /** 落盘格式：带版本号，便于迁移 */
 export interface SavePayload {
@@ -28,6 +34,7 @@ export interface SavePayload {
     tiles: number[][]
     progress: WorldProgress
     pods: SleepPod[]
+    exploration: ExplorationState
   }
 }
 
@@ -42,6 +49,7 @@ export function serialize(world: WorldState): SavePayload {
       tiles: world.tiles.map((row) => [...row]),
       progress: { ...world.progress },
       pods: world.pods.map((pod) => ({ ...pod })),
+      exploration: structuredClone(world.exploration),
     },
   }
 }
@@ -72,7 +80,7 @@ function validateBaseWorld(world: unknown): { ok: true; data: BaseWorldData } | 
   for (const row of raw.tiles) {
     if (!Array.isArray(row) || row.length !== MAP_WIDTH) return { ok: false, error: '存档地图行数据不完整' }
     for (const cell of row) {
-      if (cell !== TILE.EMPTY && cell !== TILE.SOIL && cell !== TILE.ROCK) {
+      if (cell !== TILE.EMPTY && cell !== TILE.SOIL && cell !== TILE.ROCK && cell !== TILE.WEAK_ROCK) {
         return { ok: false, error: '存档包含未知瓦片类型' }
       }
     }
@@ -132,18 +140,29 @@ export function deserialize(raw: unknown): LoadResult {
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
         pods: [],
+        exploration: freshExploration(),
       },
     }
   }
-  if (payload.version !== 2 && payload.version !== WORLD_VERSION) {
+  if (payload.version !== 2 && payload.version !== 4 && payload.version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${payload.version}，当前 v${WORLD_VERSION}）`)
   }
 
   const progress = validateProgress((payload.world as { progress?: unknown }).progress)
   if (!progress) return err('存档进度字段无效')
 
-  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [] }
+  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [], exploration: freshExploration() }
+  if (payload.version === 4) {
+    // 仅在用户明确复制时调用；旧版第二层从不可操作，替换下部不会损失玩家建设。
+    const blueprint = createInitialWorld()
+    for (let y = 12; y < MAP_HEIGHT; y++) world.tiles[y] = [...blueprint.tiles[y]]
+  }
   if (payload.version === WORLD_VERSION) {
+    const exploration = validateExploration((payload.world as { exploration?: unknown }).exploration, world)
+    if (!exploration) return err('存档探索进度或梯道无效')
+    world.exploration = exploration
+  }
+  if (payload.version === WORLD_VERSION || payload.version === 4) {
     const rawPods = (payload.world as { pods?: unknown }).pods
     if (!Array.isArray(rawPods) || rawPods.length > MAP_WIDTH * MAP_HEIGHT) return err('存档睡眠舱数据无效')
     const ids = new Set<number>()
@@ -160,6 +179,8 @@ export function deserialize(raw: unknown): LoadResult {
       if (!canPlacePod(world, pod.x, pod.y, pod.door).ok) return err('存档睡眠舱位置无效')
     }
     world.pods = pods
+    if (world.exploration.clueFound && (!world.pods.length || !world.progress.coreRepaired)) return err('存档探索前置建设无效')
+    if (!explorationAccessIntact(world)) return err('存档探索通路无效')
   }
 
   return {
@@ -167,6 +188,42 @@ export function deserialize(raw: unknown): LoadResult {
     savedAt,
     world,
   }
+}
+
+function validateExploration(raw: unknown, world: WorldState): ExplorationState | null {
+  if (!raw || typeof raw !== 'object') return null
+  const e = raw as ExplorationState
+  if (['clueFound', 'pickaxeUpgraded', 'entered', 'springFound'].some((key) => typeof (raw as Record<string, unknown>)[key] !== 'boolean')) return null
+  if (e.shaftX !== null && !BREAKTHROUGHS.some((x) => x === e.shaftX)) return null
+  if (e.clueFound !== (e.shaftX !== null) || (e.pickaxeUpgraded && !e.clueFound) || (e.entered && !e.pickaxeUpgraded) || (e.springFound && !e.entered)) return null
+  if (e.explorer !== null && (!Number.isInteger(e.explorer?.x) || !Number.isInteger(e.explorer?.y))) return null
+  if (e.clueFound !== (e.explorer !== null) || !Array.isArray(e.lamps) || e.lamps.length > MAP_WIDTH) return null
+  const blueprint = createInitialWorld()
+  for (let y = 12; y < MAP_HEIGHT; y++) for (let x = 0; x < MAP_WIDTH; x++) {
+    const tile = world.tiles[y][x], initial = blueprint.tiles[y][x]
+    if (initial === TILE.ROCK && tile !== TILE.ROCK) return null
+    if (initial === TILE.EMPTY && tile !== TILE.EMPTY) return null
+    if (tile !== initial && tile !== TILE.EMPTY) return null
+    if (initial === TILE.WEAK_ROCK && tile === TILE.EMPTY && (!e.pickaxeUpgraded || x !== e.shaftX || world.tiles[y - 1][x] !== TILE.EMPTY)) return null
+  }
+  world.exploration = structuredClone(e)
+  if (e.entered && !shaftConnected(world)) return null
+  if (e.explorer && (!canStand(world, e.explorer.x, e.explorer.y) || !walkingRoute(world, { x: e.shaftX!, y: 11 }, e.explorer))) return null
+  if (!e.entered && e.explorer && e.explorer.y !== 11) return null
+  if (e.springFound && !springVisible(world)) return null
+  const seen = new Set<number>()
+  for (const lamp of e.lamps) {
+    if (!Number.isInteger(lamp?.x) || lamp.y !== 19 || lamp.x < 3 || lamp.x > 40 || seen.has(lamp.x) || BREAKTHROUGHS.some((x) => x === lamp.x) || Math.abs(lamp.x - LANDMARKS.spring.x) <= 2 || !e.springFound || ![19, 20, 21].every((y) => world.tiles[y][lamp.x] === TILE.EMPTY)) return null
+    seen.add(lamp.x)
+  }
+  return structuredClone(e)
+}
+
+/** 只读取已存在的旧库；不存在时不创建空旧数据库。 */
+export async function loadLegacySave(): Promise<unknown | null> {
+  const databases = await indexedDB.databases()
+  if (!databases.some((db) => db.name === LEGACY_DB_NAME)) return null
+  return createIndexedDbStore(LEGACY_DB_NAME).load()
 }
 
 /** 存储适配器：浏览器用 IndexedDB，测试与降级场景用内存实现 */

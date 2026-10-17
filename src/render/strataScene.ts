@@ -31,9 +31,7 @@ export function createStrataLabels(): Container {
   }
   layer.addChild(rock)
   label('第 1 层 · 暖窝层', 14, 5.1, 0xf6dfb5)
-  label('坚硬岩层 · 以后升级工具再向下', 8, STRATA.seal.top + 0.8, 0xc4d0dc, 18)
+  label('厚厚的岩层 · 找找有裂纹的地方', 8, STRATA.seal.top + 0.8, 0xc4d0dc, 16)
   label('第 2 层 · 泉水层', 8, STRATA.water.top + 0.4, 0xaddbe1)
-  label('岩层深处，好像有水声……', 12, 18.3, 0xb5dce0, 17)
-  label('尚未开放 · 先看看未来的家', 14, 24, 0x9dbbc9, 17)
   return layer
 }

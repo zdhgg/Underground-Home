@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { createGameSession, type BuildState, type GameSession, type SessionProgress } from './app/session'
+import { createGameSession, type BuildState, type ExplorationUI, type GameSession, type SessionProgress } from './app/session'
 import { STRATA } from './core/world'
 import type { DepthView } from './render/camera'
 
@@ -20,6 +20,7 @@ const progress = ref<SessionProgress>({
 })
 const build = ref<BuildState>({ available: false, active: false, selected: false, valid: false, message: '', count: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
+const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false })
 
 let toastTimer: number | undefined
 
@@ -44,6 +45,7 @@ onMounted(async () => {
       },
       onBuild: (next) => { build.value = next },
       onView: (next) => { view.value = next },
+      onExploration: (next) => { exploration.value = next },
     })
   } catch {
     fatalError.value = '渲染初始化失败：当前浏览器可能不支持 WebGL，请换用新版浏览器打开。'
@@ -83,12 +85,15 @@ onBeforeUnmount(() => {
           <span class="mole-face">🐹</span>
           <div class="mole-name">
             <strong>小鼹鼠 阿土</strong>
-            <small>{{ progress.finished ? '小家园 · 可以休息啦' : '你的地下向导' }}</small>
+            <small>{{ progress.finished ? '泉水层 · 新家园的起点' : '你的地下向导' }}</small>
           </div>
           <button type="button" class="ghost" @click="session?.focusTarget()">👀 带我去看看</button>
         </div>
         <p class="mole-speech">{{ progress.speech }}</p>
         <p v-if="!progress.finished" class="mole-outcome">✨ {{ progress.outcome }}</p>
+        <button v-if="exploration.clue && !exploration.upgraded" type="button" class="adventure-action" @click="session?.upgradeTool()">⛏ 换上小铁镐</button>
+        <button v-if="exploration.connected" type="button" class="adventure-action" :disabled="exploration.traveling" @click="session?.travel()">{{ exploration.traveling ? '🪜 阿土正在走……' : exploration.downstairs ? '↑ 沿梯子回家' : '↓ 沿梯子下去' }}</button>
+        <button v-if="exploration.found" type="button" class="ghost" :aria-pressed="exploration.lampMode" @click="session?.toggleLamp()">{{ exploration.lampMode ? '⛏ 收起壁灯，继续挖掘' : '🏮 安一盏小壁灯' }}</button>
       </section>
 
       <div class="zoom">
@@ -103,12 +108,13 @@ onBeforeUnmount(() => {
         </button>
         <div class="depth-seal">▥ 坚硬岩层</div>
         <button type="button" class="water-destination" :aria-current="!view.overview && view.layer === 'water' ? 'location' : undefined" @click="session?.lookDown()">
-          <span>↓ 向下看看</span><small>第 2 层 · 泉水层 · 未开放</small>
+          <span>↓ 向下看看</span><small>第 2 层 · {{ exploration.entered ? '已抵达' : '水声从这里传来' }}</small>
         </button>
         <button type="button" class="overview-button" :aria-pressed="view.overview" @click="session?.showOverview()">⊞ 家园全景</button>
-        <small class="depth-hint">{{ view.overview ? '全景只看不挖 · 回家继续建设' : view.layer === 'water' ? '先听听水声，以后再来探索' : '拖动画面，也能慢慢向下看' }}</small>
+        <small class="depth-hint">{{ view.overview ? '全景只看不挖 · 点楼层继续' : exploration.entered ? '看地图不等于走路 · 阿土会沿梯子往返' : '寻找岩壁裂纹，亲手挖通梯道' }}</small>
       </nav>
-      <span class="prototype-note">双层试玩 · 独立存档</span>
+      <span class="prototype-note">泉水探索试玩 · 独立存档</span>
+      <button v-if="exploration.canImport" class="legacy-import" type="button" @click="session?.importLegacy()">💾 复制 v0.1.0 进度 · 原档保留</button>
 
       <button type="button" class="undo" @click="session?.undo()">↶ 撤销</button>
       <section v-if="build.available && !view.overview && view.layer === 'home'" class="build-tools" aria-label="建设工具">
@@ -124,7 +130,7 @@ onBeforeUnmount(() => {
         <p v-if="build.active" role="status">{{ build.message }}</p>
         <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
       </section>
-      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : view.layer === 'water' ? '💧 泉水层仅供观察，暂不能挖掘和建设' : '🟫 暖窝层泥土可挖　🪨 岩石暂不可挖' }}</div>
+      <div class="legend">{{ view.overview ? '一张连续剖面 · 家园会一层一层向下生长' : exploration.lampMode ? '🏮 壁灯选址中 · 点空洞安灯，再点工具收起' : exploration.upgraded ? '⛏ 小铁镐 · 裂纹岩可挖　🪨 坚硬基岩保留' : '🟫 泥土可挖　🪨 找找有裂纹的岩壁' }}</div>
 
       <transition name="toast">
         <div v-if="toastVisible" class="toast" :class="{ warning: messageWarning }">{{ message }}</div>
@@ -133,12 +139,15 @@ onBeforeUnmount(() => {
 
     <footer class="bottom">
       <span>点泥土挖一格 · 拖动平移 · 挖错了点右下角撤销</span>
-      <span class="scope">第一夜：点亮家园，给伙伴安一张床</span>
+      <span class="scope">点亮家园 → 安好小床 → 听水声，向下探索</span>
     </footer>
   </div>
 </template>
 
 <style scoped>
+.adventure-action { padding: 11px 14px; min-height: 44px; border-radius: 10px; background: #3c8063; color: #fff8dc; font-size: 14px; font-weight: 700; }
+.adventure-action:disabled { opacity: .65; cursor: wait; }
+.legacy-import { position: absolute; bottom: 60px; left: 12px; padding: 10px 12px; border-radius: 10px; background: #edf4e9; color: #3c6154; font-size: 12px; }
 .depth-nav { position: absolute; right: 12px; top: 124px; width: 182px; padding: 12px; border-radius: 14px; background: #fffdf7f2; color: #44584c; box-shadow: 0 4px 16px #213d3026; }
 .depth-location { margin: 0 0 10px; font-size: 11px; font-weight: 700; color: #61756b; }
 .depth-nav button { display: flex; width: 100%; flex-direction: column; align-items: flex-start; gap: 4px; padding: 10px; min-height: 48px; border-radius: 9px; background: #edf0e9; color: #3c6154; text-align: left; }

@@ -1,4 +1,4 @@
-import { TILE, type Cell, type WorldState } from './world'
+import { TILE, type Cell, type TileType, type WorldState } from './world'
 import { canRestoreDig } from './build'
 
 /**
@@ -16,7 +16,7 @@ export interface DigHistory {
   size(): number
 }
 
-type WorldAction = { kind: 'dig'; x: number; y: number } | { kind: 'pod'; id: number }
+type WorldAction = { kind: 'dig'; x: number; y: number; tile?: TileType } | { kind: 'pod'; id: number } | { kind: 'lamp'; x: number; y: number }
 
 /** 建造与挖掘共用LIFO撤销；记录仅限本次会话。 */
 export function createWorldHistory(limit = 200) {
@@ -29,14 +29,21 @@ export function createWorldHistory(limit = 200) {
     undo(world: WorldState): WorldAction | null {
       while (stack.length) {
         const action = stack.pop()!
+        if (action.kind === 'lamp') {
+          const index = world.exploration.lamps.findIndex((lamp) => lamp.x === action.x)
+          if (index < 0) continue
+          world.exploration.lamps.splice(index, 1)
+          return action
+        }
         if (action.kind === 'pod') {
+          if (world.exploration.clueFound && world.pods.length === 1) continue
           const index = world.pods.findIndex((pod) => pod.id === action.id)
           if (index < 0) continue
           world.pods.splice(index, 1)
           return action
         }
         if (!canRestoreDig(world, action.x, action.y)) continue
-        world.tiles[action.y][action.x] = TILE.SOIL
+        world.tiles[action.y][action.x] = action.tile ?? TILE.SOIL
         world.dugCount = Math.max(0, world.dugCount - 1)
         return action
       }

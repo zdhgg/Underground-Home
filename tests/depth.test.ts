@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createInitialWorld, STRATA, TILE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, LANDMARKS, HOME_ROOM_TOP, HOME_FLOOR_Y } from '../src/core/world'
+import { BREAKTHROUGHS, createInitialWorld, STRATA, TILE, TILE_SIZE, MAP_WIDTH, MAP_HEIGHT, LANDMARKS, HOME_ROOM_TOP, HOME_FLOOR_Y } from '../src/core/world'
 import { canDig, dig } from '../src/core/dig'
 import { canPlacePod } from '../src/core/build'
 import { createWorldHistory } from '../src/core/history'
@@ -11,18 +11,19 @@ describe('连续双层空间的边界', () => {
     const world = createInitialWorld()
     expect(HOME_FLOOR_Y - HOME_ROOM_TOP).toBe(3)
     for (let x = 2; x < world.width - 2; x++) {
-      expect(world.tiles[HOME_FLOOR_Y][x]).toBe(TILE.ROCK)
+      expect(world.tiles[HOME_FLOOR_Y][x]).toBe(BREAKTHROUGHS.some((column) => column === x) ? TILE.WEAK_ROCK : TILE.ROCK)
       expect(world.tiles[HOME_ROOM_TOP - 1][x]).not.toBe(TILE.SOIL)
     }
   })
   it('厚岩层完整隔开上下空间，任何位置都不能误挖穿', () => {
     const world = createInitialWorld()
     for (let y = STRATA.seal.top; y < STRATA.seal.bottom; y++) for (let x = 0; x < world.width; x++) {
-      expect(world.tiles[y][x]).toBe(TILE.ROCK)
-      expect(canDig(world, x, y).reason).toBe('rock')
+      const weak = BREAKTHROUGHS.some((column) => column === x)
+      expect(world.tiles[y][x]).toBe(weak ? TILE.WEAK_ROCK : TILE.ROCK)
+      expect(canDig(world, x, y).reason).toBe(weak ? 'tool' : 'rock')
     }
     expect(LANDMARKS.spring.y).toBeGreaterThan(STRATA.water.top)
-    expect(world.tiles[LANDMARKS.spring.y][LANDMARKS.spring.x]).toBe(TILE.EMPTY)
+    expect(world.tiles[LANDMARKS.spring.y][LANDMARKS.spring.x]).toBe(TILE.SOIL)
   })
 
   it('第二层的土、天然洞和岩石都不可挖建，失败不改变进度', () => {
@@ -30,7 +31,7 @@ describe('连续双层空间的边界', () => {
     world.progress.coreRepaired = true
     const before = serialize(world).world
     for (let y = STRATA.water.top; y < world.height; y++) for (let x = 1; x < world.width - 1; x++) {
-      expect(dig(world, x, y)).toMatchObject({ ok: false, reason: 'locked-layer' })
+      expect(dig(world, x, y).ok).toBe(false)
     }
     expect(canPlacePod(world, 14, 19)).toEqual({ ok: false, reason: 'locked-layer' })
     expect(serialize(world).world).toEqual(before)

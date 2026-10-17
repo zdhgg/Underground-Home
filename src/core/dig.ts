@@ -1,5 +1,6 @@
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type TileType, type WorldState } from './world'
 import { isPodStructure } from './build'
+import { isShaftCell, waterSpan } from './exploration'
 
 /** 挖掘失败原因（翻译成儿童可读的提示由界面层负责） */
 export type DigFailure =
@@ -13,6 +14,8 @@ export type DigFailure =
   | 'empty'
   | 'facility'
   | 'locked-layer'
+  | 'tool'
+  | 'reach'
 
 export interface DigResult {
   ok: boolean
@@ -34,7 +37,19 @@ export function canDig(world: WorldState, x: number, y: number): DigResult {
   const tile = world.tiles[y][x]
   if (isPodStructure(world, x, y)) return { ok: false, x, y, tile, reason: 'facility' }
   if (y < SURFACE_Y) return { ok: false, x, y, tile, reason: 'sky' }
-  if (isPreviewLayer(y)) return { ok: false, x, y, tile, reason: 'locked-layer' }
+  if (isShaftCell(x, y)) {
+    if (!world.exploration.pickaxeUpgraded || world.exploration.shaftX !== x) return { ok: false, x, y, tile, reason: 'tool' }
+    if (tile !== TILE.EMPTY && world.tiles[y - 1][x] !== TILE.EMPTY) return { ok: false, x, y, tile, reason: 'reach' }
+  } else if (isPreviewLayer(y)) {
+    if (!world.exploration.entered) return { ok: false, x, y, tile, reason: 'locked-layer' }
+    if (tile === TILE.SOIL) {
+      const span = waterSpan(world)
+      if (!span || x < span.left - 1 || x > span.right + 1) return { ok: false, x, y, tile, reason: 'reach' }
+      // 从地面开路；上方两格可随后自由拓宽。
+      if (y < 21 && world.tiles[y + 1][x] !== TILE.EMPTY) return { ok: false, x, y, tile, reason: 'reach' }
+    }
+  }
+  if (tile === TILE.WEAK_ROCK && !world.exploration.pickaxeUpgraded) return { ok: false, x, y, tile, reason: 'tool' }
   if (tile === TILE.ROCK) return { ok: false, x, y, tile, reason: 'rock' }
   if (tile === TILE.EMPTY) return { ok: false, x, y, tile, reason: 'empty' }
   return { ok: true, x, y, tile }

@@ -22,6 +22,7 @@ import { bedSlots, drawSleepPod } from './sleepPods'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE } from '../core/build'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
+import { ExplorationScene } from './explorationScene'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -260,6 +261,7 @@ export class PixiWorldRenderer {
   private readonly highlightGfx = new Graphics()
   private readonly effects = new Graphics()
   private readonly hover = new Graphics()
+  private readonly explorationScene = new ExplorationScene()
 
   private crystal: Container | null = null
   private readonly crystalFeedback: CrystalFeedback
@@ -333,6 +335,7 @@ export class PixiWorldRenderer {
       this.darkness,
       this.glowLayer,
       createStrataLabels(),
+      this.explorationScene.view,
       this.lamps,
       this.highlightGfx,
       this.effects,
@@ -367,7 +370,11 @@ export class PixiWorldRenderer {
     this.rebuildLandmarks()
     this.refreshPods()
     this.rebuildFriends()
+    this.refreshExploration()
   }
+
+  refreshExploration(): void { if (this.world) this.explorationScene.refresh(this.world) }
+  playExplorationTravel(points: Cell[], done: () => void): void { this.explorationScene.travel(points, done) }
 
   /** 只重建舱体，不碰伙伴；建成演出先刷新舱体再播放入场 */
   refreshPods(): void {
@@ -620,6 +627,7 @@ export class PixiWorldRenderer {
     this.updateMachineGlow()
     this.updateFriends(dt)
     this.updateEffects(dt)
+    this.explorationScene.update(dt)
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
   }
@@ -636,6 +644,7 @@ export class PixiWorldRenderer {
   private applyCamera(): void {
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
+    this.app.canvas.dataset && Object.assign(this.app.canvas.dataset, { cameraX: String(this.camera.x), cameraY: String(this.camera.y), zoom: String(this.camera.zoom) })
     this.onViewChanged?.(cameraDepth(this.camera, this.viewport, this.overview))
   }
 
@@ -1165,11 +1174,7 @@ export class PixiWorldRenderer {
 
     // 地下泉水：藏在岩层里，只透出隐约蓝光（探索期待的伏笔）
     const spring = new Graphics()
-    const springX = (LANDMARKS.spring.x + 0.5) * T
-    const springY = (LANDMARKS.spring.y + 0.5) * T
-    spring.ellipse(springX, springY + 18, 90, 15).fill({ color: COLORS.water, alpha: 0.35 })
-    spring.ellipse(springX, springY + 16, 65, 7).stroke({ color: 0xa7e4ed, alpha: 0.7, width: 2 })
-    spring.circle(springX, springY, 66).fill({ color: COLORS.water, alpha: 0.09 })
+    // 泉水由 ExplorationScene 随地面探索揭示，不能隔着未探索岩层看见。
     this.springGlow = spring
     this.glowLayer.addChild(spring)
 

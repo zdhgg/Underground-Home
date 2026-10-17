@@ -1,0 +1,108 @@
+import { BREAKTHROUGHS, HOME_FLOOR_Y, LANDMARKS, TILE, type Cell, type WorldState } from './world'
+
+export const isShaftColumn = (x: number): boolean => BREAKTHROUGHS.some((column) => column === x)
+export const isShaftCell = (x: number, y: number): boolean => isShaftColumn(x) && y >= HOME_FLOOR_Y && y < 19
+const occupied = (world: WorldState, x: number, y: number): boolean => world.pods.some((p) => x >= p.x && x < p.x + 3 && y >= p.y && y < p.y + 2)
+
+export function suggestedBreakthrough(world: WorldState): number {
+  return world.pods.some((p) => p.y <= 11 && p.y + 2 > 11 && p.x <= 27 && p.x + 3 > 25) ? 16 : 27
+}
+
+/** 阿土只在有地面承托的水平通道和真实梯道行走，不复用贴墙攀爬。 */
+export function canStand(world: WorldState, x: number, y: number): boolean {
+  return world.tiles[y]?.[x] === TILE.EMPTY && !occupied(world, x, y)
+    && (world.tiles[y + 1]?.[x] !== TILE.EMPTY || (isShaftColumn(x) && y >= 11 && y <= 21))
+}
+
+export function walkingRoute(world: WorldState, from: Cell, to: Cell): Cell[] | null {
+  const queue = [from]
+  const previous = new Map<string, Cell | null>([[`${from.x},${from.y}`, null]])
+  for (let i = 0; i < queue.length; i++) {
+    const cell = queue[i]
+    if (cell.x === to.x && cell.y === to.y) {
+      const route: Cell[] = []
+      let step: Cell | null = cell
+      while (step) { route.unshift(step); step = previous.get(`${step.x},${step.y}`) ?? null }
+      return route
+    }
+    for (const next of [{ x: cell.x - 1, y: cell.y }, { x: cell.x + 1, y: cell.y }, { x: cell.x, y: cell.y - 1 }, { x: cell.x, y: cell.y + 1 }]) {
+      if (next.x < 1 || next.x >= world.width - 1 || next.y < 11 || next.y > 21) continue
+      if (next.y !== cell.y && (!isShaftColumn(cell.x) || cell.x !== next.x)) continue
+      const key = `${next.x},${next.y}`
+      if (previous.has(key) || !canStand(world, next.x, next.y)) continue
+      previous.set(key, cell)
+      queue.push(next)
+    }
+  }
+  return null
+}
+
+export function inspectCrack(world: WorldState, x: number, y: number): boolean {
+  if (!world.progress.coreRepaired || !world.pods.length || !isShaftColumn(x) || y !== HOME_FLOOR_Y) return false
+  if (world.exploration.clueFound) return world.exploration.shaftX === x && !world.exploration.entered
+  if (!canStand(world, x, 11)) return false
+  // 到达裂纹上方必须有从大厅地面走来的路，不能远程发现孤立洞口。
+  if (![18, 25].some((startX) => canStand(world, startX, 11) && walkingRoute(world, { x: startX, y: 11 }, { x, y: 11 }))) return false
+  if (world.exploration.entered) return false
+  world.exploration.clueFound = true
+  world.exploration.shaftX = x
+  world.exploration.explorer = { x, y: 11 }
+  return true
+}
+
+export function upgradePickaxe(world: WorldState): boolean {
+  if (!world.exploration.clueFound || world.exploration.pickaxeUpgraded) return false
+  world.exploration.pickaxeUpgraded = true
+  return true
+}
+
+export function shaftConnected(world: WorldState): boolean {
+  const x = world.exploration.shaftX
+  return x !== null && Array.from({ length: 11 }, (_, i) => i + 11).every((y) => canStand(world, x, y))
+}
+
+/** 已连到梯脚的地面空间；用于探索边缘、建设通路和迷雾。 */
+export function waterSpan(world: WorldState): { left: number; right: number } | null {
+  const x = world.exploration.shaftX
+  if (!world.exploration.entered || x === null || !shaftConnected(world)) return null
+  let left = x, right = x
+  while (canStand(world, left - 1, 21)) left--
+  while (canStand(world, right + 1, 21)) right++
+  return { left, right }
+}
+
+export function springVisible(world: WorldState): boolean {
+  const span = waterSpan(world)
+  return !!span && span.left <= LANDMARKS.spring.x && span.right >= LANDMARKS.spring.x
+}
+
+/** 误挖可撤销；有人站着的格子、已使用梯道和回程地面不允许被填埋。 */
+export function explorationProtects(world: WorldState, x: number, y: number): boolean {
+  const e = world.exploration
+  if (e.explorer?.x === x && e.explorer.y === y) return true
+  if (e.lamps.some((lamp) => lamp.x === x && y >= 19 && y <= 21)) return true
+  if (!e.entered || e.shaftX === null) return false
+  if (x === e.shaftX && y >= 11 && y <= 21) return true
+  if (y === 21 && e.explorer?.y === 21 && x >= Math.min(e.explorer.x, e.shaftX) && x <= Math.max(e.explorer.x, e.shaftX)) return true
+  return e.springFound && y === 21 && x >= Math.min(LANDMARKS.spring.x, e.shaftX) && x <= Math.max(LANDMARKS.spring.x, e.shaftX)
+}
+
+/** 小壁灯嵌在洞壁上，选址自由，不占伙伴走路的地面。 */
+export function canPlaceWallLamp(world: WorldState, x: number): boolean {
+  const span = waterSpan(world)
+  return world.exploration.springFound && !!span && x >= span.left && x <= span.right
+    && !isShaftColumn(x) && Math.abs(x - LANDMARKS.spring.x) > 2
+    && [19, 20, 21].every((y) => world.tiles[y][x] === TILE.EMPTY)
+    && !world.exploration.lamps.some((lamp) => lamp.x === x)
+}
+
+export function explorationAccessIntact(world: WorldState): boolean {
+  const e = world.exploration
+  if (!e.clueFound || e.shaftX === null) return true
+  const top = { x: e.shaftX, y: 11 }
+  if (![18, 25].some((x) => canStand(world, x, 11) && walkingRoute(world, { x, y: 11 }, top))) return false
+  if (!e.entered) return true
+  if (!shaftConnected(world) || !e.explorer || !walkingRoute(world, top, e.explorer)) return false
+  return (!e.springFound || !!walkingRoute(world, top, LANDMARKS.spring))
+    && e.lamps.every((lamp) => !!walkingRoute(world, top, { x: lamp.x, y: 21 }))
+}

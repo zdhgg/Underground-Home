@@ -1,4 +1,5 @@
 import { LANDMARKS, type Rect, type WorldState } from './world'
+import { shaftConnected, springVisible, suggestedBreakthrough, waterSpan } from './exploration'
 
 /**
  * 任务（missions）：给"问题和目标"，不规定唯一解。
@@ -88,5 +89,39 @@ export function guideHighlight(world: WorldState): GuideHighlight {
   if (!crystalFound) return { kind: 'dig', rect: LANDMARKS.crystalZone }
   if (!crystalCollected) return { kind: 'collect', rect: LANDMARKS.crystalZone }
   if (!coreRepaired) return { kind: 'repair', rect: LANDMARKS.generatorZone }
+  if (world.pods.length) {
+    const e = world.exploration
+    const x = e.shaftX ?? suggestedBreakthrough(world)
+    if (!e.clueFound) return { kind: 'dig', rect: { x, y: 11, w: 1, h: 2 } }
+    if (!e.pickaxeUpgraded) return { kind: 'repair', rect: { x, y: 11, w: 1, h: 2 } }
+    if (!shaftConnected(world)) {
+      const y = Array.from({ length: 10 }, (_, i) => i + 12).find((row) => world.tiles[row][x] !== 0) ?? 12
+      return { kind: 'dig', rect: { x, y, w: 1, h: 1 } }
+    }
+    if (!e.entered) return { kind: 'collect', rect: { x, y: 11, w: 1, h: 2 } }
+    if (!e.springFound) {
+      const span = waterSpan(world)
+      const frontier = span ? span.left > LANDMARKS.spring.x - 1 ? span.left - 1 : span.right + 1 : x
+      return { kind: 'collect', rect: { x: springVisible(world) ? LANDMARKS.spring.x : frontier, y: 21, w: 1, h: 1 } }
+    }
+  }
   return { kind: 'none' }
+}
+
+export function explorationGuide(world: WorldState): { title: string; speech: string; outcome: string; done: number; total: number; finished: boolean } {
+  const e = world.exploration
+  const connected = shaftConnected(world)
+  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound].filter(Boolean).length
+  const guide = !e.clueFound
+    ? ['听听岩壁里的水声', '滴答、滴答！挖通裂纹上方的泥土，再点一下岩壁听听。', '岩壁的裂纹，也许通向新的家园。']
+    : !e.pickaxeUpgraded
+      ? ['换上小铁镐', '裂缝里有凉凉的水汽！换上小铁镐，就能挖开这种带裂纹的岩石。', '坚硬的大岩石还要留着。']
+      : !connected
+        ? ['亲手挖出向下的梯道', '点裂纹，一格一格往下挖。我会帮你把小梯子接好！', '梯子连到洞底，我们才能下去。']
+        : !e.entered
+          ? ['沿梯子去第二层', '通啦！点“沿梯子下去”，和我一起到新地方看看！', '顺着真实的梯子，抵达泉水层。']
+          : !e.springFound
+            ? ['找到滴答响的泉水', springVisible(world) ? '泉水露出来啦！点一下泉水，我沿着地面走过去看看。' : `水声从${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边传来！先挖脚边的土，再向上挖宽。点空地，我会走过去。`, '找到水源，这里也能成为家园。']
+            : ['泉水层，成为新家园！', '找到天然泉水啦！试着往左右扩建，再放一盏小壁灯。新家园怎么布置，由你决定！', '更深处的坚硬岩层，等我们以后再探索。']
+  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 5, finished: e.springFound }
 }
