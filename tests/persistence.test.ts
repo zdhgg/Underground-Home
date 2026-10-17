@@ -28,17 +28,17 @@ describe('存档序列化与校验', () => {
     }
   })
 
-  it('完整走完任务链后存档往返，任务状态保持不变', () => {
+  it('完成点灯后存档往返，进入睡眠舱任务且点灯状态保持不变', () => {
     const world = createInitialWorld()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
-    expect(missionSummary(world)).toEqual({ done: 3, total: 3 })
+    expect(missionSummary(world)).toEqual({ done: 3, total: 4 })
 
     const result = deserialize(JSON.parse(JSON.stringify(serialize(world))))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(missionSummary(result.world)).toEqual({ done: 3, total: 3 })
+      expect(missionSummary(result.world)).toEqual({ done: 3, total: 4 })
       expect(result.world.progress.coreRepaired).toBe(true)
     }
   })

@@ -12,9 +12,9 @@ import {
 import { LANDMARKS, TILE, createInitialWorld, tileAt } from '../src/core/world'
 
 describe('第一夜任务链', () => {
-  it('初始：0/3，当前任务是找到能源石，高亮指向能源石区域', () => {
+  it('初始：0/4，当前任务是找到能源石，高亮指向能源石区域', () => {
     const world = createInitialWorld()
-    expect(missionSummary(world)).toEqual({ done: 0, total: 3 })
+    expect(missionSummary(world)).toEqual({ done: 0, total: 4 })
     expect(currentMission(world)?.id).toBe('find-energy-stone')
     expect(currentMission(world)?.title).toBe('找到发光的能源石')
 
@@ -40,7 +40,7 @@ describe('第一夜任务链', () => {
 
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
     expect(missionSummary(world).done).toBe(3)
-    expect(currentMission(world)).toBeNull()
+    expect(currentMission(world)?.id).toBe('build-sleep-pod')
     expect(guideHighlight(world).kind).toBe('none')
   })
 
@@ -79,6 +79,6 @@ describe('第一夜任务链', () => {
       expect(mission.todo.length).toBeGreaterThan(0)
       expect(mission.outcome.length).toBeGreaterThan(0)
     }
-    expect(getMissionProgress(createInitialWorld())).toHaveLength(3)
+    expect(getMissionProgress(createInitialWorld())).toHaveLength(4)
   })
 })

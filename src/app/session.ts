@@ -1,5 +1,6 @@
 import { dig, type DigResult } from '../core/dig'
-import { createDigHistory } from '../core/history'
+import { createWorldHistory } from '../core/history'
+import { canPlacePod, placePod, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { currentMission, guideHighlight, missionSummary } from '../core/missions'
 import {
@@ -18,6 +19,23 @@ export interface SessionHooks {
   onMessage(message: string, kind?: 'info' | 'warning'): void
   /** 任务进度与引导变化（小鼹鼠面板 + 徽章） */
   onProgress(progress: SessionProgress): void
+  onBuild?(state: BuildState): void
+}
+
+export interface BuildState {
+  available: boolean
+  active: boolean
+  selected: boolean
+  valid: boolean
+  message: string
+  count: number
+}
+
+const BUILD_MESSAGES: Record<BuildFailure, string> = {
+  power: '先修好能源核心，再安小床。', bounds: '这里超出地下范围啦。',
+  reserved: '给入口和能源核心留出位置。', overlap: '这里已经有睡眠舱啦。',
+  soil: '先切回挖掘，挖出3格宽、2格高的空地。', support: '舱底需要一整排泥土或岩石托住。',
+  access: '需要侧门连通家园，也要给伙伴和核心留条路。',
 }
 
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
@@ -32,6 +50,8 @@ export interface SessionProgress {
 
 /** 组合根：把 world / rules / missions / persistence / render / input 装配成一次游戏会话 */
 export interface GameSession {
+  setBuildMode(active: boolean): void
+  confirmBuild(): void
   zoomBy(delta: number): void
   centerOnHome(): void
   /** 撤销最近一次挖掘（挖错保护；能源石被挖开后不可再被埋回去） */
@@ -65,6 +85,8 @@ function describeDigFailure(result: DigResult): string {
       return '这里已经挖空啦，拖动画布看看别处吧'
     case 'sky':
       return '地面以上的地方不能挖哦'
+    case 'facility':
+      return '这是睡眠舱和它的地基，先保留它们吧。'
     default:
       return '这里是地图边缘，换个地方挖吧'
   }
@@ -73,12 +95,26 @@ function describeDigFailure(result: DigResult): string {
 export async function createGameSession(host: HTMLElement, hooks: SessionHooks): Promise<GameSession> {
   const renderer = await PixiWorldRenderer.create(host)
   const store = pickStore()
-  const history = createDigHistory()
+  const history = createWorldHistory()
 
   let world = createInitialWorld()
   let saveTimer: number | undefined
+  let building = false
+  let candidate: Cell | null = null
+  let hoverBuild: Cell | null = null
 
-  // 优先恢复存档；任何损坏都回退到新世界并给出提示（含 v1 → v2 自动迁移）
+  const pushBuild = (): void => {
+    const point = candidate ?? hoverBuild
+    const result = point ? canPlacePod(world, point.x, point.y) : null
+    renderer.setBuildPreview(building ? point : null, result?.ok, result?.ok ? result.door : 'left')
+    hooks.onBuild?.({
+      available: world.progress.coreRepaired, active: building, selected: candidate !== null,
+      valid: candidate !== null && Boolean(result?.ok), count: world.pods.length,
+      message: result ? (result.ok ? '这里可以建！确认后伙伴就有床啦。' : BUILD_MESSAGES[result.reason]) : '点选睡眠舱左上角的位置（3格宽 × 2格高）。',
+    })
+  }
+
+  // 优先恢复存档；损坏反馈；v1 / v2 自动迁移到含睡眠舱的 v3。
   try {
     const raw = await store.load()
     if (raw !== null && raw !== undefined) {
@@ -116,13 +152,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     const summary = missionSummary(world)
     const mission = currentMission(world)
     hooks.onProgress({
-      title: mission ? mission.title : '第一盏灯，点亮啦',
-      speech: mission ? mission.speech : '叮——灯全亮啦！家又暖暖的，谢谢你！🎉',
+      title: mission ? mission.title : '有灯、有床的小家园',
+      speech: mission ? mission.speech : '伙伴睡得好香！你还可以继续挖空间，试试别的布局。',
       outcome: mission ? mission.outcome : '',
       done: summary.done,
       total: summary.total,
       finished: summary.done >= summary.total,
     })
+    pushBuild()
 
     const guide = guideHighlight(world)
     if (guide.kind === 'none') {
@@ -148,6 +185,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   }
 
   const handleTap = (cell: Cell): void => {
+    if (building) {
+      candidate = cell
+      pushBuild()
+      return
+    }
     const beforeDone = missionSummary(world).done
 
     // 1) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
@@ -204,7 +246,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       hooks.onMessage(describeDigFailure(result))
       return
     }
-    history.record(cell.x, cell.y)
+    history.record({ kind: 'dig', x: cell.x, y: cell.y })
     const revealedNow = missionSummary(world).done > beforeDone
     // 能源石露出来时需要重建地标；普通挖掘只刷新本格与四邻的边缘
     if (revealedNow) renderer.refresh()
@@ -225,8 +267,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     onPanBy: (delta) => renderer.panBy(delta.x, delta.y),
     onHover: (screen) => {
       const cell = screen ? renderer.tileAtScreen(screen) : null
-      renderer.setHoverCell(cell)
-      renderer.setCursor(pickCursor(cell))
+      renderer.setHoverCell(building ? null : cell)
+      renderer.setCursor(building ? 'copy' : pickCursor(cell))
+      if (building) {
+        hoverBuild = cell
+        pushBuild()
+      }
     },
     onZoom: (delta, anchor) => renderer.zoomBy(delta, anchor),
   })
@@ -238,28 +284,53 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   window.addEventListener('pagehide', onVisibilityChange)
 
   return {
+    setBuildMode: (active) => {
+      if (active && !world.progress.coreRepaired) return
+      building = active
+      candidate = null
+      hoverBuild = null
+      renderer.setHoverCell(null)
+      pushBuild()
+    },
+    confirmBuild: () => {
+      if (!building || !candidate) return
+      const check = canPlacePod(world, candidate.x, candidate.y)
+      if (!check.ok) { hooks.onMessage(BUILD_MESSAGES[check.reason], 'warning'); return }
+      const pod = placePod(world, candidate.x, candidate.y)
+      if (!pod) return
+      history.record({ kind: 'pod', id: pod.id })
+      building = false
+      candidate = null
+      hoverBuild = null
+      renderer.refresh()
+      renderer.playBurst((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
+      scheduleSave()
+      pushProgress()
+      hooks.onMessage('🛏️ 小床安好啦！伙伴来休息了。')
+    },
     zoomBy: (delta) => renderer.zoomBy(delta),
     centerOnHome: () => renderer.focusHome(),
     undo: () => {
-      // 已挖开的能源石不可被埋回去（避免"任务已完成、石头又没了"的矛盾状态）
-      const restored = history.undo(
-        world,
-        (x, y) => x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y && world.progress.crystalFound,
-      )
+      // LIFO：优先撤销最近建设 / 挖掘，保护能源石、设施及唯一通路。
+      const restored = history.undo(world)
       if (!restored) {
         hooks.onMessage('还没有可以撤销的操作')
         return
       }
       // 撤销只影响瓦片：增量刷新本格与邻域边缘
-      renderer.refreshTerrain([restored])
-      renderer.playDigEffect(restored)
+      if (restored.kind === 'pod') renderer.refresh()
+      else {
+        renderer.refreshTerrain([restored])
+        renderer.playDigEffect(restored)
+      }
       scheduleSave()
       pushProgress()
       hooks.onMessage('↶ 已撤销上一步')
     },
     focusTarget: () => {
       const guide = guideHighlight(world)
-      const rect = guide.kind === 'none' ? LANDMARKS.shelter : guide.rect
+      const rect = guide.kind === 'none' && world.progress.coreRepaired && world.pods.length === 0
+        ? { x: 11, y: 7, w: 6, h: 5 } : guide.kind === 'none' ? LANDMARKS.shelter : guide.rect
       renderer.focusOn((rect.x + rect.w / 2) * TILE_SIZE, (rect.y + rect.h / 2) * TILE_SIZE)
     },
     destroy: () => {

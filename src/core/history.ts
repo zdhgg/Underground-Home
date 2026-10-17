@@ -1,4 +1,5 @@
 import { TILE, type Cell, type WorldState } from './world'
+import { canRestoreDig } from './build'
 
 /**
  * 挖掘撤销栈：只记录"挖开一格"，撤销即把这一格恢复成泥土。
@@ -13,6 +14,35 @@ export interface DigHistory {
   /** 撤销最近一次可撤销的挖掘；没有可撤销内容时返回 null */
   undo(world: WorldState, isProtected?: (x: number, y: number) => boolean): Cell | null
   size(): number
+}
+
+type WorldAction = { kind: 'dig'; x: number; y: number } | { kind: 'pod'; id: number }
+
+/** 建造与挖掘共用LIFO撤销；记录仅限本次会话。 */
+export function createWorldHistory(limit = 200) {
+  const stack: WorldAction[] = []
+  return {
+    record(action: WorldAction): void {
+      stack.push(action)
+      if (stack.length > limit) stack.shift()
+    },
+    undo(world: WorldState): WorldAction | null {
+      while (stack.length) {
+        const action = stack.pop()!
+        if (action.kind === 'pod') {
+          const index = world.pods.findIndex((pod) => pod.id === action.id)
+          if (index < 0) continue
+          world.pods.splice(index, 1)
+          return action
+        }
+        if (!canRestoreDig(world, action.x, action.y)) continue
+        world.tiles[action.y][action.x] = TILE.SOIL
+        world.dugCount = Math.max(0, world.dugCount - 1)
+        return action
+      }
+      return null
+    },
+  }
 }
 
 export function createDigHistory(limit = 200): DigHistory {

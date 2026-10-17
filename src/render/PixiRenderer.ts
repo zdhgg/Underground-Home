@@ -16,6 +16,8 @@ import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTex
 import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
 import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
+import { drawSleepPod } from './sleepPods'
+import { POD_SIZE } from '../core/build'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -97,6 +99,8 @@ interface FriendSprite {
   view: Container
   baseY: number
   phase: number
+  resting?: boolean
+  target?: { x: number; y: number }
 }
 
 interface CameraTween {
@@ -159,6 +163,8 @@ export class PixiWorldRenderer {
   private readonly lampFixtures: Sprite[]
   private readonly glowLayer = new Container()
   private readonly friendsLayer = new Container()
+  private readonly podLayer = new Container()
+  private readonly buildPreview = new Container()
   private readonly darkness = new Graphics()
   private readonly lamps = new Graphics()
   private readonly highlightGfx = new Graphics()
@@ -231,6 +237,7 @@ export class PixiWorldRenderer {
       this.wind,
       this.shelterFixtures,
       this.landmarkLayer,
+      this.podLayer,
       this.friendsLayer,
       this.darkness,
       this.glowLayer,
@@ -239,6 +246,7 @@ export class PixiWorldRenderer {
       this.effects,
       this.crystalFeedback.view,
       this.hover,
+      this.buildPreview,
     )
     app.stage.addChild(this.worldLayer)
     app.ticker.add(this.tick)
@@ -265,7 +273,21 @@ export class PixiWorldRenderer {
   refresh(): void {
     this.refreshTerrain()
     this.rebuildLandmarks()
+    for (const child of this.podLayer.removeChildren()) child.destroy({ children: true })
+    for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod(pod))
     this.rebuildFriends()
+  }
+
+  setBuildPreview(cell: Cell | null, valid = false, door: 'left' | 'right' = 'left'): void {
+    for (const child of this.buildPreview.removeChildren()) child.destroy({ children: true })
+    if (!cell) return
+    const room = drawSleepPod({ ...cell, door }, true)
+    room.alpha = 0.6
+    const outline = new Graphics()
+    outline.rect(cell.x * TILE_SIZE, cell.y * TILE_SIZE, POD_SIZE.w * TILE_SIZE, POD_SIZE.h * TILE_SIZE)
+      .fill({ color: valid ? 0x8fe3a6 : 0xff947e, alpha: 0.15 })
+      .stroke({ width: 3, color: valid ? 0x8fe3a6 : 0xff947e })
+    this.buildPreview.addChild(room, outline)
   }
 
   /**
@@ -599,7 +621,8 @@ export class PixiWorldRenderer {
   // ---------- 内部：伙伴与特效 ----------
 
   private rebuildFriends(): void {
-    this.friendsLayer.removeChildren()
+    const previous = this.friends.map((friend) => ({ x: friend.view.x, y: friend.view.y }))
+    for (const child of this.friendsLayer.removeChildren()) child.destroy({ children: true })
     this.friends = []
     const world = this.world
     if (!world) return
@@ -608,19 +631,29 @@ export class PixiWorldRenderer {
       { x: 23.9, y: 11.45 },
     ]
     spots.forEach((spot, i) => {
+      const pod = world.pods[0]
       const view = new Container()
       const body = new Graphics()
       const bodyColor = i === 0 ? 0xa8ba8e : 0xe9b6a7
       body.circle(0, 0, 13).fill(bodyColor)
       body.circle(-7, -10, 5).fill(bodyColor)
       body.circle(7, -10, 5).fill(bodyColor)
-      body.circle(-4, -2, 1.8).fill(0x403c38)
-      body.circle(4, -2, 1.8).fill(0x403c38)
+      if (pod) {
+        body.moveTo(-6, -2).lineTo(-2, -2).moveTo(2, -2).lineTo(6, -2).stroke({ width: 1.7, color: 0x403c38 })
+      } else {
+        body.circle(-4, -2, 1.8).fill(0x403c38)
+        body.circle(4, -2, 1.8).fill(0x403c38)
+      }
       body.circle(0, 4, 2.6).fill(0xd98a82)
       view.addChild(body)
       view.position.set(spot.x * TILE_SIZE, spot.y * TILE_SIZE)
+      if (pod) view.scale.set(0.55)
+      if (pod && previous[i]) view.position.copyFrom(previous[i])
       this.friendsLayer.addChild(view)
-      this.friends.push({ view, baseY: spot.y * TILE_SIZE, phase: i * 1.7 })
+      this.friends.push({
+        view, baseY: spot.y * TILE_SIZE, phase: i * 1.7, resting: Boolean(pod),
+        target: pod ? { x: (pod.x + (pod.door === 'left' ? 2.35 : 0.65)) * TILE_SIZE, y: pod.y * TILE_SIZE + 19 + i * 24 } : undefined,
+      })
     })
   }
 
@@ -629,6 +662,12 @@ export class PixiWorldRenderer {
     if (this.celebrationTime > 0) this.celebrationTime = Math.max(0, this.celebrationTime - dt)
     const celebrating = this.celebrationTime > 0
     for (const friend of this.friends) {
+      if (friend.resting && friend.target) {
+        const k = Math.min(1, dt * 4)
+        friend.view.x += (friend.target.x - friend.view.x) * k
+        friend.view.y += (friend.target.y - friend.view.y) * k
+        continue
+      }
       const bounce = celebrating
         ? Math.abs(Math.sin(this.elapsed * 6 + friend.phase)) * 16
         : repaired

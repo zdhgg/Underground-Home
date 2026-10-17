@@ -19,7 +19,7 @@ export interface Mission {
   isDone: (world: WorldState) => boolean
 }
 
-/** 第一夜主线：找到能源石 → 收好它 → 修好能源核心点亮家园 */
+/** 第一夜当前主线：找到能源石 → 收好它 → 修好核心 → 安置睡眠舱 */
 export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'find-energy-stone',
@@ -44,6 +44,14 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
     todo: '点一下大厅中间的能源核心。',
     outcome: '地下的灯会一盏一盏亮起来！',
     isDone: (world) => world.progress.coreRepaired,
+  },
+  {
+    id: 'build-sleep-pod',
+    title: '给伙伴安一个睡眠舱',
+    speech: '灯亮啦！在大厅旁挖出3×2格空地，再选“睡眠舱”。位置由你决定！',
+    todo: '挖空、选位置，确认建造一间双人睡眠舱。',
+    outcome: '两位伙伴就能钻进小床休息啦。',
+    isDone: (world) => world.pods.length > 0,
   },
 ]
 

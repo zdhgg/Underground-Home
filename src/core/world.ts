@@ -24,7 +24,12 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 2
+export const WORLD_VERSION = 3
+
+export interface SleepPod extends Cell {
+  id: number
+  door: 'left' | 'right'
+}
 
 export interface Rect {
   x: number
@@ -76,6 +81,7 @@ export interface WorldState {
   /** 累计挖开格数（展示与统计用） */
   dugCount: number
   progress: WorldProgress
+  pods: SleepPod[]
 }
 
 /**
@@ -115,6 +121,7 @@ export function createInitialWorld(): WorldState {
     tiles,
     dugCount: 0,
     progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
+    pods: [],
   }
 }
 

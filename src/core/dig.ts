@@ -1,4 +1,5 @@
 import { LANDMARKS, SURFACE_Y, TILE, isInside, type TileType, type WorldState } from './world'
+import { isPodStructure } from './build'
 
 /** 挖掘失败原因（翻译成儿童可读的提示由界面层负责） */
 export type DigFailure =
@@ -10,6 +11,7 @@ export type DigFailure =
   | 'rock'
   /** 已经挖空 */
   | 'empty'
+  | 'facility'
 
 export interface DigResult {
   ok: boolean
@@ -29,6 +31,7 @@ export interface DigResult {
 export function canDig(world: WorldState, x: number, y: number): DigResult {
   if (!isInside(world, x, y)) return { ok: false, x, y, tile: null, reason: 'out-of-bounds' }
   const tile = world.tiles[y][x]
+  if (isPodStructure(world, x, y)) return { ok: false, x, y, tile, reason: 'facility' }
   if (y < SURFACE_Y) return { ok: false, x, y, tile, reason: 'sky' }
   if (tile === TILE.ROCK) return { ok: false, x, y, tile, reason: 'rock' }
   if (tile === TILE.EMPTY) return { ok: false, x, y, tile, reason: 'empty' }

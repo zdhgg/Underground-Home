@@ -7,7 +7,9 @@ import {
   type TileType,
   type WorldProgress,
   type WorldState,
+  type SleepPod,
 } from './world'
+import { canPlacePod } from './build'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
@@ -23,6 +25,7 @@ export interface SavePayload {
     /** tiles[y][x]，存数字以减小体积 */
     tiles: number[][]
     progress: WorldProgress
+    pods: SleepPod[]
   }
 }
 
@@ -36,6 +39,7 @@ export function serialize(world: WorldState): SavePayload {
       dugCount: world.dugCount,
       tiles: world.tiles.map((row) => [...row]),
       progress: { ...world.progress },
+      pods: world.pods.map((pod) => ({ ...pod })),
     },
   }
 }
@@ -53,7 +57,7 @@ interface BaseWorldData {
   tiles: TileType[][]
 }
 
-/** 校验 v1 / v2 共有的地图数据；返回可读错误或规整后的数据 */
+/** 校验 v1 / v2 / v3 共有的地图数据；返回可读错误或规整后的数据 */
 function validateBaseWorld(world: unknown): { ok: true; data: BaseWorldData } | { ok: false; error: string } {
   if (typeof world !== 'object' || world === null) return { ok: false, error: '存档缺少世界数据' }
   const raw = world as { width?: unknown; height?: unknown; dugCount?: unknown; tiles?: unknown }
@@ -125,20 +129,41 @@ export function deserialize(raw: unknown): LoadResult {
         ...base.data,
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
+        pods: [],
       },
     }
   }
-  if (payload.version !== WORLD_VERSION) {
+  if (payload.version !== 2 && payload.version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${payload.version}，当前 v${WORLD_VERSION}）`)
   }
 
   const progress = validateProgress((payload.world as { progress?: unknown }).progress)
   if (!progress) return err('存档进度字段无效')
 
+  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [] }
+  if (payload.version === WORLD_VERSION) {
+    const rawPods = (payload.world as { pods?: unknown }).pods
+    if (!Array.isArray(rawPods) || rawPods.length > MAP_WIDTH * MAP_HEIGHT) return err('存档睡眠舱数据无效')
+    const ids = new Set<number>()
+    for (const item of rawPods) {
+      if (typeof item !== 'object' || item === null) return err('存档睡眠舱数据无效')
+      const pod = item as SleepPod
+      if (!Number.isInteger(pod.id) || pod.id < 1 || ids.has(pod.id) || !Number.isInteger(pod.x) || !Number.isInteger(pod.y) || (pod.door !== 'left' && pod.door !== 'right')) return err('存档睡眠舱数据无效')
+      ids.add(pod.id)
+      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door })
+    }
+    const pods = world.pods
+    for (const pod of pods) {
+      world.pods = pods.filter((other) => other.id !== pod.id)
+      if (!canPlacePod(world, pod.x, pod.y, pod.door).ok) return err('存档睡眠舱位置无效')
+    }
+    world.pods = pods
+  }
+
   return {
     ok: true,
     savedAt,
-    world: { ...base.data, version: WORLD_VERSION, progress },
+    world,
   }
 }
 
