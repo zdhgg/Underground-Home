@@ -25,6 +25,7 @@ import { POD_SIZE, BEDS_PER_POD } from '../core/build'
 import { waitingPartners } from '../core/partners'
 import { foundRelics } from '../core/relics'
 import { drawRelic } from './relicProps'
+import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import { ExplorationScene } from './explorationScene'
 import {
@@ -269,6 +270,10 @@ export class PixiWorldRenderer {
   private readonly landmarkLayer = new Container()
   /** 挖出来的旧避难所遗物：摆在发现的那一格上 */
   private readonly relicLayer = new Container()
+  /** 第一层的生产道具：种植槽与"水到家"的水管 / 水缸 */
+  private readonly farmLayer = new Container()
+  /** 水流动感与成熟光圈：每帧重画，位于黑暗之上 */
+  private readonly farmFlow = new Graphics()
   private readonly shelterFixtures: Container
   private readonly lampFixtures: Sprite[]
   private readonly glowLayer = new Container()
@@ -351,6 +356,7 @@ export class PixiWorldRenderer {
       this.shelterFixtures,
       this.landmarkLayer,
       this.relicLayer,
+      this.farmLayer,
       this.podLayer,
       this.friendsLayer,
       this.darkness,
@@ -358,6 +364,7 @@ export class PixiWorldRenderer {
       createStrataLabels(),
       this.explorationScene.view,
       this.lamps,
+      this.farmFlow,
       this.highlightGfx,
       this.effects,
       this.crystalFeedback.view,
@@ -390,9 +397,39 @@ export class PixiWorldRenderer {
     this.refreshTerrain()
     this.rebuildLandmarks()
     this.refreshRelics()
+    this.refreshFarm()
     this.refreshPods()
     this.rebuildFriends()
     this.refreshExploration()
+  }
+
+  /** 只重建种植槽与水管：种下、长大、收获、引水完成后调用 */
+  refreshFarm(): void {
+    for (const child of this.farmLayer.removeChildren()) child.destroy({ children: true })
+    const world = this.world
+    if (!world) return
+    if (world.farm.waterSupplied) this.farmLayer.addChild(drawWaterLine(world))
+    for (const planter of world.farm.planters) this.farmLayer.addChild(drawPlanter(planter))
+  }
+
+  /** 水在管子里流动 + 熟了的槽呼吸：纯画面，每帧重画，不读也不写世界。 */
+  private drawFarmFlow(): void {
+    const g = this.farmFlow
+    g.clear()
+    const world = this.world
+    if (!world || !world.farm.waterSupplied) return
+    const column = world.exploration.shaftX
+    if (column !== null) {
+      const pipeX = (column + 0.5) * TILE_SIZE + 9
+      const top = 11 * TILE_SIZE + 12
+      const bottom = 21.8 * TILE_SIZE
+      for (let i = 0; i < 6; i++) {
+        const progress = ((this.elapsed * 0.42 + i / 6) % 1)
+        const y = bottom - progress * (bottom - top)
+        g.circle(pipeX, y, 2.2).fill({ color: 0xd7f4ff, alpha: 0.75 })
+      }
+    }
+    drawRipeGlow(g, world, this.elapsed)
   }
 
   /** 只重建伙伴精灵：建成 / 撤销睡眠舱、找到水出现新朋友时调用 */
@@ -507,8 +544,31 @@ export class PixiWorldRenderer {
     for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod(pod))
   }
 
-  setBuildPreview(cell: Cell | null, valid = false, door: 'left' | 'right' = 'left', hint = ''): void {
+  /**
+   * 建造预览：睡眠舱画舱体轮廓，种植槽画一格槽位。
+   * cell 传 null 时只清空预览。hint 是预览旁的短句。
+   */
+  setBuildPreview(
+    cell: Cell | null,
+    valid = false,
+    door: 'left' | 'right' = 'left',
+    hint = '',
+    kind: 'none' | 'pod' | 'planter' = 'pod',
+    planterCell: Cell | null = null,
+  ): void {
     for (const child of this.buildPreview.removeChildren()) child.destroy({ children: true })
+    if (kind === 'planter' && planterCell) {
+      const color = valid ? 0x8fe3a6 : 0xff947e
+      const slot = new Graphics()
+      slot.rect(planterCell.x * TILE_SIZE + 3, planterCell.y * TILE_SIZE + 12, TILE_SIZE - 6, TILE_SIZE - 14)
+        .fill({ color, alpha: 0.18 })
+        .stroke({ width: 3, color })
+      const trough = drawPlanter({ id: 0, x: planterCell.x, y: planterCell.y, growth: 0 })
+      trough.alpha = 0.6
+      this.buildPreview.addChild(trough, slot)
+      if (hint) this.addBuildHint(hint, valid, planterCell.x + 0.5, planterCell.y, 1)
+      return
+    }
     if (!cell) return
     const color = valid ? 0x8fe3a6 : 0xff947e
     const room = drawSleepPod({ ...cell, door }, true)
@@ -518,8 +578,11 @@ export class PixiWorldRenderer {
       .fill({ color, alpha: 0.15 })
       .stroke({ width: 3, color })
     this.buildPreview.addChild(room, outline)
-    if (!hint) return
-    // 预览旁给一个短句：不用低头看底部面板也能知道行不行。
+    if (hint) this.addBuildHint(hint, valid, cell.x + POD_SIZE.w / 2, cell.y, 2)
+  }
+
+  /** 预览旁给一个短句：不用低头看底部面板也能知道行不行。 */
+  private addBuildHint(hint: string, valid: boolean, centerX: number, topRow: number, rowsHigh: number): void {
     const label = new Text({
       text: hint,
       style: {
@@ -537,8 +600,8 @@ export class PixiWorldRenderer {
     bg.roundRect(-width / 2, -height / 2, width, height, 8).fill({ color: 0x16252b, alpha: 0.82 })
     tag.addChild(bg, label)
     tag.position.set(
-      (cell.x + POD_SIZE.w / 2) * TILE_SIZE,
-      cell.y * TILE_SIZE - 10 - height / 2,
+      centerX * TILE_SIZE,
+      topRow * TILE_SIZE - 10 - height / 2 + (rowsHigh === 1 ? TILE_SIZE / 2 : 0),
     )
     this.buildPreview.addChild(tag)
   }
@@ -753,6 +816,7 @@ export class PixiWorldRenderer {
     this.updateFriends(dt)
     this.updateEffects(dt)
     this.explorationScene.update(dt)
+    this.drawFarmFlow()
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
   }
@@ -1098,6 +1162,49 @@ export class PixiWorldRenderer {
     const y = (pod.y + POD_SIZE.h / 2) * TILE_SIZE
     this.playBurst(x, y, { color: 0xffd98a, count: 16, speed: 95, ring: true, ringRadius: 70 })
     this.spawnConfetti([{ x, y: y - 40 }])
+  }
+
+  /**
+   * 引水到家的演出：泉水那边起一大团水花，水一路顺着管子往上冒，镜头跟着管子走。
+   * 世界数据已经由会话层写好，这里只放画面。
+   */
+  playSupplyWater(): void {
+    const springX = (LANDMARKS.spring.x + 0.5) * TILE_SIZE
+    const springY = 22 * TILE_SIZE - 7
+    this.playBurst(springX, springY, { color: 0xd9fdf6, count: 24, speed: 110, ring: true, ringRadius: 44 })
+    this.playBurst(springX, springY - 4, { color: 0x9fe6e6, count: 14, speed: 50, gravity: -30 })
+    for (let row = 20; row >= 12; row -= 2) {
+      this.playBurst(springX, (row + 0.6) * TILE_SIZE, { color: 0xbfeef0, count: 6, speed: 26, gravity: -22 })
+    }
+    const barrelX = WATER_BARREL_X * TILE_SIZE
+    this.playBurst(barrelX, 11 * TILE_SIZE, { color: 0xbfe6f2, count: 16, speed: 70, ring: true, ringRadius: 38 })
+    const column = this.world?.exploration.shaftX ?? 27
+    this.cameraTween = {
+      from: { ...this.camera },
+      to: centerOn((column + 0.5) * TILE_SIZE, 15.4 * TILE_SIZE, this.viewport, Math.max(0.9, this.camera.zoom)),
+      elapsed: 0,
+      duration: 1.1,
+    }
+  }
+
+  /** 收菜：一格小爆发 + 上飘的叶子和光点 */
+  playHarvest(cell: Cell): void {
+    const x = (cell.x + 0.5) * TILE_SIZE
+    const y = (cell.y + 0.45) * TILE_SIZE
+    this.playBurst(x, y, { color: 0xd7f4a0, count: 14, speed: 74, ring: true, ringRadius: 24 })
+    this.playBurst(x, y - 6, { color: 0xffe6ad, count: 10, speed: 40, gravity: -30 })
+  }
+
+  /** 开饭：伙伴原地开心蹦跳 + 爱心和彩纸；有菜有水，家里热闹一下 */
+  playMealCelebration(): void {
+    this.celebrationTime = 2.4
+    if (this.friends.length === 0) return
+    this.spawnConfetti(this.friends.map((friend) => ({ x: friend.view.x, y: friend.view.y - 30 })))
+    for (const friend of this.friends) {
+      this.playBurst(friend.view.x, friend.view.y - 18, { color: 0xff9db2, count: 7, speed: 38, gravity: -26 })
+    }
+    const barrelX = WATER_BARREL_X * TILE_SIZE
+    this.playBurst(barrelX, 11.2 * TILE_SIZE, { color: 0xbfe6f2, count: 10, speed: 44, gravity: -18 })
   }
 
   private spawnConfetti(anchors: ReadonlyArray<{ x: number; y: number }> = REPAIR_CONFETTI_ANCHORS): void {

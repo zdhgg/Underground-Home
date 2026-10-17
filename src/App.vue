@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from 'vue'
-import { createGameSession, type BuildState, type ExplorationUI, type GameSession, type Milestone, type SessionProgress } from './app/session'
+import { createGameSession, type BuildState, type ExplorationUI, type FarmUI, type GameSession, type Milestone, type SessionProgress } from './app/session'
 import { STRATA } from './core/world'
 import type { DepthView } from './render/camera'
 
@@ -19,8 +19,9 @@ const progress = ref<SessionProgress>({
   finished: false,
   relics: { found: 0, total: 3 },
 })
-const build = ref<BuildState>({ available: false, active: false, selected: false, valid: false, message: '', count: 0 })
+const build = ref<BuildState>({ podAvailable: false, planterAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
+const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false })
 const exploration = ref<ExplorationUI>({ clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canImport: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
@@ -32,7 +33,9 @@ const legendHint = computed(() => {
   if (!exploration.value.upgraded) return '🟫 泥土可挖　🪨 找找有裂纹的岩壁'
   if (!exploration.value.entered) return '⛏ 点裂纹岩：阿土一镐一镐往下挖　🪨 坚硬基岩保留'
   if (!exploration.value.found) return '🟫 点泥土挖过去　💧 看见泉水点一下它'
-  return '💧 泉水找到啦 · 新朋友要来住，回暖窝层安张床'
+  if (!farm.value.unlocked) return '🚰 泉水找到啦 · 点「把水引到家里」'
+  if (farm.value.ripe > 0) return '🥕 有菜熟了 · 点它就能收'
+  return '💧 水到家啦 · 种菜、收菜、请伙伴吃饭'
 })
 
 let toastTimer: number | undefined
@@ -68,6 +71,7 @@ onMounted(async () => {
       onBuild: (next) => { build.value = next },
       onView: (next) => { view.value = next },
       onExploration: (next) => { exploration.value = next },
+      onFarm: (next) => { farm.value = next },
       onMilestone: showMilestone,
     })
   } catch {
@@ -125,6 +129,8 @@ onBeforeUnmount(() => {
         >{{ exploration.chaining ? `⛏ 阿土正在挖……（还剩 ${exploration.remaining} 段）` : `⛏ 一路挖到底（还剩 ${exploration.remaining} 段）` }}</button>
         <button v-if="exploration.connected" type="button" class="adventure-action" :disabled="exploration.traveling" @click="session?.travel()">{{ exploration.traveling ? '🪜 阿土正在走……' : exploration.downstairs ? '↑ 沿梯子回家' : '↓ 沿梯子下去' }}</button>
         <button v-if="exploration.found" type="button" class="ghost" :aria-pressed="exploration.lampMode" @click="session?.toggleLamp()">{{ exploration.lampMode ? '⛏ 收起壁灯，继续挖掘' : '🏮 安一盏小壁灯' }}</button>
+        <button v-if="farm.canSupplyWater" type="button" class="adventure-action water" :disabled="farm.supplying || exploration.traveling" @click="session?.supplyWater()">{{ farm.supplying ? '🚰 阿土在接水管……' : '🚰 把水引到家里' }}</button>
+        <button v-if="farm.harvested" type="button" class="adventure-action meal" :disabled="farm.food === 0 || exploration.traveling" @click="session?.feed()">{{ farm.food > 0 ? `🍽 请大家吃饭（食物 ${farm.food}）` : '🍽 先收点菜再开饭' }}</button>
       </section>
 
       <div class="zoom">
@@ -148,22 +154,24 @@ onBeforeUnmount(() => {
       <button v-if="exploration.canImport" class="legacy-import" type="button" @click="session?.importLegacy()">💾 复制 v0.1.0 进度 · 原档保留</button>
 
       <button type="button" class="undo" @click="session?.undo()">↶ 撤销</button>
-      <section v-if="build.available && !view.overview && view.layer === 'home'" class="build-tools" aria-label="建设工具">
+      <section v-if="(build.podAvailable || build.planterAvailable) && !view.overview && view.layer === 'home'" class="build-tools" aria-label="建设工具">
         <div class="build-buttons">
-          <button type="button" :aria-pressed="!build.active" @click="session?.setBuildMode(false)">⛏ 挖掘</button>
-          <button type="button" :aria-pressed="build.active" @click="session?.setBuildMode(!build.active)">🛏 睡眠舱</button>
-          <template v-if="build.active">
+          <button type="button" :aria-pressed="build.mode === 'none'" @click="session?.setBuildMode('none')">⛏ 挖掘</button>
+          <button v-if="build.podAvailable" type="button" :aria-pressed="build.mode === 'pod'" @click="session?.setBuildMode('pod')">🛏 睡眠舱</button>
+          <button v-if="build.planterAvailable" type="button" :aria-pressed="build.mode === 'planter'" @click="session?.setBuildMode('planter')">🌱 种植槽</button>
+          <template v-if="build.mode !== 'none'">
             <button type="button" class="confirm" :disabled="!build.valid" @click="session?.confirmBuild()">✅ 确认建造</button>
-            <button type="button" class="cancel" @click="session?.setBuildMode(false)">✖ 取消</button>
+            <button type="button" class="cancel" @click="session?.setBuildMode(build.mode)">✖ 取消</button>
           </template>
-          <span v-else>选“睡眠舱”开始建造</span>
+          <span v-else>选一个工具开始建造</span>
         </div>
-        <p v-if="build.active" role="status">{{ build.message }}</p>
-        <p v-else>先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面，预览会告诉你行不行。</p>
+        <p v-if="build.mode !== 'none'" role="status">{{ build.message }}</p>
+        <p v-else>睡眠舱给伙伴睡觉，种植槽种出吃的。点一下地面看预览，预览会告诉你行不行。</p>
       </section>
       <div class="legend">
         <span>{{ legendHint }}</span>
         <span v-if="progress.relics.found" class="relic-count">🧰 遗物 {{ progress.relics.found }}/{{ progress.relics.total }}</span>
+        <span v-if="farm.planterCount" class="farm-count">🥕 种植槽 {{ farm.planterCount }} · 熟了 {{ farm.ripe }} · 食物 {{ farm.food }}</span>
       </div>
 
       <transition name="card">
@@ -183,7 +191,7 @@ onBeforeUnmount(() => {
 
     <footer class="bottom">
       <span>点泥土挖一格 · 点裂纹岩让阿土去挖 · 拖动平移 · 挖错点右下角撤销</span>
-      <span class="scope">点亮家园 → 安好小床 → 找到水 → 接新朋友来住</span>
+      <span class="scope">点亮家园 → 安好小床 → 找到水 → 引水种菜 → 请伙伴吃饭</span>
     </footer>
   </div>
 </template>
@@ -192,6 +200,8 @@ onBeforeUnmount(() => {
 .adventure-action { padding: 11px 14px; min-height: 44px; border-radius: 10px; background: #3c8063; color: #fff8dc; font-size: 14px; font-weight: 700; }
 .adventure-action:disabled { opacity: .65; cursor: wait; }
 .adventure-action.chain { background: #a9702c; box-shadow: 0 3px 0 #7d5119; }
+.adventure-action.water { background: #3f7f9a; box-shadow: 0 3px 0 #2c5c72; }
+.adventure-action.meal { background: #a9532c; box-shadow: 0 3px 0 #7d3a19; }
 .adventure-action.chain:active { transform: translateY(2px); box-shadow: 0 1px 0 #7d5119; }
 .milestone {
   position: absolute;
@@ -489,6 +499,10 @@ onBeforeUnmount(() => {
 
 .relic-count {
   color: #8a6a33;
+}
+
+.farm-count {
+  color: #4f7b45;
 }
 
 .toast {

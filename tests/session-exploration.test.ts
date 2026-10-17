@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createInitialWorld, TILE, type Cell, type WorldState } from '../src/core/world'
+import { LANDMARKS, createInitialWorld, TILE, type Cell, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { placePod } from '../src/core/build'
 import { serialize } from '../src/core/persistence'
-import { shaftConnected } from '../src/core/exploration'
+import { inspectCrack, shaftConnected, upgradePickaxe } from '../src/core/exploration'
 import { createGameSession } from '../src/app/session'
 
 const harness = vi.hoisted(() => {
@@ -12,7 +12,8 @@ const harness = vi.hoisted(() => {
     canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
-    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(),
+    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(),
+    playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
     playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
     playBurst: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('../src/input/pointerControls', () => ({
 }))
 vi.mock('../src/render/waterSound', () => ({
   playWaterClue: vi.fn(), playRockHit: vi.fn(), playBreakthrough: vi.fn(), playLayerArrival: vi.fn(), playSpringFound: vi.fn(),
+  playWaterSupplied: vi.fn(), playHarvest: vi.fn(), playMealTime: vi.fn(),
 }))
 vi.mock('../src/core/persistence', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/core/persistence')>(),
@@ -48,6 +50,26 @@ function readySave() {
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
   placePod(w, 12, 10)
+  return serialize(w)
+}
+
+/** 已经找到泉水、引水到家、左翼挖出一带地面的存档：用来测种植与收获 */
+function farmedSave() {
+  const w = createInitialWorld()
+  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.tiles[9][14] = TILE.EMPTY
+  for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
+  placePod(w, 12, 10)
+  for (let x = 26; x <= 27; x++) dig(w, x, 11)
+  inspectCrack(w, 27, 12)
+  upgradePickaxe(w)
+  for (let y = 12; y < 19; y++) if (w.tiles[y][27] !== TILE.EMPTY) dig(w, 27, y)
+  w.exploration.entered = true
+  for (let x = 23; x >= 18; x--) dig(w, x, 21)
+  w.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
+  w.exploration.springFound = true
+  for (let y = 9; y <= 11; y++) for (let x = 2; x <= 11; x++) if (w.tiles[y][x] === TILE.SOIL) dig(w, x, y)
+  w.farm.waterSupplied = true
   return serialize(w)
 }
 
@@ -290,12 +312,92 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.springFound).toBe(true)
     expect(harness.renderer.playSpringDiscovery).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
-    // 水找到之后还有最后一步：新朋友要床位——所以此时探索主线还不算走完
-    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ done: 5, total: 6, finished: false })
+    // 找到水之后还没走完：要先把水引到家里，再安顿新朋友、种出第一份收成
+    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水引到家里', done: 5, total: 8, finished: false })
     session.toggleLamp(); tap(25, 19)
     expect(w.exploration.lamps).toEqual([{ x: 25, y: 19 }])
     session.undo()
     expect(w.exploration.lamps).toEqual([])
+    session.destroy()
+  })
+
+  it('引水 → 种菜 → 干活长大 → 收菜 → 请伙伴吃饭，整条链路走通', async () => {
+    const onMilestone = vi.fn()
+    const onFarm = vi.fn()
+    const message = vi.fn()
+    harness.store.load.mockResolvedValue(readySave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onMilestone, onFarm })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
+    /** 提示是否说过这句话（onMessage 带第二个参数，所以只比第一句） */
+    const said = (fragment: string) => message.mock.calls.some(([text]) => String(text).includes(fragment))
+    tap(26, 11); tap(27, 11); tap(27, 12); arrive(); session.upgradeTool()
+    tap(27, 12); arrive(); tap(27, 13); arrive(); tap(27, 14)
+    for (let i = 0; i < 8 && !shaftConnected(w); i++) arrive()
+    session.travel(); arrive()
+    for (let x = 23; x >= 18; x--) tap(x, 21)
+    tap(18, 21); arrive()
+    expect(w.exploration.springFound).toBe(true)
+    expect(onFarm).toHaveBeenLastCalledWith(expect.objectContaining({ canSupplyWater: true, unlocked: false }))
+
+    // 引水：阿土亲自走到泉边接水管
+    session.supplyWater()
+    expect(w.farm.waterSupplied).toBe(false)
+    arrive()
+    expect(w.farm.waterSupplied).toBe(true)
+    expect(harness.renderer.refreshFarm).toHaveBeenCalled()
+    expect(harness.renderer.playSupplyWater).toHaveBeenCalledTimes(1)
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '水到家啦！' }))
+    expect(onFarm).toHaveBeenLastCalledWith(expect.objectContaining({ unlocked: true, canSupplyWater: false }))
+
+    // 种菜：先挖空一格，再选"种植槽"
+    tap(5, 11)
+    expect(w.tiles[11][5]).toBe(TILE.EMPTY)
+    session.setBuildMode('planter')
+    tap(5, 11)
+    session.confirmBuild()
+    expect(w.farm.planters).toHaveLength(1)
+    expect(said('种下一槽菜')).toBe(true)
+
+    // 干三件事：挖三格土，菜一档一档长熟（先切回挖掘工具）
+    expect(w.tiles[10][5]).toBe(TILE.SOIL)
+    session.setBuildMode('none')
+    tap(5, 10); tap(5, 9); tap(6, 10)
+    expect(w.farm.planters[0].growth).toBe(3)
+    expect(said('长熟啦')).toBe(true)
+
+    // 收菜：点成熟的槽，换到一份食物
+    tap(5, 11)
+    expect(w.farm.food).toBe(1)
+    expect(w.farm.harvests).toBe(1)
+    expect(w.farm.planters[0].growth).toBe(0)
+    expect(harness.renderer.playHarvest).toHaveBeenCalledTimes(1)
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '第一份收成！' }))
+    // 没熟的槽点一下只会被提示
+    tap(5, 11)
+    expect(w.farm.food).toBe(1)
+
+    // 开饭：伙伴吃一份
+    expect(w.pods.length).toBeGreaterThan(0)
+    session.feed()
+    expect(w.farm.food).toBe(0)
+    expect(harness.renderer.playMealCelebration).toHaveBeenCalledTimes(1)
+    session.destroy()
+  })
+
+  it('种植槽可以撤销；撤销之后那一格恢复成空地', async () => {
+    harness.store.load.mockResolvedValue(farmedSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    session.setBuildMode('planter')
+    tap(5, 11)
+    session.confirmBuild()
+    expect(w.farm.planters).toHaveLength(1)
+    session.undo()
+    expect(w.farm.planters).toEqual([])
+    expect(harness.renderer.refreshFarm).toHaveBeenCalled()
     session.destroy()
   })
 

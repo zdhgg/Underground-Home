@@ -1,6 +1,7 @@
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type TileType, type WorldState } from './world'
 import { isPodStructure } from './build'
 import { isShaftCell, waterSpan } from './exploration'
+import { planterAt } from './farm'
 
 /** 挖掘失败原因（翻译成儿童可读的提示由界面层负责） */
 export type DigFailure =
@@ -36,6 +37,8 @@ export function canDig(world: WorldState, x: number, y: number): DigResult {
   if (!isInside(world, x, y)) return { ok: false, x, y, tile: null, reason: 'out-of-bounds' }
   const tile = world.tiles[y][x]
   if (isPodStructure(world, x, y)) return { ok: false, x, y, tile, reason: 'facility' }
+  // 种着菜的槽不能挖掉：点它是收菜，想挪位置用左下角的撤销。
+  if (planterAt(world, x, y)) return { ok: false, x, y, tile, reason: 'facility' }
   if (y < SURFACE_Y) return { ok: false, x, y, tile, reason: 'sky' }
   if (isShaftCell(x, y)) {
     if (!world.exploration.pickaxeUpgraded || world.exploration.shaftX !== x) return { ok: false, x, y, tile, reason: 'tool' }

@@ -8,7 +8,32 @@ import {
   deserialize,
   serialize,
 } from '../src/core/persistence'
-import { LANDMARKS, WORLD_VERSION, createInitialWorld } from '../src/core/world'
+import { LANDMARKS, TILE, WORLD_VERSION, createInitialWorld, type WorldState } from '../src/core/world'
+import { placePod } from '../src/core/build'
+import { inspectCrack, upgradePickaxe } from '../src/core/exploration'
+
+/** 已经找到泉水、引水到家、种下一槽菜的世界：用来测 v6 的引水与种植字段 */
+function farmWorld(): WorldState {
+  const world = createInitialWorld()
+  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.tiles[9][14] = TILE.EMPTY
+  for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
+  placePod(world, 12, 10)
+  for (let x = 26; x <= 27; x++) dig(world, x, 11)
+  inspectCrack(world, 27, 12)
+  upgradePickaxe(world)
+  for (let y = 12; y < 19; y++) if (world.tiles[y][27] !== TILE.EMPTY) dig(world, 27, y)
+  world.exploration.entered = true
+  for (let x = 23; x >= 18; x--) dig(world, x, 21)
+  world.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
+  world.exploration.springFound = true
+  for (let y = 9; y <= 11; y++) for (let x = 2; x <= 11; x++) if (world.tiles[y][x] === TILE.SOIL) dig(world, x, y)
+  world.farm.waterSupplied = true
+  world.farm.planters.push({ id: 1, x: 5, y: 11, growth: 2 })
+  world.farm.food = 3
+  world.farm.harvests = 4
+  return world
+}
 
 describe('存档序列化与校验', () => {
   it('序列化-反序列化往返一致（含进度位）', () => {
@@ -127,6 +152,56 @@ describe('存档序列化与校验', () => {
       expect(result.error).toContain('v0')
       expect(result.error).toContain(`v${WORLD_VERSION}`)
     }
+  })
+})
+
+describe('引水与种植（v6）', () => {
+  it('引水、种植槽、食物与收成次数往返一致', () => {
+    const world = farmWorld()
+    const result = deserialize(JSON.parse(JSON.stringify(serialize(world))))
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.world.farm).toEqual(world.farm)
+  })
+
+  it('v5 旧档能读：新字段按默认值补齐，旧进度原样保留', () => {
+    const world = farmWorld()
+    const payload = serialize(world)
+    payload.version = 5
+    delete (payload.world as { farm?: unknown }).farm
+
+    const result = deserialize(JSON.parse(JSON.stringify(payload)))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.world.farm).toEqual({ waterSupplied: false, planters: [], food: 0, harvests: 0 })
+      expect(result.world.progress).toEqual(world.progress)
+      expect(result.world.exploration).toEqual(world.exploration)
+      expect(result.world.pods).toEqual(world.pods)
+    }
+  })
+
+  it('造假的数据被拒绝：没泉水却有水、没水却种了菜、生长档位越界、槽位落回土里', () => {
+    const payload = serialize(farmWorld())
+    expect(deserialize(JSON.parse(JSON.stringify(payload))).ok).toBe(true)
+
+    const noSpring = JSON.parse(JSON.stringify(payload))
+    noSpring.world.exploration.springFound = false
+    expect(deserialize(noSpring).ok).toBe(false)
+
+    const noWater = JSON.parse(JSON.stringify(payload))
+    noWater.world.farm.waterSupplied = false
+    expect(deserialize(noWater).ok).toBe(false)
+
+    const badGrowth = JSON.parse(JSON.stringify(payload))
+    badGrowth.world.farm.planters[0].growth = 99
+    expect(deserialize(badGrowth).ok).toBe(false)
+
+    const badFood = JSON.parse(JSON.stringify(payload))
+    badFood.world.farm.food = -1
+    expect(deserialize(badFood).ok).toBe(false)
+
+    const buried = JSON.parse(JSON.stringify(payload))
+    buried.world.tiles[11][5] = TILE.SOIL
+    expect(deserialize(buried).ok).toBe(false)
   })
 })
 

@@ -75,6 +75,8 @@ interface TerrainProbe {
   darkness: Graphics
   lamps: Graphics
   podLayer: Container
+  farmLayer: Container
+  farmFlow: Graphics
   podEntrance: unknown
   friends: {
     view: Container
@@ -89,6 +91,7 @@ interface TerrainProbe {
   }[]
   refreshPods(): void
   refreshFriends(arrivingPodId?: number | null): void
+  refreshFarm(): void
   playPodEntrance(pod: SleepPod, onSettled: () => void): void
   playPodCelebration(pod: SleepPod): void
   drawLighting(): void
@@ -516,6 +519,34 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       expect(friend.pose).toBe('rest')
       expect(Math.abs(friend.view.x - beds[i].x)).toBeLessThanOrEqual(0.001)
     })
+  })
+
+  it('种植槽与水管：按档位画出不同外观，引水之后才出现水管', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.springFound = true
+    for (let y = 9; y <= 11; y++) for (let x = 5; x < 11; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
+    next.farm.planters.push(
+      { id: 1, x: 6, y: 11, growth: 0 },
+      { id: 2, x: 7, y: 11, growth: 1 },
+      { id: 3, x: 8, y: 11, growth: 2 },
+      { id: 4, x: 9, y: 11, growth: 3 },
+    )
+    renderer.setWorld(next)
+    // 还没引水：只有四个槽，没有水管
+    expect(view.farmLayer.children).toHaveLength(4)
+
+    next.farm.waterSupplied = true
+    renderer.refreshFarm()
+    expect(view.farmLayer.children).toHaveLength(5)
+
+    // 四个档位画的不是同一套图形（造型按档位变化）
+    const shapes = view.farmLayer.children.slice(1).map((child) => {
+      const g = child.children[0] as unknown as { context: { instructions: unknown[] } }
+      return g.context.instructions.length
+    })
+    expect(shapes).toHaveLength(4)
+    expect(new Set(shapes).size).toBeGreaterThan(1)
   })
 
   it('两间舱的存档重新载入：四位伙伴各自睡在自己的舱里', () => {

@@ -75,8 +75,14 @@ describe('第一夜任务链', () => {
     expect(world.progress.crystalFound).toBe(true)
   })
 
-  it('找到水之后高亮回到暖窝层：新朋友要床位（而不是指向第二层）', () => {
+  it('找到水之后先引水，再回暖窝层给新朋友安床', () => {
     const world = reachedSpringWorld()
+    // 还没引水：高亮留泉水那一格，提示先把水接回家
+    const water = guideHighlight(world)
+    expect(water.kind).toBe('repair')
+    if (water.kind !== 'none') expect(water.rect).toMatchObject({ x: LANDMARKS.spring.x, y: LANDMARKS.spring.y })
+
+    world.farm.waterSupplied = true
     const guide = guideHighlight(world)
     expect(guide.kind).toBe('build')
     if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.buildSuggestion)

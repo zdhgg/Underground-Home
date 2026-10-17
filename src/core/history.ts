@@ -16,7 +16,11 @@ export interface DigHistory {
   size(): number
 }
 
-type WorldAction = { kind: 'dig'; x: number; y: number; tile?: TileType } | { kind: 'pod'; id: number } | { kind: 'lamp'; x: number; y: number }
+type WorldAction =
+  | { kind: 'dig'; x: number; y: number; tile?: TileType }
+  | { kind: 'pod'; id: number }
+  | { kind: 'planter'; id: number }
+  | { kind: 'lamp'; x: number; y: number }
 
 /** 建造与挖掘共用LIFO撤销；记录仅限本次会话。 */
 export function createWorldHistory(limit = 200) {
@@ -33,6 +37,13 @@ export function createWorldHistory(limit = 200) {
           const index = world.exploration.lamps.findIndex((lamp) => lamp.x === action.x)
           if (index < 0) continue
           world.exploration.lamps.splice(index, 1)
+          return action
+        }
+        if (action.kind === 'planter') {
+          // 菜还没收就撤掉：回到放之前的状态，槽里那株也一起消失。
+          const index = world.farm.planters.findIndex((planter) => planter.id === action.id)
+          if (index < 0) continue
+          world.farm.planters.splice(index, 1)
           return action
         }
         if (action.kind === 'pod') {

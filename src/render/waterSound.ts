@@ -99,3 +99,35 @@ export function playSpringFound(): void {
     blip(ctx, at + 0.3, 'sine', 1400, 500, 0.3, 0.03)
   })
 }
+
+/** 水顺着水管爬上第一层：一路向上的滑音 + 越来越近的水流声。 */
+export function playWaterSupplied(): void {
+  withAudio((ctx) => {
+    const at = ctx.currentTime
+    blip(ctx, at, 'sine', 220, 880, 0.9, 0.045)
+    for (let i = 0; i < 4; i++) {
+      noise(ctx, at + 0.12 + i * 0.16, 0.2, 0.03, 900 + i * 500, 1.1)
+    }
+    blip(ctx, at + 0.78, 'triangle', 784, 1046.5, 0.34, 0.045)
+    noise(ctx, at + 0.8, 0.3, 0.04, 2200, 0.8)
+  })
+}
+
+/** 收菜：轻快的一下。 */
+export function playHarvest(): void {
+  withAudio((ctx) => {
+    const at = ctx.currentTime
+    blip(ctx, at, 'triangle', 660, 990, 0.16, 0.04)
+    blip(ctx, at + 0.09, 'sine', 1180, 1560, 0.18, 0.03)
+  })
+}
+
+/** 开饭：三音上行，热闹一点。 */
+export function playMealTime(): void {
+  withAudio((ctx) => {
+    const at = ctx.currentTime
+    for (const [i, frequency] of [523.25, 698.46, 880].entries()) {
+      blip(ctx, at + i * 0.13, 'triangle', frequency, frequency, 0.3, 0.05)
+    }
+  })
+}

@@ -8,6 +8,19 @@ import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell
 import { canBuildMorePods, waitingPartners } from '../core/partners'
 import { relicAt, relicSummary } from '../core/relics'
 import {
+  canPlacePlanter,
+  canSupplyWater,
+  feedPartners,
+  harvestPlanter,
+  isFarmUnlocked,
+  advancePlanters,
+  placePlanter,
+  planterAt,
+  ripePlanters,
+  RIPE_STAGE,
+  type FarmFailure,
+} from '../core/farm'
+import {
   createIndexedDbStore,
   createMemoryStore,
   deserialize,
@@ -18,7 +31,7 @@ import {
 import type { DepthView } from '../render/camera'
 import { attachPointerControls } from '../input/pointerControls'
 import { PixiWorldRenderer } from '../render/PixiRenderer'
-import { playBreakthrough, playLayerArrival, playRockHit, playSpringFound, playWaterClue } from '../render/waterSound'
+import { playBreakthrough, playHarvest, playLayerArrival, playMealTime, playRockHit, playSpringFound, playWaterClue, playWaterSupplied } from '../render/waterSound'
 
 export interface SessionHooks {
   /** 状态提示（儿童可读的短句） */
@@ -28,6 +41,8 @@ export interface SessionHooks {
   onBuild?(state: BuildState): void
   onView?(view: DepthView): void
   onExploration?(state: ExplorationUI): void
+  /** 引水与种植（按钮与计数） */
+  onFarm?(state: FarmUI): void
   /** 一次性里程碑（突破岩层 / 抵达第二层 / 发现泉水）：界面弹一张大卡片 */
   onMilestone?(card: Milestone): void
 }
@@ -43,6 +58,18 @@ export interface ExplorationUI {
   remaining: number
 }
 
+/** 引水与种植：水引上来之前这些按钮都不出现 */
+export interface FarmUI {
+  canSupplyWater: boolean
+  supplying: boolean
+  unlocked: boolean
+  planterCount: number
+  ripe: number
+  food: number
+  /** 已经收过至少一次（喂饭按钮、计数都靠它） */
+  harvested: boolean
+}
+
 /** 里程碑卡片：只用来庆祝，不承载操作 */
 export interface Milestone {
   emoji: string
@@ -50,28 +77,36 @@ export interface Milestone {
   detail: string
 }
 
+/** 建造工具：同一次只会选一个（挖掘 / 睡眠舱 / 种植槽） */
+export type BuildMode = 'none' | 'pod' | 'planter'
+
 export interface BuildState {
-  available: boolean
-  active: boolean
+  /** 现在能用哪些工具（界面按这个显示按钮） */
+  podAvailable: boolean
+  planterAvailable: boolean
+  mode: BuildMode
   selected: boolean
   valid: boolean
   message: string
-  count: number
+  podCount: number
+  planterCount: number
 }
 
-const BUILD_MESSAGES: Record<BuildFailure, string> = {
+const BUILD_MESSAGES: Record<BuildFailure | FarmFailure, string> = {
   power: '先修好能源核心，再安小床。', bounds: '这里太靠边啦，换个地方试试。',
-  reserved: '入口和能源核心旁边要留出位置。', overlap: '这里已经有一张小床啦。',
-  soil: '先切回挖掘，挖出一块能放下小床的空地。', support: '小床下面要有泥土或岩石托住，不能悬空。',
+  reserved: '入口、梯子和能源核心旁边要留出位置。', overlap: '这里已经放好东西啦。',
+  soil: '先挖空这一格，再放东西。', support: '设施要放在地面上，不能悬空。',
   access: '小床的门要通到家里，也要给伙伴和核心留条路。',
   'locked-layer': '泉水层还没有开放，回暖窝层安小床吧。',
+  'no-water': '先把水引到家里，才能种东西。',
+  layer: '种植槽只能放在第一层的地面上。',
 }
 
 /** 预览旁边的短提示：孩子不用低头看底部面板也能判断 */
-const BUILD_SHORT_HINTS: Record<BuildFailure, string> = {
+const BUILD_SHORT_HINTS: Record<BuildFailure | FarmFailure, string> = {
   power: '先修好能源核心', bounds: '太靠边了', reserved: '这里要留空',
-  overlap: '已经有小床', soil: '先挖空这块', support: '小床要落地', access: '门要通到家里',
-  'locked-layer': '这一层还没开放',
+  overlap: '这里放过了', soil: '先挖空这块', support: '要放在地面上', access: '门要通到家里',
+  'locked-layer': '这一层还没开放', 'no-water': '先引水', layer: '只能放第一层',
 }
 
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
@@ -88,7 +123,7 @@ export interface SessionProgress {
 
 /** 组合根：把 world / rules / missions / persistence / render / input 装配成一次游戏会话 */
 export interface GameSession {
-  setBuildMode(active: boolean): void
+  setBuildMode(mode: BuildMode): void
   confirmBuild(): void
   zoomBy(delta: number): void
   centerOnHome(): void
@@ -103,6 +138,10 @@ export interface GameSession {
   digToBottom(): void
   travel(): void
   toggleLamp(): void
+  /** 把泉水引到家里：阿土走到泉边接水管，之后第一层才能种东西 */
+  supplyWater(): void
+  /** 请伙伴吃饭：消耗一份收成，播一段吃饭演出 */
+  feed(): void
   importLegacy(): Promise<void>
   destroy(): void
 }
@@ -163,7 +202,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   let world = createInitialWorld()
   let saveTimer: number | undefined
-  let building = false
+  let buildMode: BuildMode = 'none'
   let candidate: Cell | null = null
   let hoverBuild: Cell | null = null
   /** 伙伴是否已经在床上休息；不写入存档，重新载入时由第一间睡眠舱推导 */
@@ -178,6 +217,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let orderTimer: number | undefined
   /** 连续施工：一次委托从当前梯段一路挖到洞底 */
   let chaining = false
+  /** 引水演出进行中（按钮显示"正在接水管……"） */
+  let supplying = false
   let lastMessage = ''
   let lastMessageAt = 0
   /** 切后台打断委托后，回到前台补一句提示 */
@@ -189,49 +230,51 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let savePending = false
 
   const pushBuild = (): void => {
-    // 床位数量由"愿意搬进来的伙伴"决定：一开始两位老住户=1 间舱；
-    // 找到水之后另外两位朋友才肯来，于是多出第 2 间舱——永远不出现没人住的空舱。
-    const available = world.progress.coreRepaired && canBuildMorePods(world)
-    if (!available && building) {
-      building = false
+    // 睡眠舱：床位数量由"愿意搬进来的伙伴"决定（找到水之后另外两位才肯来）。
+    // 种植槽：水引到家里之后才能种。
+    const podAvailable = world.progress.coreRepaired && canBuildMorePods(world)
+    const planterAvailable = isFarmUnlocked(world)
+    // 工具不可用时自动收起，别让孩子停在一个点了没反应的模式里
+    if ((buildMode === 'pod' && !podAvailable) || (buildMode === 'planter' && !planterAvailable)) {
+      buildMode = 'none'
       candidate = null
       hoverBuild = null
     }
-    const hoverAnchor = hoverBuild ? podAnchorFromPointer(hoverBuild) : null
-    const previewPoint = building ? candidate ?? hoverAnchor : null
-    const previewResult = previewPoint ? canPlacePod(world, previewPoint.x, previewPoint.y) : null
-    const selectedResult = candidate ? previewResult : null
-    const previewHint = previewResult
-      ? previewResult.ok ? '可以建 ✓' : BUILD_SHORT_HINTS[previewResult.reason]
-      : ''
+    const anchor = buildMode === 'pod' && hoverBuild ? podAnchorFromPointer(hoverBuild) : hoverBuild
+    const point = buildMode === 'none' ? null : candidate ?? anchor
+    const podCheck = buildMode === 'pod' && point ? canPlacePod(world, point.x, point.y) : null
+    const planterCheck = buildMode === 'planter' && point ? canPlacePlanter(world, point.x, point.y) : null
+    const check = podCheck ?? planterCheck
+    const valid = check?.ok === true
+    const previewHint = check ? (valid ? '可以建 ✓' : BUILD_SHORT_HINTS[check.reason]) : ''
     renderer.setBuildPreview(
-      previewPoint,
-      previewResult?.ok ?? false,
-      previewResult?.ok ? previewResult.door : 'left',
-      building ? previewHint : '',
+      podCheck?.ok ? point : null,
+      valid,
+      podCheck?.ok ? podCheck.door : 'left',
+      buildMode === 'none' ? '' : previewHint,
+      buildMode,
+      buildMode === 'planter' ? point : null,
     )
 
-    let message = '点一下想放小床的地面，看看预览。'
-    if (!available) {
-      message = world.progress.coreRepaired
-        ? '小床都安好啦。找到水，才会有新朋友愿意搬来。'
-        : '先修好能源核心，再安小床。'
-    } else if (!building) {
-      message = '先挖出一块空地，再选“睡眠舱”。点一下想放小床的地面。'
-    } else if (candidate && selectedResult) {
-      message = selectedResult.ok
+    let message = '选一个工具开始建造。'
+    if (buildMode === 'none') {
+      message = planterAvailable
+        ? '选“睡眠舱”给伙伴安床，选“种植槽”在挖空的地面种菜。'
+        : '先挖出一块空地，再选“睡眠舱”。'
+    } else if (candidate && check) {
+      message = check.ok
         ? '这里可以建！点“确认建造”。想换位置，再点别处。'
-        : `${BUILD_MESSAGES[selectedResult.reason]} 再点别处换位置。`
-    } else if (hoverAnchor && previewResult) {
-      message = previewResult.ok
+        : `${BUILD_MESSAGES[check.reason]} 再点别处换位置。`
+    } else if (point && check) {
+      message = check.ok
         ? '这里可以建！点一下这里把位置定下来。'
-        : `${BUILD_MESSAGES[previewResult.reason]} 换个地方，或先挖空这里。`
+        : `${BUILD_MESSAGES[check.reason]} 换个地方，或先清理这里。`
     }
 
     hooks.onBuild?.({
-      available, active: building, selected: candidate !== null,
-      valid: candidate !== null && selectedResult?.ok === true, count: world.pods.length,
-      message,
+      podAvailable, planterAvailable, mode: buildMode, selected: candidate !== null,
+      valid: candidate !== null && valid, message,
+      podCount: world.pods.length, planterCount: world.farm.planters.length,
     })
   }
 
@@ -287,6 +330,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     hooks.onMessage(message, kind)
   }
 
+  /** 玩家亲自做完一件事：所有作物长一档；刚长熟的提醒一下。 */
+  const growAfterWork = (): void => {
+    if (world.farm.planters.length === 0) return
+    const ripeBefore = ripePlanters(world).length
+    if (advancePlanters(world).length === 0) return
+    renderer.refreshFarm()
+    if (ripePlanters(world).length > ripeBefore) notify('🌱 有菜长熟啦！点一下就能收。')
+  }
+
   const remainingSegments = (): number => {
     const x = world.exploration.shaftX
     return x === null ? 0 : shaftRemainingSegments(world, x)
@@ -306,6 +358,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     if (!order) return
     const interruptedChain = chaining
     chaining = false
+    // 引水也是一次委托：被中断时要放开按钮，否则会一直卡在"阿土在接水管……"。
+    supplying = false
     endOrder()
     traveling = false
     renderer.cancelExplorationAnimation()
@@ -367,6 +421,14 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       relics: relicSummary(world),
     })
     if (chainDone && !pendingRest) hooks.onProgress({ ...explorationGuide(world), relics: relicSummary(world) })
+    hooks.onFarm?.({
+      canSupplyWater: canSupplyWater(world), supplying,
+      unlocked: isFarmUnlocked(world),
+      planterCount: world.farm.planters.length,
+      ripe: ripePlanters(world).length,
+      food: world.farm.food,
+      harvested: world.farm.harvests > 0,
+    })
     hooks.onExploration?.({
       clue: world.exploration.clueFound, upgraded: world.exploration.pickaxeUpgraded,
       connected: shaftConnected(world), entered: world.exploration.entered, found: world.exploration.springFound,
@@ -502,6 +564,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     renderer.refreshTerrain([target])
     renderer.refreshExploration()
     scheduleSave()
+    growAfterWork()
     pushProgress()
     const x = world.exploration.shaftX ?? target.x
     if (shaftConnected(world)) {
@@ -529,13 +592,18 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       }
       world.exploration.lamps.push({ x: cell.x, y: 19 })
       history.record({ kind: 'lamp', x: cell.x, y: 19 })
-      renderer.refreshExploration(); scheduleSave(); pushProgress()
+      renderer.refreshExploration(); scheduleSave(); growAfterWork(); pushProgress()
       notify('🏮 新地方亮起一盏小壁灯！还能继续选位置。')
       return
     }
-    if (building) {
+    if (buildMode === 'pod') {
       // 点击格 = 舱体底边中间格；孩子只需点“想放床的地面”。
       candidate = podAnchorFromPointer(cell)
+      pushBuild()
+      return
+    }
+    if (buildMode === 'planter') {
+      candidate = cell
       pushBuild()
       return
     }
@@ -567,7 +635,26 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       return
     }
 
-    // 3) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
+    // 3) 种植槽：熟了就能收，没熟只给一句提示
+    const planter = planterAt(world, cell.x, cell.y)
+    if (planter) {
+      if (planter.growth < RIPE_STAGE) {
+        notify(`🌱 还没长熟：你每干一件事，它就长高一档（现在 ${planter.growth}/${RIPE_STAGE}）。`)
+        return
+      }
+      if (harvestPlanter(world, cell.x, cell.y)) {
+        const first = world.farm.harvests === 1
+        renderer.refreshFarm()
+        playHarvest()
+        renderer.playHarvest(cell)
+        scheduleSave(); pushProgress()
+        notify(`🥕 收了一份！家里有 ${world.farm.food} 份吃的。`)
+        if (first) hooks.onMilestone?.({ emoji: '🥕', title: '第一份收成！', detail: '点「请大家吃饭」，看看伙伴们' })
+      }
+      return
+    }
+
+    // 4) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
     if (inRect(LANDMARKS.crystalZone, cell)) {
       if (!world.progress.crystalCollected) {
         const result = collectCrystal(world, cell.x, cell.y)
@@ -592,7 +679,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       // 已收集 + 点的是泥土 → 保持自由挖掘
     }
 
-    // 4) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
+    // 5) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
     if (inRect(LANDMARKS.generatorZone, cell)) {
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
@@ -615,7 +702,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       return
     }
 
-    // 5) 普通挖掘（严格单格）：尘土即反馈，不再逐次弹文字
+    // 6) 普通挖掘（严格单格）：尘土即反馈，不再逐次弹文字
     const result = dig(world, cell.x, cell.y)
     if (!result.ok) {
       hooks.onMessage(describeDigFailure(result))
@@ -630,6 +717,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     renderer.playDigEffect(cell)
     renderer.refreshExploration()
     scheduleSave()
+    growAfterWork()
     pushProgress()
     const relic = relicAt(cell.x, cell.y)
     if (relic) {
@@ -702,9 +790,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         return
       }
       const cell = screen ? renderer.tileAtScreen(screen) : null
-      renderer.setHoverCell(building ? null : cell)
-      renderer.setCursor(building ? 'copy' : pickCursor(cell))
-      if (building) {
+      renderer.setHoverCell(buildMode === 'none' ? cell : null)
+      renderer.setCursor(buildMode === 'none' ? pickCursor(cell) : 'copy')
+      if (buildMode !== 'none') {
         if (hoverBuild?.x === cell?.x && hoverBuild?.y === cell?.y) return
         hoverBuild = cell
         pushBuild()
@@ -747,11 +835,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   window.addEventListener('blur', onWindowBlur)
 
   return {
-    setBuildMode: (active) => {
+    setBuildMode: (mode) => {
       if (traveling) return
       lampMode = false
-      if (active && (!world.progress.coreRepaired || world.pods.length > 0)) return
-      building = active
+      if (mode === 'pod' && (!world.progress.coreRepaired || !canBuildMorePods(world))) return
+      if (mode === 'planter' && !isFarmUnlocked(world)) return
+      buildMode = buildMode === mode ? 'none' : mode
       candidate = null
       hoverBuild = null
       renderer.setHoverCell(null)
@@ -759,13 +848,28 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     },
     confirmBuild: () => {
       if (traveling) return
-      if (!building || !candidate) return
+      if (buildMode === 'planter') {
+        if (!candidate) return
+        const check = canPlacePlanter(world, candidate.x, candidate.y)
+        if (!check.ok) { hooks.onMessage(BUILD_MESSAGES[check.reason], 'warning'); return }
+        const planter = placePlanter(world, candidate.x, candidate.y)
+        if (!planter) return
+        history.record({ kind: 'planter', id: planter.id })
+        candidate = null
+        renderer.refreshFarm()
+        renderer.playBurst((planter.x + 0.5) * TILE_SIZE, (planter.y + 0.5) * TILE_SIZE, { color: 0x9ed7a4, count: 10 })
+        scheduleSave()
+        pushProgress()
+        notify('🌱 种下一槽菜啦！你每干一件事，它就长高一档。')
+        return
+      }
+      if (buildMode !== 'pod' || !candidate) return
       const check = canPlacePod(world, candidate.x, candidate.y)
       if (!check.ok) { hooks.onMessage(BUILD_MESSAGES[check.reason], 'warning'); return }
       const pod = placePod(world, candidate.x, candidate.y)
       if (!pod) return
       history.record({ kind: 'pod', id: pod.id })
-      building = false
+      buildMode = 'none'
       candidate = null
       hoverBuild = null
       resting = false
@@ -788,7 +892,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
     zoomBy: (delta) => renderer.zoomBy(delta),
     centerOnHome: () => { renderer.focusHome() },
     lookDown: () => {
-      building = false
+      buildMode = 'none'
       candidate = null
       hoverBuild = null
       pushBuild()
@@ -796,7 +900,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       renderer.focusWater()
     },
     showOverview: () => {
-      building = false
+      buildMode = 'none'
       candidate = null
       hoverBuild = null
       pushBuild()
@@ -813,6 +917,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       }
       // 撤销只影响瓦片：增量刷新本格与邻域边缘
       if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
+      else if (restored.kind === 'planter') renderer.refreshFarm()
       else if (restored.kind === 'lamp') renderer.refreshExploration()
       else {
         renderer.refreshTerrain([restored])
@@ -857,9 +962,39 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
         } else { renderer.focusHome(); notify('⌂ 顺着梯子回到家啦！') }
       })
     },
+    supplyWater: () => {
+      if (traveling || supplying || !canSupplyWater(world)) return
+      const from = world.exploration.explorer
+      if (!from) return
+      const route = walkingRoute(world, from, { ...LANDMARKS.spring })
+      if (!route) { notify('先挖开脚边的泥土，让阿土能走到水边。'); return }
+      supplying = true
+      pushProgress()
+      moveExplorer(route, () => {
+        world.farm.waterSupplied = true
+        supplying = false
+        playWaterSupplied()
+        renderer.playSupplyWater()
+        renderer.refreshFarm()
+        renderer.playMoleReaction('水到家啦！')
+        notify('🚰 水管接好啦！有了水，第一层就能种出吃的。')
+        hooks.onMilestone?.({ emoji: '🚰', title: '水到家啦！', detail: '第一层可以种菜了 · 选「种植槽」种下第一棵' })
+      })
+    },
+    feed: () => {
+      if (traveling || !feedPartners(world)) return
+      playMealTime()
+      renderer.playMealCelebration()
+      renderer.playMoleReaction('开饭啦！')
+      scheduleSave()
+      pushProgress()
+      notify(world.farm.food > 0
+        ? `🍽 伙伴们吃得好开心！还剩 ${world.farm.food} 份。`
+        : '🍽 伙伴们吃得好开心！再去收点菜吧。')
+    },
     toggleLamp: () => {
       if (!world.exploration.springFound || traveling) return
-      lampMode = !lampMode; building = false; candidate = null; pushProgress()
+      lampMode = !lampMode; buildMode = 'none'; candidate = null; pushProgress()
       notify(lampMode ? '🏮 点挖空的泉水层洞壁，安一盏小灯。再点工具可以收起。' : '⛏ 继续自由挖掘吧。')
     },
     importLegacy: async () => {

@@ -83,7 +83,7 @@ export type GuideHighlight =
   | { kind: 'dig'; rect: Rect }
   | { kind: 'collect'; rect: Rect }
   | { kind: 'repair'; rect: Rect }
-  /** 有了水之后回第一层给新朋友安床 */
+  /** 有了水之后回第一层给新朋友安床 / 种菜 */
   | { kind: 'build'; rect: Rect }
   | { kind: 'none' }
 
@@ -107,19 +107,27 @@ export function guideHighlight(world: WorldState): GuideHighlight {
       const frontier = span ? span.left > LANDMARKS.spring.x - 1 ? span.left - 1 : span.right + 1 : x
       return { kind: 'collect', rect: { x: springVisible(world) ? LANDMARKS.spring.x : frontier, y: 21, w: 1, h: 1 } }
     }
-    // 有水了：新朋友愿意搬来，带玩家回暖窝层挖空地、安新床。
-    if (canBuildMorePods(world)) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
+    // 找到水之后先把它引上来（点面板上的「把水引到家里」）
+    if (!world.farm.waterSupplied) return { kind: 'repair', rect: { ...LANDMARKS.spring, w: 1, h: 1 } }
+    // 水到家了：给新朋友安床、在第一层种菜——高亮都指回暖窝层的建造建议区
+    if (canBuildMorePods(world) || world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
   }
   return { kind: 'none' }
 }
 
+/**
+ * 探索 + 引水 + 种植的主线引导（一步一步只显示当前这一步）。
+ * 判定全部来自世界数据，顺序无关；进度位单调，收获过一次就不会回退。
+ */
 export function explorationGuide(world: WorldState): { title: string; speech: string; outcome: string; done: number; total: number; finished: boolean } {
   const e = world.exploration
+  const farm = world.farm
   const connected = shaftConnected(world)
   const waiting = waitingPartners(world)
-  // 最后一步在找到水之前不算数：那时"没有等床的伙伴"只是因为朋友还没来。
+  // 在找到水之前，这两步都不算数：那时"没等床的伙伴""没收成"只是还没开始。
   const friendsSettled = e.springFound && waiting === 0
-  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, friendsSettled].filter(Boolean).length
+  const harvested = farm.harvests > 0
+  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested].filter(Boolean).length
   const guide = !e.clueFound
     ? ['去找能让新朋友留下的水', '伙伴说：家里要是有水，还有两位朋友愿意搬来住！挖通裂纹上方的泥土，再点一下裂纹——我去听听里面有没有水声。', '有了水，新朋友才肯搬进来。']
     : !e.pickaxeUpgraded
@@ -130,8 +138,12 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
           ? ['沿梯子去第二层', '通啦！点“沿梯子下去”，和我一起到新地方看看！', '顺着真实的梯子，抵达泉水层。']
           : !e.springFound
             ? ['找到滴答响的泉水', springVisible(world) ? '泉水露出来啦！点一下泉水，我会沿着地面走过去看看。' : `水声从${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边传来！点着泥土一格一格挖过去，挖到水边我就能走过去看看。`, '找到水源，这里也能成为家园。']
-            : waiting > 0
-              ? ['安顿新朋友', `泉水找到啦！还有 ${waiting} 位朋友说：有水就搬来住。回暖窝层挖出一块空地，给他们安一张小床吧。`, '伙伴多了，家里更热闹。']
-              : ['家越住越大！', '伙伴们都有床啦。想继续扩建，就往左右挖一挖。', '地下小家园，还会一层一层长大。']
-  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 6, finished: friendsSettled }
+            : !farm.waterSupplied
+              ? ['把水引到家里', '找到水啦！点「把水引到家里」，我把水管顺着梯子接到大厅——以后在家就能种菜。', '家里有了水，第一层就能种出吃的。']
+              : waiting > 0
+                ? ['安顿新朋友', `家里有水了！还有 ${waiting} 位朋友说：有水就搬来住。回暖窝层挖出一块空地，给他们安一张小床吧。`, '伙伴多了，家里更热闹。']
+                : !harvested
+                  ? ['种出第一份食物', '点「种植槽」，在第一层挖空的地面上摆一个。你每干一件事，它就会长大一档：长熟了再点一下就能收！', '有菜吃，伙伴才住得安心。']
+                  : ['家越住越大！', '家里有水、有床、有新鲜菜啦。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
+  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 8, finished: friendsSettled && harvested }
 }

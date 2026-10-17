@@ -4,6 +4,8 @@ import {
   MAP_WIDTH,
   TILE,
   WORLD_VERSION,
+  type FarmState,
+  type Planter,
   type TileType,
   type WorldProgress,
   type WorldState,
@@ -11,9 +13,11 @@ import {
   type ExplorationState,
   createInitialWorld,
   freshExploration,
+  freshFarm,
   BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
+import { canPlacePlanter, RIPE_STAGE } from './farm'
 import { canStand, explorationAccessIntact, HALL_START_Y, shaftConnected, SHAFT_LAST_Y, springVisible, walkingRoute } from './exploration'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
@@ -35,6 +39,8 @@ export interface SavePayload {
     progress: WorldProgress
     pods: SleepPod[]
     exploration: ExplorationState
+    /** 引水与种植（v6 起） */
+    farm: FarmState
   }
 }
 
@@ -50,6 +56,7 @@ export function serialize(world: WorldState): SavePayload {
       progress: { ...world.progress },
       pods: world.pods.map((pod) => ({ ...pod })),
       exploration: structuredClone(world.exploration),
+      farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
     },
   }
 }
@@ -141,28 +148,29 @@ export function deserialize(raw: unknown): LoadResult {
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
         pods: [],
         exploration: freshExploration(),
+        farm: freshFarm(),
       },
     }
   }
-  if (payload.version !== 2 && payload.version !== 4 && payload.version !== WORLD_VERSION) {
+  if (payload.version !== 2 && payload.version !== 4 && payload.version !== 5 && payload.version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${payload.version}，当前 v${WORLD_VERSION}）`)
   }
 
   const progress = validateProgress((payload.world as { progress?: unknown }).progress)
   if (!progress) return err('存档进度字段无效')
 
-  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [], exploration: freshExploration() }
+  const world: WorldState = { ...base.data, version: WORLD_VERSION, progress, pods: [], exploration: freshExploration(), farm: freshFarm() }
   if (payload.version === 4) {
     // 仅在用户明确复制时调用；旧版第二层从不可操作，替换下部不会损失玩家建设。
     const blueprint = createInitialWorld()
     for (let y = 12; y < MAP_HEIGHT; y++) world.tiles[y] = [...blueprint.tiles[y]]
   }
-  if (payload.version === WORLD_VERSION) {
+  if (payload.version === WORLD_VERSION || payload.version === 5) {
     const exploration = validateExploration((payload.world as { exploration?: unknown }).exploration, world)
     if (!exploration) return err('存档探索进度或梯道无效')
     world.exploration = exploration
   }
-  if (payload.version === WORLD_VERSION || payload.version === 4) {
+  if (payload.version === WORLD_VERSION || payload.version === 5 || payload.version === 4) {
     const rawPods = (payload.world as { pods?: unknown }).pods
     if (!Array.isArray(rawPods) || rawPods.length > MAP_WIDTH * MAP_HEIGHT) return err('存档睡眠舱数据无效')
     const ids = new Set<number>()
@@ -182,11 +190,51 @@ export function deserialize(raw: unknown): LoadResult {
     if (world.exploration.clueFound && (!world.pods.length || !world.progress.coreRepaired)) return err('存档探索前置建设无效')
     if (!explorationAccessIntact(world)) return err('存档探索通路无效')
   }
+  if (payload.version === WORLD_VERSION) {
+    const farm = validateFarm((payload.world as { farm?: unknown }).farm, world)
+    if (!farm) return err('存档引水或种植数据无效')
+    world.farm = farm
+  }
 
   return {
     ok: true,
     savedAt,
     world,
+  }
+}
+
+/** v6 起：引水状态、种植槽与食物。水必须先于种植，槽位也要仍在合法地面上。 */
+function validateFarm(raw: unknown, world: WorldState): FarmState | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const farm = raw as FarmState
+  if (typeof farm.waterSupplied !== 'boolean') return null
+  if (!Number.isInteger(farm.food) || farm.food < 0) return null
+  if (!Number.isInteger(farm.harvests) || farm.harvests < 0) return null
+  if (!Array.isArray(farm.planters) || farm.planters.length > MAP_WIDTH * MAP_HEIGHT) return null
+  // 没有泉水就没有水可引；水没引上来就不该有作物。
+  if (farm.waterSupplied && !world.exploration.springFound) return null
+  if (farm.planters.length > 0 && !farm.waterSupplied) return null
+  const ids = new Set<number>()
+  const planters: Planter[] = []
+  for (const item of farm.planters) {
+    if (typeof item !== 'object' || item === null) return null
+    const planter = item as Planter
+    if (!Number.isInteger(planter.id) || planter.id < 1 || ids.has(planter.id)) return null
+    if (!Number.isInteger(planter.x) || !Number.isInteger(planter.y)) return null
+    if (!Number.isInteger(planter.growth) || planter.growth < 0 || planter.growth > RIPE_STAGE) return null
+    ids.add(planter.id)
+    planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth })
+  }
+  const restored = world.farm
+  world.farm = { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests }
+  try {
+    for (const planter of planters) {
+      world.farm.planters = planters.filter((other) => other.id !== planter.id)
+      if (!canPlacePlanter(world, planter.x, planter.y).ok) return null
+    }
+    return { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests }
+  } finally {
+    world.farm = restored
   }
 }
 

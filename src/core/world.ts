@@ -26,7 +26,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 5
+export const WORLD_VERSION = 6
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -90,6 +90,29 @@ export interface WorldProgress {
   coreRepaired: boolean
 }
 
+/** 第一层的一格种植槽：位置自由，growth 0 刚种下 → RIPE_STAGE 可收 */
+export interface Planter extends Cell {
+  id: number
+  growth: number
+}
+
+/**
+ * 引水与种植：第二层的水引上来之后，第一层才成为生产空间。
+ * 生长不用真实时间，靠"玩家干活"推进——孩子随时收，不必等。
+ */
+export interface FarmState {
+  /** 泉水已经引到家里（大厅有水桶，第一层可以种东西了） */
+  waterSupplied: boolean
+  /** 第一层摆下的种植槽 */
+  planters: Planter[]
+  /** 收成存下的食物份数（吃饭会减少） */
+  food: number
+  /** 累计收成次数：只增不减，用来判断"已经收过第一份" */
+  harvests: number
+}
+
+export const freshFarm = (): FarmState => ({ waterSupplied: false, planters: [], food: 0, harvests: 0 })
+
 /** 世界状态：一张固定小地图 + 第一夜进度 */
 export interface WorldState {
   version: number
@@ -102,6 +125,7 @@ export interface WorldState {
   progress: WorldProgress
   pods: SleepPod[]
   exploration: ExplorationState
+  farm: FarmState
 }
 
 export interface ExplorationState {
@@ -161,6 +185,7 @@ export function createInitialWorld(): WorldState {
     progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
     pods: [],
     exploration: freshExploration(),
+    farm: freshFarm(),
   }
 }
 
