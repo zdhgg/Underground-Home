@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Container, Sprite, Text, Texture, TextureSource, type Graphics, type Ticker } from 'pixi.js'
+import { placePod } from '../src/core/build'
 import { dig } from '../src/core/dig'
 import { createDigHistory } from '../src/core/history'
 import { collectCrystal, repairCore } from '../src/core/interact'
-import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE } from '../src/core/world'
+import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE, type SleepPod } from '../src/core/world'
 import { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrainTextures'
 import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
 import { loadCrystalTexture } from '../src/render/crystalTexture'
 import type { CrystalFeedback } from '../src/render/CrystalFeedback'
 import { LAMP_LOCATIONS, loadShelterFixtureTextures } from '../src/render/shelterFixtures'
+import { bedSlots } from '../src/render/sleepPods'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -71,6 +73,21 @@ interface TerrainProbe {
   worldLayer: Container
   darkness: Graphics
   lamps: Graphics
+  podLayer: Container
+  podEntrance: unknown
+  friends: {
+    view: Container
+    body: Graphics
+    bodyColor: number
+    baseY: number
+    phase: number
+    pose: string
+    bed: { x: number; y: number } | null
+    inEntrance: boolean
+  }[]
+  refreshPods(): void
+  playPodEntrance(pod: SleepPod, onSettled: () => void): void
+  playPodCelebration(pod: SleepPod): void
   drawLighting(): void
   tick(ticker: Ticker): void
   updateTerrainCell(x: number, y: number): void
@@ -320,5 +337,80 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(lampSprites.every((lamp) => lamp.tint === 0x666666)).toBe(true)
     expect(view.shelterFixtures.children).toEqual(fixtures)
     expect(JSON.stringify(world)).toBe(snapshot)
+  })
+
+  describe('睡眠舱入场与休息', () => {
+  function carvedWorld() {
+    const next = createInitialWorld()
+    next.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    for (let y = 8; y < 10; y++) for (let x = 12; x < 15; x++) dig(next, x, y)
+    return next
+  }
+
+  it('载入带睡眠舱的存档时伙伴直接睡在床上，不重播入场', () => {
+    const saved = carvedWorld()
+    const pod = placePod(saved, 12, 8)!
+    renderer.setWorld(saved)
+    const beds = bedSlots(pod)
+    expect(view.podEntrance).toBeNull()
+    expect(view.friends).toHaveLength(2)
+    view.friends.forEach((friend, i) => {
+      expect(friend.pose).toBe('rest')
+      expect(friend.bed).toEqual(beds[i])
+      expect(friend.view.x).toBeCloseTo(beds[i].x, 5)
+      expect(friend.view.y).toBeCloseTo(beds[i].y, 5)
+      expect(friend.view.scale.x).toBeCloseTo(0.65, 5)
+    })
+  })
+
+  it('建成刷新只重建舱体，伙伴仍留在避难所等待出发', () => {
+    const next = carvedWorld()
+    renderer.setWorld(next)
+    const beforeY = view.friends[0].view.y
+    placePod(next, 12, 8)
+    renderer.refreshPods()
+    expect(view.podEntrance).toBeNull()
+    expect(view.friends[0].pose).toBe('idle')
+    expect(view.friends[0].view.y).toBe(beforeY)
+    expect(view.podLayer.children).toHaveLength(1)
+  })
+
+  it('建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调', () => {
+    const next = carvedWorld()
+    renderer.setWorld(next)
+    const pod = placePod(next, 12, 8)!
+    renderer.refreshPods()
+    let posesAtSettle: string[] = []
+    const settled = vi.fn(() => {
+      posesAtSettle = view.friends.map((friend) => friend.pose)
+    })
+    renderer.playPodEntrance(pod, settled)
+    expect(settled).not.toHaveBeenCalled()
+
+    for (let i = 0; i < 40; i++) view.tick({ deltaMS: 16 } as Ticker)
+    expect(view.friends[0].pose).not.toBe('rest')
+    expect(settled).not.toHaveBeenCalled()
+
+    for (let i = 0; i < 200; i++) view.tick({ deltaMS: 16 } as Ticker)
+    const beds = bedSlots(pod)
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(posesAtSettle).toEqual(['rest', 'rest'])
+    view.friends.forEach((friend, i) => {
+      expect(friend.pose).toBe('rest')
+      expect(friend.view.x).toBeCloseTo(beds[i].x, 5)
+      // 休息时会有 ±1.2px 的呼吸起伏
+      expect(Math.abs(friend.view.y - beds[i].y)).toBeLessThanOrEqual(1.5)
+    })
+  })
+
+  it('路径不可达时兜底直接上床，不把伙伴留在半路', () => {
+    renderer.setWorld(createInitialWorld())
+    const stranded: SleepPod = { id: 7, x: 9, y: 13, door: 'right' }
+    const settled = vi.fn()
+    renderer.playPodEntrance(stranded, settled)
+    expect(settled).toHaveBeenCalledTimes(1)
+    expect(view.podEntrance).toBeNull()
+    expect(view.friends.every((friend) => friend.pose === 'rest')).toBe(true)
+  })
   })
 })

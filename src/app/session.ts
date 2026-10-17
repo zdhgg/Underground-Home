@@ -2,7 +2,7 @@ import { dig, type DigResult } from '../core/dig'
 import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
-import { currentMission, guideHighlight, missionSummary } from '../core/missions'
+import { FIRST_NIGHT_MISSIONS, currentMission, guideHighlight, missionSummary } from '../core/missions'
 import {
   createIndexedDbStore,
   createMemoryStore,
@@ -108,6 +108,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
   let building = false
   let candidate: Cell | null = null
   let hoverBuild: Cell | null = null
+  /** 伙伴是否已经在床上休息；不写入存档，重新载入时由第一间睡眠舱推导 */
+  let resting = false
 
   const pushBuild = (): void => {
     // 本阶段只开放第一间睡眠舱：建成后收起工具，避免没人使用的空舱造成误解。
@@ -160,6 +162,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       const result = deserialize(raw)
       if (result.ok) {
         world = result.world
+        resting = world.pods.length > 0
         hooks.onMessage('💾 已恢复上次的进度')
       } else {
         hooks.onMessage(`存档读取失败（${result.error}），已开始新的第一夜`, 'warning')
@@ -189,14 +192,22 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
 
   const pushProgress = (): void => {
     const summary = missionSummary(world)
-    const mission = currentMission(world)
+    // 建成后到入睡前仍显示“睡眠舱”这一步；伙伴真正躺下才显示完成与庆祝。
+    const pendingRest = world.pods.length > 0 && !resting
+    const mission = pendingRest
+      ? FIRST_NIGHT_MISSIONS[FIRST_NIGHT_MISSIONS.length - 1]
+      : currentMission(world)
     hooks.onProgress({
       title: mission ? mission.title : '有灯、有床的小家园',
-      speech: mission ? mission.speech : '小床安好啦！你还可以继续挖空间，把家变得更大。',
+      speech: pendingRest
+        ? '小床安好啦！伙伴准备钻进被窝……'
+        : mission
+          ? mission.speech
+          : '伙伴睡得好香！你还可以继续挖空间，把家变得更大。',
       outcome: mission ? mission.outcome : '',
-      done: summary.done,
+      done: pendingRest ? Math.max(0, summary.done - 1) : summary.done,
       total: summary.total,
-      finished: summary.done >= summary.total,
+      finished: !pendingRest && summary.done >= summary.total,
     })
     pushBuild()
 
@@ -342,11 +353,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks):
       building = false
       candidate = null
       hoverBuild = null
-      renderer.refresh()
+      resting = false
+      // 只刷新舱体：保留伙伴当前站位，随后沿真实通道播放入场。
+      renderer.refreshPods()
       renderer.playBurst((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
       scheduleSave()
       pushProgress()
-      hooks.onMessage('🛏️ 小床安好啦！')
+      hooks.onMessage('🛏️ 小床安好啦！伙伴准备钻进被窝……')
+      renderer.playPodEntrance(pod, () => {
+        resting = true
+        renderer.playPodCelebration(pod)
+        pushProgress()
+        hooks.onMessage('💤 伙伴钻进被窝，睡着啦！')
+      })
     },
     zoomBy: (delta) => renderer.zoomBy(delta),
     centerOnHome: () => renderer.focusHome(),

@@ -2,6 +2,15 @@ import { Container, Graphics, Text } from 'pixi.js'
 import { TILE_SIZE, type SleepPod } from '../core/world'
 import { POD_SIZE } from '../core/build'
 
+/** 两位伙伴在舱内的床铺位置（身体中心）；门在左时床头靠右，反之靠左。 */
+export function bedSlots(pod: Pick<SleepPod, 'x' | 'y' | 'door'>): { x: number; y: number }[] {
+  const x = (pod.x + (pod.door === 'left' ? 2.35 : 0.65)) * TILE_SIZE
+  return [
+    { x, y: pod.y * TILE_SIZE + 19 },
+    { x, y: pod.y * TILE_SIZE + 43 },
+  ]
+}
+
 /** 玩法草案：嵌在洞壁里的双人床位，暂用程序化示意造型。 */
 export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door'>, preview = false): Container {
   const view = new Container()

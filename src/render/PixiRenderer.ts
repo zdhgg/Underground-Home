@@ -8,6 +8,7 @@ import {
   TILE_SIZE,
   isInside,
   type Cell,
+  type SleepPod,
   type TileType,
   type WorldState,
 } from '../core/world'
@@ -16,7 +17,8 @@ import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTex
 import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
 import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
-import { drawSleepPod } from './sleepPods'
+import { bedSlots, drawSleepPod } from './sleepPods'
+import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE } from '../core/build'
 import {
   WORLD_PIXEL_HEIGHT,
@@ -95,12 +97,43 @@ interface Ring {
   color: number
 }
 
+type FriendPose = 'idle' | 'walk' | 'climb' | 'rest'
+
 interface FriendSprite {
   view: Container
+  body: Graphics
+  bodyColor: number
+  /** 站立时的身体中心高度 */
   baseY: number
   phase: number
-  resting?: boolean
-  target?: { x: number; y: number }
+  pose: FriendPose
+  /** 休息时床铺的世界坐标；未入住为 null */
+  bed: { x: number; y: number } | null
+  /** 入场演出正在驱动时，跳过站立 / 呼吸动画 */
+  inEntrance: boolean
+}
+
+interface RoutePoint {
+  x: number
+  y: number
+  pose: 'walk' | 'climb' | 'enter'
+}
+
+interface PodTraveller {
+  friend: FriendSprite
+  delay: number
+  duration: number
+  points: RoutePoint[]
+  /** points 的累计长度，用于按距离插值 */
+  lengths: number[]
+  total: number
+  settled: boolean
+}
+
+interface PodEntrance {
+  elapsed: number
+  travellers: PodTraveller[]
+  onSettled: () => void
 }
 
 interface CameraTween {
@@ -148,6 +181,55 @@ function easeInOutCubic(k: number): number {
   return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2
 }
 
+// ---------- 伙伴：体态、站位与一次性入场 ----------
+
+const FRIEND_RADIUS = 13
+const FRIEND_REST_SCALE = 0.65
+const FRIEND_OUTLINE = 0x3a4a44
+/** 建成后先"准备一下"再出发，让玩家看清小床已经出现 */
+const ENTRANCE_PREPARE_DELAY = 0.45
+const ENTRANCE_STAGGER = 0.3
+const ENTRANCE_SEGMENT_TIME = 0.22
+
+const REPAIR_CONFETTI_ANCHORS = [
+  { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
+  { x: 23.9 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
+  { x: 21.5 * TILE_SIZE, y: 8.4 * TILE_SIZE },
+]
+
+/** 身体中心站在该格地面上的高度：向下找到第一块实心格 */
+function friendWalkY(world: WorldState, cell: Cell): number {
+  for (let y = cell.y + 1; y < world.height; y++) {
+    if (world.tiles[y][cell.x] !== TILE.EMPTY) return y * TILE_SIZE - FRIEND_RADIUS
+  }
+  return (cell.y + 1) * TILE_SIZE - FRIEND_RADIUS
+}
+
+/** 爬墙时向有岩壁的一侧贴一点，避免看起来悬空 */
+function friendWallOffset(world: WorldState, cell: Cell): number {
+  const left = isInside(world, cell.x - 1, cell.y) && world.tiles[cell.y][cell.x - 1] !== TILE.EMPTY
+  const right = isInside(world, cell.x + 1, cell.y) && world.tiles[cell.y][cell.x + 1] !== TILE.EMPTY
+  if (left && !right) return -3
+  if (right && !left) return 3
+  return 0
+}
+
+function paintFriend(body: Graphics, color: number, pose: FriendPose): void {
+  body.clear()
+  body.circle(0, 0, FRIEND_RADIUS).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+  body.circle(-7, -10, 5).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+  body.circle(7, -10, 5).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+  if (pose === 'rest') {
+    // 被子盖住下半身，只露出头和闭上的眼睛
+    body.roundRect(-12, -2, 24, 12, 5).fill(0xfff2d8).stroke({ width: 1.5, color: 0xa9886b })
+    body.moveTo(-6, -5).lineTo(-2, -5).moveTo(2, -5).lineTo(6, -5).stroke({ width: 2, color: 0x403c38 })
+  } else {
+    body.circle(-4, -2, 1.8).fill(0x403c38)
+    body.circle(4, -2, 1.8).fill(0x403c38)
+    body.circle(0, 4, 2.6).fill(0xd98a82)
+  }
+}
+
 /**
  * PixiJS 渲染器：只负责"世界 → 画面"。
  * 不包含任何游戏规则；挖掘 / 互动判定由 core 决定后再通知本层刷新。
@@ -176,6 +258,7 @@ export class PixiWorldRenderer {
   private springGlow: Graphics | null = null
   private machineGlow: Graphics | null = null
   private friends: FriendSprite[] = []
+  private podEntrance: PodEntrance | null = null
   private particles: Particle[] = []
   private rings: Ring[] = []
   private highlight: HighlightSpec | null = null
@@ -269,13 +352,19 @@ export class PixiWorldRenderer {
     this.refresh()
   }
 
-  /** 世界数据变化后刷新画面（收集 / 修复 / 载入后调用） */
+  /** 世界数据变化后刷新画面（收集 / 修复 / 载入 / 撤销后调用） */
   refresh(): void {
     this.refreshTerrain()
     this.rebuildLandmarks()
+    this.refreshPods()
+    this.rebuildFriends()
+  }
+
+  /** 只重建舱体，不碰伙伴；建成演出先刷新舱体再播放入场 */
+  refreshPods(): void {
+    this.podEntrance = null
     for (const child of this.podLayer.removeChildren()) child.destroy({ children: true })
     for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod(pod))
-    this.rebuildFriends()
   }
 
   setBuildPreview(cell: Cell | null, valid = false, door: 'left' | 'right' = 'left', hint = ''): void {
@@ -645,51 +734,48 @@ export class PixiWorldRenderer {
   // ---------- 内部：伙伴与特效 ----------
 
   private rebuildFriends(): void {
-    const previous = this.friends.map((friend) => ({ x: friend.view.x, y: friend.view.y }))
+    this.podEntrance = null
     for (const child of this.friendsLayer.removeChildren()) child.destroy({ children: true })
     this.friends = []
     const world = this.world
     if (!world) return
+    const pod = world.pods[0]
+    const beds = pod ? bedSlots(pod) : null
     const spots = [
-      { x: 18.6, y: 11.45 },
-      { x: 23.9, y: 11.45 },
+      { x: 18.6 * TILE_SIZE, y: friendWalkY(world, { x: 18, y: 11 }) },
+      { x: 23.9 * TILE_SIZE, y: friendWalkY(world, { x: 23, y: 11 }) },
     ]
     spots.forEach((spot, i) => {
-      const pod = world.pods[0]
+      const bodyColor = i === 0 ? 0xa8ba8e : 0xe9b6a7
       const view = new Container()
       const body = new Graphics()
-      const bodyColor = i === 0 ? 0xa8ba8e : 0xe9b6a7
-      body.circle(0, 0, 13).fill(bodyColor)
-      body.circle(-7, -10, 5).fill(bodyColor)
-      body.circle(7, -10, 5).fill(bodyColor)
-      if (pod) {
-        body.moveTo(-6, -2).lineTo(-2, -2).moveTo(2, -2).lineTo(6, -2).stroke({ width: 1.7, color: 0x403c38 })
-      } else {
-        body.circle(-4, -2, 1.8).fill(0x403c38)
-        body.circle(4, -2, 1.8).fill(0x403c38)
+      const friend: FriendSprite = {
+        view, body, bodyColor, baseY: spot.y, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
       }
-      body.circle(0, 4, 2.6).fill(0xd98a82)
+      if (beds) {
+        friend.bed = beds[i]
+        friend.pose = 'rest'
+        view.position.set(friend.bed.x, friend.bed.y)
+        view.scale.set(FRIEND_REST_SCALE)
+      } else {
+        view.position.set(spot.x, spot.y)
+      }
+      paintFriend(body, bodyColor, friend.pose)
       view.addChild(body)
-      view.position.set(spot.x * TILE_SIZE, spot.y * TILE_SIZE)
-      if (pod) view.scale.set(0.55)
-      if (pod && previous[i]) view.position.copyFrom(previous[i])
       this.friendsLayer.addChild(view)
-      this.friends.push({
-        view, baseY: spot.y * TILE_SIZE, phase: i * 1.7, resting: Boolean(pod),
-        target: pod ? { x: (pod.x + (pod.door === 'left' ? 2.35 : 0.65)) * TILE_SIZE, y: pod.y * TILE_SIZE + 19 + i * 24 } : undefined,
-      })
+      this.friends.push(friend)
     })
   }
 
   private updateFriends(dt: number): void {
+    this.advancePodEntrance(dt)
     const repaired = this.world?.progress.coreRepaired ?? false
     if (this.celebrationTime > 0) this.celebrationTime = Math.max(0, this.celebrationTime - dt)
     const celebrating = this.celebrationTime > 0
     for (const friend of this.friends) {
-      if (friend.resting && friend.target) {
-        const k = Math.min(1, dt * 4)
-        friend.view.x += (friend.target.x - friend.view.x) * k
-        friend.view.y += (friend.target.y - friend.view.y) * k
+      if (friend.inEntrance) continue
+      if (friend.pose === 'rest' && friend.bed) {
+        friend.view.y = friend.bed.y + Math.sin(this.elapsed * 2 + friend.phase) * 1.2
         continue
       }
       const bounce = celebrating
@@ -701,13 +787,142 @@ export class PixiWorldRenderer {
     }
   }
 
-  private spawnConfetti(): void {
+  /**
+   * 第一间睡眠舱的一次性入场：沿真实空洞格走到舱门，再钻进被窝。
+   * 只在建成时调用；重新载入时 rebuildFriends 会直接恢复成休息状态。
+   */
+  playPodEntrance(pod: SleepPod, onSettled: () => void): void {
+    const world = this.world
+    if (!world || this.friends.length === 0) return
+    this.podEntrance = null
+    const beds = bedSlots(pod)
+    const travellers: PodTraveller[] = []
+    this.friends.forEach((friend, i) => {
+      const from = { x: Math.floor(friend.view.x / TILE_SIZE), y: Math.floor(friend.view.y / TILE_SIZE) }
+      const route = findEntranceRoute(world, from, pod)
+      if (!route) return
+      const points: RoutePoint[] = [{ x: friend.view.x, y: friend.view.y, pose: 'walk' }]
+      route.forEach((cell, index) => {
+        const prev = route[index - 1]
+        const pose: 'walk' | 'climb' = prev && prev.y !== cell.y ? 'climb' : 'walk'
+        points.push({
+          pose,
+          x: pose === 'climb'
+            ? (cell.x + 0.5) * TILE_SIZE + friendWallOffset(world, cell)
+            : (cell.x + 0.5) * TILE_SIZE,
+          y: pose === 'climb' ? (cell.y + 0.5) * TILE_SIZE : friendWalkY(world, cell),
+        })
+      })
+      points.push({ x: beds[i].x, y: beds[i].y, pose: 'enter' })
+      const lengths = [0]
+      for (let j = 1; j < points.length; j++) {
+        lengths.push(lengths[j - 1] + Math.hypot(points[j].x - points[j - 1].x, points[j].y - points[j - 1].y))
+      }
+      travellers.push({
+        friend,
+        delay: ENTRANCE_PREPARE_DELAY + i * ENTRANCE_STAGGER,
+        duration: Math.min(2.6, Math.max(0.9, points.length * ENTRANCE_SEGMENT_TIME)),
+        points,
+        lengths,
+        total: lengths[lengths.length - 1],
+        settled: false,
+      })
+      friend.inEntrance = true
+      friend.pose = 'walk'
+      paintFriend(friend.body, friend.bodyColor, 'walk')
+    })
+    if (travellers.length !== this.friends.length) {
+      this.settleFriendsInBed(beds)
+      onSettled()
+      return
+    }
+    this.podEntrance = { elapsed: 0, travellers, onSettled }
+  }
+
+  /** 路径异常时的兜底：直接放到床上，避免伙伴卡住 */
+  private settleFriendsInBed(beds: { x: number; y: number }[]): void {
+    this.podEntrance = null
+    this.friends.forEach((friend, i) => {
+      friend.inEntrance = false
+      friend.pose = 'rest'
+      friend.bed = beds[i]
+      friend.view.scale.set(FRIEND_REST_SCALE)
+      friend.view.position.set(beds[i].x, beds[i].y)
+      paintFriend(friend.body, friend.bodyColor, 'rest')
+    })
+  }
+
+  private advancePodEntrance(dt: number): void {
+    const entrance = this.podEntrance
+    if (!entrance) return
+    entrance.elapsed += dt
+    let allSettled = true
+    for (const traveller of entrance.travellers) {
+      const friend = traveller.friend
+      const local = entrance.elapsed - traveller.delay
+      if (local < 0) {
+        allSettled = false
+        continue
+      }
+      if (local >= traveller.duration) {
+        if (!traveller.settled) {
+          traveller.settled = true
+          friend.inEntrance = false
+          friend.pose = 'rest'
+          friend.view.scale.set(FRIEND_REST_SCALE)
+          const last = traveller.points[traveller.points.length - 1]
+          friend.bed = { x: last.x, y: last.y }
+          friend.view.position.set(last.x, last.y)
+          paintFriend(friend.body, friend.bodyColor, 'rest')
+        }
+        continue
+      }
+      allSettled = false
+      const distance = (local / traveller.duration) * traveller.total
+      let index = 0
+      while (index < traveller.points.length - 2 && traveller.lengths[index + 1] < distance) index++
+      const from = traveller.points[index]
+      const to = traveller.points[index + 1]
+      const segLength = traveller.lengths[index + 1] - traveller.lengths[index]
+      const k = segLength > 0 ? Math.min(1, Math.max(0, (distance - traveller.lengths[index]) / segLength)) : 0
+      let x = from.x + (to.x - from.x) * k
+      let y = from.y + (to.y - from.y) * k
+      let pose: FriendPose
+      if (to.pose === 'climb') {
+        pose = 'climb'
+        x += Math.sin(local * 13 + friend.phase) * 1.5
+        y += Math.sin(local * 13 + friend.phase * 1.3) * 1
+      } else if (to.pose === 'enter') {
+        pose = 'walk'
+        friend.view.scale.set(1 - (1 - FRIEND_REST_SCALE) * k)
+      } else {
+        pose = 'walk'
+        friend.view.scale.set(1)
+        y += Math.abs(Math.sin(local * 11 + friend.phase)) * 2
+      }
+      if (friend.pose !== pose) {
+        friend.pose = pose
+        paintFriend(friend.body, friend.bodyColor, pose)
+      }
+      friend.view.position.set(x, y)
+    }
+    if (allSettled) {
+      const callback = entrance.onSettled
+      this.podEntrance = null
+      callback()
+    }
+  }
+
+  /** 入舱 + 入睡完成后的庆祝反馈；只作用在新睡眠舱附近 */
+  playPodCelebration(pod: SleepPod): void {
+    const x = (pod.x + POD_SIZE.w / 2) * TILE_SIZE
+    const y = (pod.y + POD_SIZE.h / 2) * TILE_SIZE
+    this.playBurst(x, y, { color: 0xffd98a, count: 16, speed: 95, ring: true, ringRadius: 70 })
+    this.spawnConfetti([{ x, y: y - 40 }])
+  }
+
+  private spawnConfetti(anchors: ReadonlyArray<{ x: number; y: number }> = REPAIR_CONFETTI_ANCHORS): void {
     const colors = [0xf6c85f, 0x9ee7f4, 0xf2a7b3, 0xa8e6cf]
-    const anchors = [
-      { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
-      { x: 23.9 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
-      { x: 21.5 * TILE_SIZE, y: 8.4 * TILE_SIZE },
-    ]
     for (let i = 0; i < 18; i++) {
       const anchor = anchors[i % anchors.length]
       const n = hash(i, 3)
