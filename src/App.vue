@@ -12,7 +12,7 @@ const messageWarning = ref(false)
 const toastVisible = ref(false)
 const progress = ref<SessionProgress>({
   title: '找到发光的能源石',
-  speech: '家里又黑又冷……挖开左边泛蓝光的泥土，找一找能源石！',
+  speech: '外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。',
   outcome: '能源石能把家园照亮。',
   done: 0,
   total: 4,

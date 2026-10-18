@@ -13,6 +13,8 @@ import { loadCrystalTexture } from '../src/render/crystalTexture'
 import type { CrystalFeedback } from '../src/render/CrystalFeedback'
 import { LAMP_LOCATIONS, loadShelterFixtureTextures } from '../src/render/shelterFixtures'
 import { bedSlots } from '../src/render/sleepPods'
+import { loadSurfaceTextures } from '../src/render/surfaceTextures'
+import type { SurfaceScene } from '../src/render/surfaceScene'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -46,6 +48,11 @@ vi.mock('../src/render/shelterFixtures', async (importOriginal) => ({
   loadShelterFixtureTextures: vi.fn(),
 }))
 
+vi.mock('../src/render/surfaceTextures', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/surfaceTextures')>(),
+  loadSurfaceTextures: vi.fn(),
+}))
+
 function texture(size = 64): Texture {
   return new Texture({ source: new TextureSource({ width: size, height: size }) })
 }
@@ -59,6 +66,9 @@ function textures(): TerrainTextures {
 }
 
 interface TerrainProbe {
+  surfaceScene: SurfaceScene
+  camera: { x: number; y: number; zoom: number }
+  viewport: { width: number; height: number }
   tileSprites: { base: Sprite; edges: Sprite[] }[][]
   terrainLayer: Container
   hover: Graphics
@@ -113,9 +123,20 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   let art: TerrainTextures
   let world: ReturnType<typeof createInitialWorld>
 
+  it('初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根', () => {
+    for (const [width, height] of [[1440, 800], [1024, 600], [927, 482], [760, 360]]) {
+      view.viewport = { width, height }
+      renderer.focusHome()
+      const camera = view.camera
+      expect((SURFACE_Y * TILE_SIZE - camera.y) * camera.zoom).toBeGreaterThan(145)
+      expect((12 * TILE_SIZE - camera.y) * camera.zoom).toBeLessThan(height - 20)
+    }
+  })
+
   beforeEach(async () => {
     vi.stubGlobal('window', { devicePixelRatio: 1 })
     art = textures()
+    vi.mocked(loadSurfaceTextures).mockResolvedValue({ horizon: texture(724), woodland: texture(724), entrance: texture(1024) })
     vi.mocked(loadTerrainTextures).mockResolvedValue(art)
     vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({
       source: new TextureSource({ width: 1536, height: 1024 }),

@@ -28,6 +28,8 @@ import { foundRelics } from '../core/relics'
 import { drawRelic } from './relicProps'
 import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
+import { SurfaceScene, SURFACE_ENTRANCE } from './surfaceScene'
+import { loadSurfaceTextures, type SurfaceTextures } from './surfaceTextures'
 import { ExplorationScene } from './explorationScene'
 import {
   WORLD_PIXEL_HEIGHT,
@@ -45,11 +47,9 @@ import {
   type Viewport,
 } from './camera'
 
-/** 渲染调色板（程序化部分：天空、风暴、机器、发光体等） */
+/** 渲染调色板（程序化部分：机器、发光体等） */
 const COLORS = {
   caveDeep: 0x22313a,
-  skyTop: 0x46586a,
-  skyBottom: 0x83808b,
   machineCore: 0x5d6f78,
   machineCoreInner: 0x33474f,
   coreReady: 0xffc978,
@@ -405,7 +405,7 @@ export class PixiWorldRenderer {
   /** 地形层：底色 + 洞穴背景 + 瓦片精灵池（最底层） */
   private readonly terrainLayer = new Container()
   private readonly backdrop = new Graphics()
-  private readonly wind = new Graphics()
+  private readonly surfaceScene: SurfaceScene
   private readonly landmarkLayer = new Container()
   /** 挖出来的旧避难所遗物：摆在发现的那一格上 */
   private readonly relicLayer = new Container()
@@ -464,8 +464,9 @@ export class PixiWorldRenderer {
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
-    const [textures, energyCoreTexture, crystalTexture, fixtureTextures] = await Promise.all([
+    const [textures, energyCoreTexture, crystalTexture, fixtureTextures, surfaceTextures] = await Promise.all([
       loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(), loadShelterFixtureTextures(),
+      loadSurfaceTextures(),
     ])
     const app = new Application()
     await app.init({
@@ -477,7 +478,7 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures)
+    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures, surfaceTextures)
   }
 
   private constructor(
@@ -486,7 +487,9 @@ export class PixiWorldRenderer {
     private readonly energyCoreTexture: Texture,
     private readonly crystalTexture: Texture,
     fixtureTextures: ShelterFixtureTextures,
+    surfaceTextures: SurfaceTextures,
   ) {
+    this.surfaceScene = new SurfaceScene(surfaceTextures)
     const fixtures = createShelterFixtures(fixtureTextures)
     this.shelterFixtures = fixtures.view
     this.lampFixtures = fixtures.lamps
@@ -500,7 +503,7 @@ export class PixiWorldRenderer {
     // 顺序即光照逻辑：结构在黑暗之下，发光物与标签在黑暗之上
     this.worldLayer.addChild(
       this.terrainLayer,
-      this.wind,
+      this.surfaceScene.view,
       this.shelterFixtures,
       this.landmarkLayer,
       this.relicLayer,
@@ -905,13 +908,13 @@ export class PixiWorldRenderer {
     if (this.friends.some((friend) => friend.hidden)) this.lampRevealDelay = LAMP_REVEAL_DELAY
   }
 
-  /** 初始 / 回家视角：一眼看到避难所、能源核心和左侧的能源石区 */
+  /** 初始 / 回家视角：同时看见地表风雪、地下大厅和左侧能源石区。 */
   focusHome(): void {
     this.overview = false
     this.cancelCameraTween()
-    const zoom = clampZoom(Math.min(1.55, Math.max(0.9, this.viewport.width / 920)))
+    const zoom = clampZoom(Math.min(1.55, Math.max(0.9, this.viewport.width / 920), this.viewport.height / 530))
     const centerX = 17.8 * TILE_SIZE
-    const centerY = 9.2 * TILE_SIZE - 20
+    const centerY = 5.2 * TILE_SIZE
     this.camera = centerOn(centerX, centerY, this.viewport, zoom)
     this.applyCamera()
   }
@@ -982,7 +985,7 @@ export class PixiWorldRenderer {
     this.syncViewport()
     if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
     this.updateCameraTween(dt)
-    this.drawWind(this.elapsed)
+    this.surfaceScene.update(this.elapsed)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
     if (this.powerSurge > 0) this.powerSurge = Math.max(0, this.powerSurge - dt)
     this.updateLighting(dt)
@@ -1007,6 +1010,7 @@ export class PixiWorldRenderer {
   }
 
   private applyCamera(): void {
+    this.surfaceScene.setCamera(this.camera, this.viewport)
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
     this.app.canvas.dataset && Object.assign(this.app.canvas.dataset, { cameraX: String(this.camera.x), cameraY: String(this.camera.y), zoom: String(this.camera.zoom) })
@@ -1596,14 +1600,11 @@ export class PixiWorldRenderer {
 
   // ---------- 内部：地形（第一批素材） ----------
 
-  /** 全图底色 + 天空色带（静态绘制一次） */
+  /** 全图洞穴底色；天空与地表交给独立的 SurfaceScene。 */
   private buildBackdrop(): void {
     const g = this.backdrop
     g.clear()
     g.rect(0, 0, WORLD_PIXEL_WIDTH, WORLD_PIXEL_HEIGHT).fill(COLORS.caveDeep)
-    const skyHalf = (SURFACE_Y * TILE_SIZE) / 2
-    g.rect(0, 0, WORLD_PIXEL_WIDTH, skyHalf).fill(COLORS.skyTop)
-    g.rect(0, skyHalf, WORLD_PIXEL_WIDTH, skyHalf).fill(COLORS.skyBottom)
   }
 
   /** 洞穴背景：平铺贴图，位于挖空区域之后 */
@@ -1747,9 +1748,9 @@ export class PixiWorldRenderer {
     this.glowLayer.addChild(this.makeLabel(machineLabel, generatorX, generatorY + 52, machineLabelColor))
 
     // 地表入口标签
-    this.glowLayer.addChild(
-      this.makeLabel('避难所入口', (LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * T, SURFACE_Y * T - 16, COLORS.labelCream),
-    )
+    const entranceLabel = this.makeLabel('避难所入口', SURFACE_ENTRANCE.x, SURFACE_ENTRANCE.labelY, COLORS.labelCream)
+    entranceLabel.style.stroke = { color: 0x263e49, width: 3 }
+    this.glowLayer.addChild(entranceLabel)
 
     // 地下泉水：藏在岩层里，只透出隐约蓝光（探索期待的伏笔）
     const spring = new Graphics()
@@ -1793,20 +1794,6 @@ export class PixiWorldRenderer {
     const color = tile === TILE.SOIL ? 0xf3edbc : 0x9fb4c9
     g.rect(cell.x * TILE_SIZE + 2, cell.y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4)
       .stroke({ width: 2, color, alpha: 0.95 })
-  }
-
-  private drawWind(seconds: number): void {
-    const g = this.wind
-    g.clear()
-    const skyHeight = SURFACE_Y * TILE_SIZE + 12
-    for (let i = 0; i < 14; i++) {
-      const speed = 60 + hash(i, 3) * 90
-      const span = WORLD_PIXEL_WIDTH + 200
-      const x = ((hash(i, 1) * span + seconds * speed) % span) - 100
-      const y = hash(i, 2) * skyHeight * 0.85
-      const width = 50 + hash(i, 5) * 60
-      g.roundRect(x, y, width, 3.5, 2).fill({ color: 0xdfe6ea, alpha: 0.16 + hash(i, 7) * 0.12 })
-    }
   }
 
   private makeLabel(text: string, x: number, y: number, color: number): Text {

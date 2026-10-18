@@ -26,7 +26,7 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'find-energy-stone',
     title: '找到发光的能源石',
-    speech: '这里又黑又冷……交给我！挖开左边泛蓝光的泥土，找一找能源石。',
+    speech: '外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。',
     todo: '点一点泛蓝光的泥土，一格一格挖开它。',
     outcome: '能源石能把家照亮。',
     isDone: (world) => world.progress.crystalFound,
