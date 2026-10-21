@@ -1,11 +1,11 @@
 {
   "url": "http://127.0.0.1:5197/",
-  "startedAt": "2026-10-21T09:00:47.920Z",
+  "startedAt": "2026-10-21T09:06:39.684Z",
   "checks": [
     {
       "name": "进入页显示 0.2.0",
       "ok": true,
-      "detail": "开发试玩版 · v0.2.0更新记录"
+      "detail": "v0.2.0更新记录"
     },
     {
       "name": "更新记录有 0.2.0",
@@ -40,7 +40,7 @@
     {
       "name": "刷新后出现“继续游戏”",
       "ok": true,
-      "detail": "阿土的地下新生活 地下小家园 在风雪之下，建一个温暖的小家。 继续游戏 → 上次的家还在 找到发光的能源石 第一夜 0/4 · 上次保存 今天 17:01 重新开始 会自动保存 ·"
+      "detail": "阿土的地下新生活 地下小家园 在风雪之下，建一个温暖的小家。 继续游戏 → 上次的家还在 找到发光的能源石 第一夜 0/4 · 上次保存 今天 17:07 重新开始 会自动保存 ·"
     },
     {
       "name": "旧 v10 存档被识别",
@@ -80,12 +80,12 @@
   ],
   "consoleErrors": [],
   "consoleWarnings": [
-    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
-    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
-    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
-    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+    "[.WebGL-0x771404229800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x771404229800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x771404229800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x771404229800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
   ],
   "pageErrors": [],
   "failedRequests": [],
-  "finishedAt": "2026-10-21T09:02:02.338Z"
+  "finishedAt": "2026-10-21T09:07:51.644Z"
 }

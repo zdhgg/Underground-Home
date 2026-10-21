@@ -110,7 +110,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 
     <footer class="start-footer">
       <button class="version-button" type="button" @click="openNotes">
-        开发试玩版 · v{{ version }}<span class="version-link">更新记录</span>
+        v{{ version }}<span class="version-link">更新记录</span>
       </button>
       <span>进入后可跳过开场</span>
     </footer>
