@@ -1,0 +1,91 @@
+{
+  "url": "http://127.0.0.1:5197/",
+  "startedAt": "2026-10-21T09:00:47.920Z",
+  "checks": [
+    {
+      "name": "进入页显示 0.2.0",
+      "ok": true,
+      "detail": "开发试玩版 · v0.2.0更新记录"
+    },
+    {
+      "name": "更新记录有 0.2.0",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更新记录无“未发布”",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更新记录包含突破岩层",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "更新记录包含客厅美术",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "新档进入开场",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "跳过开场后进入游戏画布",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "刷新后出现“继续游戏”",
+      "ok": true,
+      "detail": "阿土的地下新生活 地下小家园 在风雪之下，建一个温暖的小家。 继续游戏 → 上次的家还在 找到发光的能源石 第一夜 0/4 · 上次保存 今天 17:01 重新开始 会自动保存 ·"
+    },
+    {
+      "name": "旧 v10 存档被识别",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "v10 存档加载无错误提示",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "可切换到家园全景",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "窄屏页面无横向溢出",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无页面运行时错误",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无失败资源请求",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "无控制台 error",
+      "ok": true,
+      "detail": ""
+    }
+  ],
+  "consoleErrors": [],
+  "consoleWarnings": [
+    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels",
+    "[.WebGL-0x6a2402f9e800]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  ],
+  "pageErrors": [],
+  "failedRequests": [],
+  "finishedAt": "2026-10-21T09:02:02.338Z"
+}
