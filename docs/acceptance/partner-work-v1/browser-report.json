@@ -1,0 +1,16 @@
+{
+  "mode": "Production preview, isolated desktop and touch Chromium contexts",
+  "checks": [
+    "v9 rooms and facilities preserved; Xiaoquan connects water and returns along ladder; Atu stays; no camera pull",
+    "real planter + three real digs -> growth; click ripe crop selects Xiaoman, one harvest, replant, Atu unchanged",
+    "Adeng walks through opened ladder; cancel keeps lamp absent; retry installs; undo removes lamp",
+    "v10 worker positions reload without pending jobs or repeated harvest",
+    "900x620 finder, work panel and cancel; interrupted harvest does not replay after reload",
+    "blocked body clearance reports route failure, no remote harvest or changed position",
+    "corrupt worker save warning and overwrite protection",
+    "touch finder + true touch drag leaves world unchanged + touch crop starts Xiaoman harvest once",
+    "final-build regression: create first bed -> Xiaoman joins -> undo removes membership position -> v10 reload succeeds",
+    "final-build regression: water return uses a vacant camp spot while Atu waits at home"
+  ],
+  "runtimeErrors": []
+}

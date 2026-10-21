@@ -1,6 +1,10 @@
-import { Container, Graphics, Text } from 'pixi.js'
+import { Container, Graphics, Sprite, Text } from 'pixi.js'
 import { BREAKTHROUGHS, HOME_FLOOR_Y, LANDMARKS, MAP_WIDTH, TILE, TILE_SIZE as T, type Cell, type WorldState } from '../core/world'
 import { SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible, waterSpan } from '../core/exploration'
+import { MoleVisual, type MoleTextures } from './moleVisual'
+import { AtuConstruction } from './atuConstruction'
+import type { SoilPlan } from '../core/atu'
+import type { EnvironmentTextures } from './environmentArt'
 
 /** 破岩演出：抬手到落镐的时间；落镐那一刻世界才改变，孩子看到的是"挖开"。 */
 const SWING_TIME = 0.42
@@ -28,7 +32,11 @@ export class ExplorationScene {
   private readonly cues = new Graphics()
   private readonly fog = new Graphics()
   private readonly explorer = new Container()
+  private readonly mole: MoleVisual | null
   private readonly tool = new Graphics()
+  private readonly construction = new AtuConstruction()
+  private readonly selection = new Graphics()
+  private readonly targetLabel = new Text({ text: '', style: { fontFamily: '"Microsoft YaHei", sans-serif', fontSize: 11, fontWeight: '600', fill: 0xfff4d7 } })
   /** 阿土嘴边的短句（"通啦！"），只在有反应时可见 */
   private readonly bubble = new Container()
   private readonly bubbleText = new Text({
@@ -36,7 +44,7 @@ export class ExplorationScene {
     style: { fontFamily: '"Microsoft YaHei", sans-serif', fontSize: 12, fontWeight: '700', fill: 0x2f4a3d },
   })
   private readonly bubbleBg = new Graphics()
-  private motion: { points: Cell[]; elapsed: number; done: () => void } | null = null
+  private motion: { points: Cell[]; elapsed: number; done: () => void; step?: (cell: Cell) => void; reported: number } | null = null
   private workAnim: WorkState | null = null
   private reaction: Reaction | null = null
   private world: WorldState | null = null
@@ -45,8 +53,11 @@ export class ExplorationScene {
   /** 阿土脚下的世界坐标与跳跃偏移分开存，避免每帧互相覆盖 */
   private standAt = { x: 0, y: 0 }
   private hop = 0
+  private readonly environmentTextures: EnvironmentTextures | null
 
-  constructor() {
+  constructor(textures: MoleTextures | null = null, environmentTextures: EnvironmentTextures | null = null) {
+    this.environmentTextures = environmentTextures
+    this.mole = textures ? new MoleVisual(textures) : null
     const mole = new Graphics()
     mole.ellipse(0, 0, 11, 13).fill(0xb49372).stroke({ width: 2, color: 0x514338 })
     mole.circle(-8, -9, 4).circle(8, -9, 4).fill(0xb49372)
@@ -55,7 +66,7 @@ export class ExplorationScene {
     mole.circle(-4, -2, 1.5).circle(4, -2, 1.5).fill(0x403c38)
     mole.ellipse(0, 3, 3, 2).fill(0xda9590)
     mole.moveTo(-6, 12).lineTo(-10, 15).moveTo(6, 12).lineTo(10, 15).stroke({ width: 3, color: 0x514338 })
-    // 小铁镐：握点在原点，施工时整体旋转；不施工时藏起来。
+    // 小铁镐：握点在原点；升级后平时也拿着，施工时挥动。
     this.tool.moveTo(0, 0).lineTo(9, -10).stroke({ width: 3, color: 0x8d6a48 })
     this.tool.moveTo(4, -14).quadraticCurveTo(11, -12, 16, -6).stroke({ width: 4, color: 0xb9c3cc })
     this.tool.position.set(6, 4)
@@ -63,13 +74,28 @@ export class ExplorationScene {
     this.bubbleText.anchor.set(0.5)
     this.bubble.addChild(this.bubbleBg, this.bubbleText)
     this.bubble.visible = false
-    this.explorer.addChild(mole, this.tool)
-    this.view.addChild(this.fog, this.scenery, this.cues, this.explorer, this.bubble)
+    const marker = new Graphics().ellipse(0, 13, 12, 3).stroke({ width: 1.3, color: 0xb5dfba, alpha: .8 })
+    this.explorer.addChild(marker, this.mole?.view ?? mole, this.tool)
+    if (this.mole) mole.destroy()
+    this.targetLabel.anchor.set(.5)
+    this.view.addChild(this.fog, this.scenery, this.cues, this.selection, this.explorer, this.construction.view, this.targetLabel, this.bubble)
   }
 
   /** 是否有正在播出的施工演出：会话层用它决定要不要锁输入。 */
   get animating(): boolean {
-    return this.motion !== null || this.workAnim !== null
+    return this.motion !== null || this.workAnim !== null || this.construction.active
+  }
+
+  get visible(): boolean { return this.explorer.visible }
+
+  get speechAnchor(): { x: number; y: number } | null {
+    return this.visible ? { x: this.explorer.x, y: this.explorer.y - 40 } : null
+  }
+
+  get hitBounds(): { x: number; y: number; width: number; height: number } | null {
+    if (!this.visible) return null
+    const b = this.explorer.getBounds()
+    return { x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY }
   }
 
   refresh(world: WorldState): void {
@@ -123,27 +149,43 @@ export class ExplorationScene {
       }
     }
     this.explorer.visible = e.explorer !== null || this.motion !== null || this.workAnim !== null
-    if (e.explorer && !this.motion && !this.workAnim) this.positionExplorer(e.explorer)
-    if (e.explorer) label('阿土', e.explorer.x + 0.5, e.explorer.y - 0.65, 0xffdf9b, 11)
+    if (e.explorer && !this.animating) this.positionExplorer(e.explorer)
     const span = waterSpan(world)
     if (span) {
       label(e.springFound ? '泉水层 · 新家园从这里开始' : '沿地面开路，找找水声', (span.left + span.right) / 2 + 0.5, 23.6)
       // 潮湿洞壁、苔藓与小蘑菇只出现在已探索区域。
       for (let x = span.left; x <= span.right; x++) {
         if (x % 3 === 0) {
-          g.ellipse((x + 0.5) * T, 22 * T - 2, 13, 3).fill(0x537c68)
-          g.moveTo((x + 0.6) * T, 22 * T - 3).lineTo((x + 0.6) * T, 22 * T - 10).stroke({ width: 2, color: 0xc7c4a1 })
-          g.ellipse((x + 0.6) * T, 22 * T - 11, 6, 3).fill(0x8ebfc2)
+          if (this.environmentTextures) {
+            const moss = new Sprite(this.environmentTextures.moss)
+            moss.anchor.set(.5, 1)
+            moss.width = 39; moss.height = 34
+            moss.position.set((x + 0.5) * T, 22 * T - 1)
+            this.scenery.addChild(moss)
+          } else {
+            g.ellipse((x + 0.5) * T, 22 * T - 2, 13, 3).fill(0x537c68)
+            g.moveTo((x + 0.6) * T, 22 * T - 3).lineTo((x + 0.6) * T, 22 * T - 10).stroke({ width: 2, color: 0xc7c4a1 })
+            g.ellipse((x + 0.6) * T, 22 * T - 11, 6, 3).fill(0x8ebfc2)
+          }
         }
       }
     }
     if (springVisible(world)) {
       const sx = (LANDMARKS.spring.x + 0.5) * T, sy = 22 * T - 7
       const radius = Math.min(36, (LANDMARKS.spring.x - span!.left + 0.5) * T - 2, (span!.right - LANDMARKS.spring.x + 0.5) * T - 2)
-      g.ellipse(sx, sy, radius, 6).fill({ color: 0x73d2d7, alpha: 0.3 })
-      g.ellipse(sx, sy, radius * 0.85, 4).fill(0x4b9fb6).stroke({ width: 2, color: 0xafe7de })
-      g.moveTo(sx - 8, sy - 18).quadraticCurveTo(sx - 3, sy - 26, sx + 2, sy - 4).stroke({ width: 3, color: 0x78c6d2 })
-      g.circle(sx - 8, sy - 22, 5).fill(0x66838a)
+      if (this.environmentTextures) {
+        const spring = new Sprite(this.environmentTextures.spring)
+        spring.anchor.set(.5, 1)
+        spring.width = Math.max(94, radius * 2.45)
+        spring.height = spring.width * 0.72
+        spring.position.set(sx, sy + 8)
+        this.scenery.addChild(spring)
+      } else {
+        g.ellipse(sx, sy, radius, 6).fill({ color: 0x73d2d7, alpha: 0.3 })
+        g.ellipse(sx, sy, radius * 0.85, 4).fill(0x4b9fb6).stroke({ width: 2, color: 0xafe7de })
+        g.moveTo(sx - 8, sy - 18).quadraticCurveTo(sx - 3, sy - 26, sx + 2, sy - 4).stroke({ width: 3, color: 0x78c6d2 })
+        g.circle(sx - 8, sy - 22, 5).fill(0x66838a)
+      }
       if (e.springFound) {
         // 找到以后泉水常亮：一圈冷色柔光，让新地方看起来"活着"。
         g.ellipse(sx, sy - 4, radius * 1.4, 14).fill({ color: 0xa5efdd, alpha: 0.14 })
@@ -157,16 +199,38 @@ export class ExplorationScene {
       g.circle(x, y + 10, world.powerDown ? 62 : 44).fill({ color: 0xffd995, alpha: world.powerDown ? 0.22 : 0.13 })
       g.roundRect(x - 7, y - 6, 14, 20, 4).fill(0x796650).stroke({ width: 2, color: 0xd1ae77 })
       g.roundRect(x - 4, y - 2, 8, 12, 2).fill(world.powerDown ? 0xfff3c8 : 0xffe7a3)
+      if (lamp.wide) {
+        g.poly([x - 12, y - 5, x + 12, y - 5, x + 8, y - 13, x - 8, y - 13]).fill(0xffe0a1).stroke({ width: 1.5, color: 0xb99054 })
+      }
     }
     this.drawFog(0)
     this.drawCues()
   }
 
-  travel(points: Cell[], done: () => void): void {
+  travel(points: Cell[], done: () => void, step?: (cell: Cell) => void): void {
+    this.workAnim = null
+    this.explorer.scale.y = 1
     // 阿土可能还没进过场：出发时先让他出现在起点，别凭空出现在终点。
     this.explorer.visible = true
     if (points.length) this.positionExplorer(points[0])
-    this.motion = { points, elapsed: 0, done }
+    this.motion = { points, elapsed: 0, done, step, reported: 0 }
+  }
+
+  soil(plan: SoilPlan, strike: () => void, done: () => void): void {
+    this.motion = null
+    this.positionExplorer(plan.stand)
+    this.construction.start(plan, strike, done)
+    this.mole?.face(plan.target.x - plan.stand.x)
+  }
+
+  preview(target: Cell | null, stand?: Cell, lift = 0, text = ''): void {
+    const g = this.selection.clear()
+    this.targetLabel.visible = target !== null
+    if (!target) return
+    g.roundRect(target.x * T + 2, target.y * T + 2, T - 4, T - 4, 5).stroke({ width: 2, color: 0xffd795 })
+    if (stand) g.ellipse((stand.x + .5) * T, (stand.y + 1 - lift) * T - 2, 11, 3).stroke({ width: 1.5, color: 0xb5e1bc })
+    this.targetLabel.text = text
+    this.targetLabel.position.set((target.x + .5) * T, target.y * T - 10)
   }
 
   /** 施工：阿土站在梯段上挥镐；落镐瞬间回调，收招后归位。 */
@@ -184,6 +248,8 @@ export class ExplorationScene {
   cancel(): void {
     this.motion = null
     this.workAnim = null
+    this.construction.cancel()
+    this.preview(null)
     this.tool.visible = false
     this.tool.rotation = 0
     this.explorer.scale.y = 1
@@ -193,6 +259,7 @@ export class ExplorationScene {
     const explorer = this.world?.exploration.explorer ?? null
     this.explorer.visible = explorer !== null
     if (explorer) this.positionExplorer(explorer)
+    this.mole?.update(this.elapsed, 'idle')
   }
 
   /** 阿土喊一句、蹦两下：纯画面反馈，不锁输入也不改世界。 */
@@ -220,8 +287,10 @@ export class ExplorationScene {
       m.elapsed += dt * 5
       const i = Math.min(Math.floor(m.elapsed), m.points.length - 1)
       const a = m.points[i], b = m.points[Math.min(i + 1, m.points.length - 1)]
+      this.mole?.face(b.x - a.x)
       const k = m.elapsed - i
       this.positionExplorer({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k })
+      while (m.reported < i) { m.reported++; m.step?.(m.points[m.reported]) }
       if (i === m.points.length - 1) { this.motion = null; m.done() }
     }
     const w = this.workAnim
@@ -229,7 +298,10 @@ export class ExplorationScene {
       w.elapsed += dt
       const k = Math.min(1, w.elapsed / SWING_TIME)
       this.tool.visible = true
-      this.tool.rotation = -1.25 + 1.8 * k
+      const direction = this.mole?.direction ?? 1
+      this.tool.position.set(6 * direction, 4)
+      this.tool.scale.set(direction, 1)
+      this.tool.rotation = direction * (-1.25 + 1.8 * k)
       this.explorer.scale.y = 1 - 0.07 * Math.sin(Math.PI * k)
       if (!w.struck && w.elapsed >= SWING_TIME) {
         w.struck = true
@@ -243,6 +315,23 @@ export class ExplorationScene {
         this.positionExplorer({ x: w.target.x, y: w.target.y - 1 })
       }
     }
+    const direction = this.construction.update(dt)
+    if (this.construction.active) this.mole?.face(direction)
+    // 完成/取消同帧也移除踏台高度，不能留到下一次世界刷新。
+    this.applyExplorer()
+    if (!this.workAnim) {
+      const direction = this.mole?.direction ?? 1
+      this.tool.visible = !this.construction.active && (this.world?.exploration.pickaxeUpgraded ?? false)
+      this.tool.position.set(7 * direction, 3)
+      this.tool.scale.set(0.75 * direction, 0.75)
+      this.tool.rotation = 0.3 * direction
+    }
+    const light = this.standAt.y >= HOME_FLOOR_Y * T
+      ? this.world?.powerDown ? 1 : 0.4
+      : this.world?.progress.coreRepaired ? 1 : 0
+    const digging = this.construction.digging
+    if (digging) this.mole?.dig(this.elapsed, digging, light)
+    else this.mole?.update(this.elapsed, w || this.construction.active ? 'work' : m ? 'walk' : 'idle', light)
     this.updateReaction(dt)
   }
 
@@ -275,7 +364,7 @@ export class ExplorationScene {
   }
 
   private applyExplorer(): void {
-    this.explorer.position.set(this.standAt.x, this.standAt.y - this.hop)
+    this.explorer.position.set(this.standAt.x, this.standAt.y - this.hop - this.construction.lift)
   }
 
   /** 施工提示：还没挖开的裂纹轻轻呼吸；下一次要挖的那块套一个目标环。 */

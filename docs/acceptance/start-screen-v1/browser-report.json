@@ -1,0 +1,30 @@
+{
+  "url": "http://127.0.0.1:5193/",
+  "results": [
+    {
+      "case": "title-waits-for-start-and-shows-version",
+      "passed": true
+    },
+    {
+      "case": "start-unlocks-sound-and-full-opening-hands-off-to-first-mission",
+      "passed": true
+    },
+    {
+      "case": "refresh-returns-to-title-keyboard-start-and-escape-same-camera",
+      "passed": true
+    },
+    {
+      "case": "existing-v12-save-ignored-and-untouched-button-skip-works",
+      "passed": true
+    },
+    {
+      "case": "title-and-start-skip-900x620",
+      "passed": true
+    },
+    {
+      "case": "title-and-start-skip-390x844",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

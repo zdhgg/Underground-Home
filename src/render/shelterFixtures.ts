@@ -1,5 +1,5 @@
 import { Assets, Container, Sprite, type Texture } from 'pixi.js'
-import { LANDMARKS, TILE_SIZE } from '../core/world'
+import { HOME_FLOOR_Y, LANDMARKS, TILE_SIZE } from '../core/world'
 import ladderUrl from '../assets/art/landmarks/shaft-ladder-v1.png'
 import lampUrl from '../assets/art/landmarks/ceiling-lamp-v1.png'
 
@@ -39,6 +39,14 @@ export function createShelterFixtures(textures: ShelterFixtureTextures): { view:
   )
   ladder.scale.set((LANDMARKS.shaft.h + 1) * TILE_SIZE / textures.ladder.height)
   view.addChild(ladder)
+  // 同一梯架接到已有大厅地面：原梯架只到大厅上部，开场下梯不能凭空落地。
+  const extension = new Sprite(textures.ladder)
+  extension.label = 'entrance-ladder-extension'
+  extension.anchor.set(.5, 0)
+  extension.position.set(ladder.x, (LANDMARKS.shaft.y + LANDMARKS.shaft.h + 1) * TILE_SIZE - 4)
+  extension.width = ladder.width
+  extension.height = HOME_FLOOR_Y * TILE_SIZE - extension.y
+  view.addChild(extension)
 
   for (const point of LAMP_LOCATIONS) {
     const lamp = new Sprite(textures.lamp)

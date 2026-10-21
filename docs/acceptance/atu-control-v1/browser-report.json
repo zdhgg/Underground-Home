@@ -1,0 +1,30 @@
+{
+  "mode": "Production preview; isolated desktop and touch Chromium contexts",
+  "freshPlaythrough": true,
+  "checks": [
+    "mouse movement before clue",
+    "cancel before soil contact",
+    "three-tile upper soil stool",
+    "energy and core",
+    "bed placement clears actor safely",
+    "two-tile body clearance",
+    "listen and upgrade",
+    "one rock at a time then existing chain",
+    "spring reached by real walk",
+    "v8 reload",
+    "v7 upgrade/terrain preserved",
+    "900x620 controls",
+    "touch tap movement",
+    "touch drag does not move/dig"
+  ],
+  "runtimeErrors": [],
+  "finalBuildChecks": [
+    "collected crystal nearby empty space moves",
+    "stop button cancels soil",
+    "Escape cancels soil",
+    "cancel build assist prevents construction",
+    "retry builds after actor retreats",
+    "900x620 find button usable over build toolbar"
+  ],
+  "finalBuildRuntimeErrors": []
+}

@@ -1,3 +1,5 @@
+import type { PartnerId } from './partners'
+
 /**
  * 世界数据模型：瓦片地图 + 初始避难所蓝图。
  * 纯数据与纯函数，不依赖 DOM / PixiJS / 浏览器 API，方便测试与复用。
@@ -26,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 7
+export const WORLD_VERSION = 13
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -46,6 +48,8 @@ export const isPreviewLayer = (y: number): boolean => y >= STRATA.water.top
 export interface SleepPod extends Cell {
   id: number
   door: 'left' | 'right'
+  /** 房间后侧设施；前侧保留真实的两格高通道。 */
+  backWall?: true
 }
 
 export interface Rect {
@@ -58,6 +62,23 @@ export interface Rect {
 export interface Cell {
   x: number
   y: number
+}
+
+export type WorkerId = Exclude<PartnerId, 'atu'>
+export type WorkerPositions = Partial<Record<WorkerId, Cell>>
+export interface WallLamp extends Cell { wide?: true }
+
+export type RoomKind = 'home' | 'garden' | 'lounge'
+export interface Inventory { stone: number; wood: number }
+export interface BuiltSite { id: string; kind: RoomKind }
+/** 避难所留下的少量材料，保证第一间住处可以直接开工。 */
+export const freshInventory = (): Inventory => ({ stone: 4, wood: 3 })
+/** 蓝图不改变地形；扩建蓝图完成前，原房间继续使用。 */
+export interface Room extends Rect {
+  id: number; kind: RoomKind
+  status?: 'blueprint'
+  managed?: true
+  replaces?: number
 }
 
 /** 第一夜的关键地点（固定叙事目标，位置由岩层蓝图保证） */
@@ -78,6 +99,8 @@ export const LANDMARKS = {
   spring: { x: 18, y: 21 },
   /** 建造引导只是可选区域，不限制玩家选址。 */
   buildSuggestion: { x: 10, y: 9, w: 7, h: 3 },
+  /** 第二层泉水边的菜园建议区：只是高亮，不限制菜槽布局。 */
+  gardenSuggestion: { x: 24, y: 19, w: 7, h: 3 },
 } as const satisfies Record<string, Rect | Cell>
 
 /** 第一夜的进度位：全部单调，不因撤销回退 */
@@ -90,10 +113,12 @@ export interface WorldProgress {
   coreRepaired: boolean
 }
 
-/** 第一层的一格种植槽：位置自由，growth 0 刚种下 → RIPE_STAGE 可收 */
+/** 一格种植槽：新菜园在第二层泉水边；growth 0 刚种下 → RIPE_STAGE 可收 */
 export interface Planter extends Cell {
   id: number
   growth: number
+  /** 自动启用的菜槽归属，撤销房间时不误删原有作物。 */
+  roomId?: number
 }
 
 /**
@@ -103,7 +128,7 @@ export interface Planter extends Cell {
 export interface FarmState {
   /** 泉水已经引到家里（大厅有水桶，第一层可以种东西了） */
   waterSupplied: boolean
-  /** 第一层摆下的种植槽 */
+  /** 摆下的种植槽（旧档可能在第一层） */
   planters: Planter[]
   /** 收成存下的食物份数（吃饭会减少） */
   food: number
@@ -115,6 +140,8 @@ export const freshFarm = (): FarmState => ({ waterSupplied: false, planters: [],
 
 /** 世界状态：一张固定小地图 + 第一夜进度 */
 export interface WorldState {
+  inventory: Inventory
+  builtSites: BuiltSite[]
   version: number
   width: number
   height: number
@@ -124,6 +151,12 @@ export interface WorldState {
   dugCount: number
   progress: WorldProgress
   pods: SleepPod[]
+  rooms: Room[]
+  nextRoomId: number
+  /** 专业伙伴最近到达的安全站位；不保存半段动画或待执行工作。 */
+  workers: WorkerPositions
+  /** 已学会的专业能力升级ID；设施配置单独保存在灯上。 */
+  partnerUpgrades: string[]
   exploration: ExplorationState
   farm: FarmState
   /**
@@ -141,7 +174,7 @@ export interface ExplorationState {
   /** 选中的真实梯道；发现线索不会自动挖空岩层。 */
   shaftX: number | null
   explorer: Cell | null
-  lamps: Cell[]
+  lamps: WallLamp[]
 }
 export const BREAKTHROUGHS = [27, 16] as const
 export const WATER_FLOOR_Y = 22
@@ -187,8 +220,14 @@ export function createInitialWorld(): WorldState {
     height: MAP_HEIGHT,
     tiles,
     dugCount: 0,
+    inventory: freshInventory(),
+    builtSites: [],
     progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
     pods: [],
+    rooms: [],
+    nextRoomId: 1,
+    workers: {},
+    partnerUpgrades: [],
     exploration: freshExploration(),
     farm: freshFarm(),
     powerDown: false,

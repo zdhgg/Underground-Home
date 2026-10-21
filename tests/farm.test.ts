@@ -126,12 +126,19 @@ describe('请伙伴吃饭', () => {
   })
 })
 
-describe('种植槽不越过第一层', () => {
-  it('第二层即使挖空了也放不下（这一层的建设留给以后）', () => {
+describe('第二层菜园', () => {
+  it('必须真正下到第二层，才能在泉水边种菜；泉眼和梯道要留出来', () => {
     const world = farmingWorld()
+    // 还没下去：即使地图上已经是空的，也不能隔着岩层种。
+    expect(canPlacePlanter(world, 25, 21)).toMatchObject({ ok: false, reason: 'layer' })
+
     world.exploration.entered = true
-    for (let x = 10; x <= 16; x++) dig(world, x, 20)
-    expect(canPlacePlanter(world, 12, 20)).toMatchObject({ ok: false, reason: 'layer' })
+    world.tiles[21][19] = TILE.EMPTY; world.tiles[20][19] = TILE.EMPTY
+    expect(canPlacePlanter(world, 25, 21).ok).toBe(true)
+    expect(canPlacePlanter(world, 19, 21)).toMatchObject({ ok: false, reason: 'reserved' })
+    expect(canPlacePlanter(world, 27, 21)).toMatchObject({ ok: false, reason: 'reserved' })
+    // 旧存档里第一层的菜槽仍能通过校验，只是不再作为新引导目标。
+    expect(canPlacePlanter(world, 5, 11).ok).toBe(true)
     expect(LANDMARKS.spring.y).toBeGreaterThan(STRATA.home.bottom)
   })
 })

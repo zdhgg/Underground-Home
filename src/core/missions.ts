@@ -50,9 +50,9 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'build-sleep-pod',
     title: '给伙伴安一个睡眠舱',
-    speech: '亮了！可是……我们睡哪儿？挖一块能放床的空地，再选“睡眠舱”。放在哪儿由你决定！',
-    todo: '挖出一块空地，选位置，确认建造一间双人睡眠舱。',
-    outcome: '阿土和阿灯钻进去；小满闻到家的味道，就来了。',
+    speech: '亮了！可是……我们睡哪儿？点左边的“两人小窝”，再点“开工”。材料在物品栏里，我来挖土、铺床！',
+    todo: '点“两人小窝”，再点“开工”。',
+    outcome: '住处会安排床位，今晚大家能睡个好觉。',
     isDone: (world) => world.pods.length > 0,
   },
 ]
@@ -107,10 +107,11 @@ export function guideHighlight(world: WorldState): GuideHighlight {
       const frontier = span ? span.left > LANDMARKS.spring.x - 1 ? span.left - 1 : span.right + 1 : x
       return { kind: 'collect', rect: { x: springVisible(world) ? LANDMARKS.spring.x : frontier, y: 21, w: 1, h: 1 } }
     }
-    // 找到水之后先把它引上来（点面板上的「把水引到家里」）
+    // 找到水之后先把它接进菜园（点面板上的「把水接到菜园」）
     if (!world.farm.waterSupplied) return { kind: 'repair', rect: { ...LANDMARKS.spring, w: 1, h: 1 } }
-    // 水到家了：给新朋友安床、在第一层种菜——高亮都指回暖窝层的建造建议区
-    if (canBuildMorePods(world) || world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
+    // 先给新朋友安床；住下之后，菜园在第二层泉水边。
+    if (canBuildMorePods(world)) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
+    if (world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.gardenSuggestion }
     // 第一夜过完了：家里有电，该顺着梯道送到下面去了
     if (!world.powerDown) return { kind: 'repair', rect: LANDMARKS.generatorZone }
   }
@@ -133,7 +134,7 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   const powered = world.powerDown
   const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested, powered].filter(Boolean).length
   const guide = !e.clueFound
-    ? ['给小满找一口水', '小满说：我饿了……可是家里没有水，种不了菜。挖开脚边的泥土，再点一下岩壁上的裂纹——我去听听里面有没有水声。', '有了水，就能种出吃的。']
+    ? ['楼下有谁在喊饿', '床安好啦。楼下好像有小兔子的声音："我饿了……下面有水吗？" 点一下岩壁上的裂纹——我去听听里面有没有水声。', '有了水，就能种出吃的。']
     : !e.pickaxeUpgraded
       ? ['换上小铁镐', '裂缝里有凉凉的水汽！换上小铁镐，就能挖开这种带裂纹的岩石。', '坚硬的大岩石还要留着。']
       : !connected
@@ -141,13 +142,13 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
         : !e.entered
           ? ['沿梯子去第二层', '通啦！点“沿梯子下去”，我带你到新地方看看！', '顺着真实的梯子，抵达泉水层。']
           : !e.springFound
-            ? ['找到滴答响的泉水', springVisible(world) ? '泉水露出来啦！点一下泉水，我走过去看看。' : `水声从${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边传来！点着泥土一格一格挖过去，挖到水边我就能走过去看看。`, '找到水源，这里也能住人。']
+            ? ['找到滴答响的泉水', springVisible(world) ? '小满说：泉水露出来啦！点一下泉水，她跑过去看看。' : `小满说：水就在${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边的土壁后面！点着泥土一格一格挖过去，挖到水边就能喝到啦。`, '找到水源，这里也能住人。']
             : !farm.waterSupplied
-              ? ['把水引到家里', '找到水啦！点「把水引到家里」，我把水管顺着梯子接到大厅——以后在家就能种菜。', '家里有了水，小满就能种菜了。']
+              ? ['把水接到菜园', '找到水啦！点「把水接到菜园」，小泉会沿通道把水接到泉边的菜地。', '水到了菜园，小满就能种菜了。']
               : waiting > 0
-                ? ['安顿新朋友', `家里有水了！${waitingNames}还在等床。回暖窝层挖一块空地，给${waiting > 1 ? '他们' : '他'}安张床吧。`, '朋友住下来，家才热闹。']
+                ? ['安顿新朋友', `家里有水了！${waitingNames}还在等床。回暖窝层建一间住处，或扩建已有住处，给${waiting > 1 ? '他们' : '他'}增加床位吧。`, '朋友住下来，家才热闹。']
                 : !harvested
-                  ? ['种出第一份食物', '点「种植槽」，在第一层挖空的地面上摆一个。你每干一件事，它就会长大一档：长熟了再点一下就能收！', '有菜吃，小满就不饿了。']
+                  ? ['在泉水边种出第一份食物', '点泉边的“小菜园”，再点“开工”。挖到的石料和旧木料能用来修菜槽！菜熟了点一下，小满来收。', '有菜吃，小满就不饿了。']
                   : !powered
                     ? ['把家里的电送到下面', '家里亮堂堂的，可是第二层还是黑的。点「⚡ 把电送到下面」，我把电线顺着梯子铺下去。', '下面的灯也能亮了。']
                     : ['家越住越大！', '家里有水、有床、有新鲜菜，第二层也亮了。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']

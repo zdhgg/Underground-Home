@@ -12,6 +12,7 @@ import {
   type SleepPod,
   type TileType,
   type WorldState,
+  type WorkerId,
 } from '../core/world'
 import { loadTerrainTextures, type EdgeDirection, type TerrainTextures } from './terrainTextures'
 import { SHAFT_LAST_Y, shaftFrontier } from '../core/exploration'
@@ -20,17 +21,35 @@ import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
 import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
 import { bedSlots, drawSleepPod } from './sleepPods'
+import { loadNestTextures, type NestTextures } from './nestArt'
+import { loadLoungeTextures, type LoungeTextures } from './loungeArt'
 import { findEntranceRoute } from './friendRoutes'
 import { POD_SIZE, BEDS_PER_POD } from '../core/build'
-import { partnerAt, partnersWilling } from '../core/partners'
+import { availablePartners, partnerBed, type PartnerId } from '../core/partners'
+import { hitPartner, type PartnerHitTarget } from './partnerHitTest'
+import { PartnerFeedback } from './partnerFeedback'
+import type { SoilPlan } from '../core/atu'
+import { RoomScene } from './roomScene'
+import { LootFeedback } from './lootFeedback'
+import { digLoot } from '../core/materials'
+import { podBlocksPassage } from '../core/passages'
+import type { RoomPreview } from '../app/roomEditor'
+import { PartnerMotion } from './partnerMotion'
+import type { WorkPlan } from '../core/partnerWork'
+import { LightingScene } from './lightingScene'
 import { powerLinePath } from '../core/power'
-import { foundRelics } from '../core/relics'
-import { drawRelic } from './relicProps'
-import { WATER_BARREL_X, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
+import { drawCollection, loadCollectionTextures, type CollectionTextures } from './collectionScene'
+import { WATER_BARREL_X, WATER_BARREL_Y, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import { SurfaceScene, SURFACE_ENTRANCE } from './surfaceScene'
 import { loadSurfaceTextures, type SurfaceTextures } from './surfaceTextures'
+import { loadEnvironmentTextures, type EnvironmentTextures } from './environmentArt'
 import { ExplorationScene } from './explorationScene'
+import { loadMoleTextures, MoleVisual, type MoleTextures } from './moleVisual'
+import { OpeningScene } from './OpeningScene'
+import { OPENING_DURATION, openingFrame, openingWeatherAt } from './openingTimeline'
+import { OpeningSound } from './openingSound'
+import { createCompanionVisual, loadCompanionTextures, type CharacterVisual, type CompanionArt } from './companionVisual'
 import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
@@ -116,6 +135,7 @@ type FriendPose = 'idle' | 'walk' | 'climb' | 'rest'
 interface FriendSprite {
   view: Container
   body: Graphics
+  visual: CharacterVisual | null
   bodyColor: number
   /** 站立时的身体中心高度 */
   baseY: number
@@ -134,7 +154,7 @@ interface FriendSprite {
   /** 伙伴名字：重建与"飞出来"时都要用 */
   partnerName: string
   /** 物种 id：决定画什么特征（大爪子 / 尾灯 / 长耳朵 / 胡须） */
-  partnerId: string
+  partnerId: PartnerId
   /** 还没点亮时，阿灯缩在角落——不站大厅、不弹跳、没有名字 */
   hidden: boolean
   /** 角落里的尾光（只有躲着的时候有） */
@@ -229,11 +249,13 @@ const ENTRANCE_STAGGER = 0.3
 const ENTRANCE_SEGMENT_TIME = 0.22
 
 /** 还没上床的伙伴站在大厅的位置（y 是脚下的格子行） */
-const IDLE_SPOTS = [
-  { x: 18.6, y: 11 }, { x: 23.9, y: 11 }, { x: 17.2, y: 11 }, { x: 25.3, y: 11 },
-] as const
-/** 伙伴配色，和 core/partners 的名单同序：阿土（土绿）、阿灯（淡紫）、小满（浅粉）、小泉（沙黄） */
-const FRIEND_COLORS = [0xa8ba8e, 0xb9a7e0, 0xe9b6a7, 0xe5cf95] as const
+const IDLE_SPOTS: Record<PartnerId, Cell> = {
+  atu: { x: 18.6, y: 11 }, adeng: { x: 23.9, y: 11 },
+  // 小满在泉水层的洞穴里等玩家；小泉找到水后才到泉边/大厅。
+  xiaoman: { x: 25.4, y: 21 }, xiaoquan: { x: 25.3, y: 11 },
+}
+/** 阿土的备用造型也用暖灰褐色，其他伙伴保留原配色。 */
+const FRIEND_COLORS: Record<PartnerId, number> = { atu: 0xb49478, adeng: 0xb9a7e0, xiaoman: 0xe9b6a7, xiaoquan: 0xe5cf95 }
 
 /** 还没点亮时，阿灯缩在大厅右下角，贴着岩壁 */
 const LAMP_CORNER = { x: 25.4, y: 10 } as const
@@ -279,6 +301,12 @@ function paintFriend(body: Graphics, color: number, pose: FriendPose, partnerId:
   body.circle(0, 0, FRIEND_RADIUS).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
   paintFace(body, partnerId)
   paintFrontFeatures(body, color, partnerId)
+}
+
+function paintPartner(friend: FriendSprite): void {
+  friend.body.visible = friend.visual === null
+  if (friend.visual) friend.visual.update(0, friend.pose, 1, friend.hidden)
+  else paintFriend(friend.body, friend.bodyColor, friend.pose, friend.partnerId)
 }
 
 /** 画在身体之前：耳朵、尾巴、翅膀——根部要被身体压住 */
@@ -407,7 +435,7 @@ export class PixiWorldRenderer {
   private readonly backdrop = new Graphics()
   private readonly surfaceScene: SurfaceScene
   private readonly landmarkLayer = new Container()
-  /** 挖出来的旧避难所遗物：摆在发现的那一格上 */
+  /** 大厅后墙的收藏架：显示已经挖到的旧物，不改变通行。 */
   private readonly relicLayer = new Container()
   /** 第一层的生产道具：种植槽与"水到家"的水管 / 水缸 */
   private readonly farmLayer = new Container()
@@ -417,6 +445,8 @@ export class PixiWorldRenderer {
   private readonly lampFixtures: Sprite[]
   private readonly glowLayer = new Container()
   private readonly friendsLayer = new Container()
+  /** 阿土单独受光，暗处仍看得清脸；阿灯继续在原黑暗层里躲藏。 */
+  private readonly moleLayer = new Container()
   private readonly podLayer = new Container()
   private readonly buildPreview = new Container()
   private readonly darkness = new Graphics()
@@ -424,15 +454,24 @@ export class PixiWorldRenderer {
   private readonly highlightGfx = new Graphics()
   private readonly effects = new Graphics()
   private readonly hover = new Graphics()
-  private readonly explorationScene = new ExplorationScene()
+  private readonly partnerFeedback = new PartnerFeedback()
+  private readonly roomScene = new RoomScene()
+  private roomPreview: RoomPreview | null = null
+  private readonly explorationScene: ExplorationScene
+  private readonly openingScene: OpeningScene
+  private readonly openingSound = new OpeningSound()
+  private opening: { elapsed: number; done: () => void; caption: (text: string) => void } | null = null
 
   private crystal: Container | null = null
   private readonly crystalFeedback: CrystalFeedback
   private springGlow: Graphics | null = null
   private machineGlow: Graphics | null = null
   private friends: FriendSprite[] = []
+  private readonly partnerMotion = new PartnerMotion()
+  private readonly lightingScene = new LightingScene()
   private podEntrance: PodEntrance | null = null
   private particles: Particle[] = []
+  private readonly lootFeedback = new LootFeedback()
   private rings: Ring[] = []
   private highlight: HighlightSpec | null = null
   /** 瓦片精灵池：[y][x]，y < SURFACE_Y 为 null */
@@ -464,9 +503,9 @@ export class PixiWorldRenderer {
 
   static async create(host: HTMLElement): Promise<PixiWorldRenderer> {
     // 素材加载失败时交给现有初始化反馈；不留下未使用的 GPU 应用和画布。
-    const [textures, energyCoreTexture, crystalTexture, fixtureTextures, surfaceTextures] = await Promise.all([
-      loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(), loadShelterFixtureTextures(),
-      loadSurfaceTextures(),
+    const [textures, energyCoreTexture, crystalTexture, fixtureTextures, moleTextures, companionTextures, surfaceTextures, nestTextures, loungeTextures, collectionTextures, environmentTextures] = await Promise.all([
+      loadTerrainTextures(), loadEnergyCoreTexture(), loadCrystalTexture(), loadShelterFixtureTextures(), loadMoleTextures(), loadCompanionTextures(),
+      loadSurfaceTextures(), loadNestTextures(), loadLoungeTextures(), loadCollectionTextures(), loadEnvironmentTextures(),
     ])
     const app = new Application()
     await app.init({
@@ -478,7 +517,7 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures, surfaceTextures)
+    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures, moleTextures, companionTextures, surfaceTextures, nestTextures, loungeTextures, collectionTextures, environmentTextures)
   }
 
   private constructor(
@@ -487,9 +526,20 @@ export class PixiWorldRenderer {
     private readonly energyCoreTexture: Texture,
     private readonly crystalTexture: Texture,
     fixtureTextures: ShelterFixtureTextures,
+    private readonly moleTextures: MoleTextures | null,
+    private readonly companionTextures: CompanionArt,
     surfaceTextures: SurfaceTextures,
+    private readonly nestTextures: NestTextures,
+    loungeTextures: LoungeTextures,
+    private readonly collectionTextures: CollectionTextures,
+    private readonly environmentTextures: EnvironmentTextures | null,
   ) {
+    this.roomScene.setTextures(nestTextures)
+    this.roomScene.setLoungeTextures(loungeTextures)
     this.surfaceScene = new SurfaceScene(surfaceTextures)
+    this.explorationScene = new ExplorationScene(moleTextures, environmentTextures)
+    this.environmentTextures = environmentTextures
+    this.openingScene = new OpeningScene(moleTextures)
     const fixtures = createShelterFixtures(fixtureTextures)
     this.shelterFixtures = fixtures.view
     this.lampFixtures = fixtures.lamps
@@ -504,6 +554,8 @@ export class PixiWorldRenderer {
     this.worldLayer.addChild(
       this.terrainLayer,
       this.surfaceScene.view,
+      this.roomScene.view,
+      this.lightingScene.view,
       this.shelterFixtures,
       this.landmarkLayer,
       this.relicLayer,
@@ -511,16 +563,23 @@ export class PixiWorldRenderer {
       this.podLayer,
       this.friendsLayer,
       this.darkness,
+      this.moleLayer,
       this.glowLayer,
       createStrataLabels(),
       this.explorationScene.view,
+      this.openingScene.view,
       this.lamps,
       this.farmFlow,
       this.powerLine,
       this.highlightGfx,
       this.effects,
+      this.lootFeedback.view,
+      this.partnerMotion.effects,
+      this.partnerFeedback.view,
       this.crystalFeedback.view,
       this.hover,
+      this.roomScene.overlay,
+      this.lightingScene.preview,
       this.buildPreview,
     )
     app.stage.addChild(this.worldLayer)
@@ -532,8 +591,64 @@ export class PixiWorldRenderer {
     return this.app.canvas
   }
 
+  playOpening(done: () => void, caption: (text: string) => void): void {
+    this.cameraTween = null
+    this.overview = false
+    this.opening = { elapsed: 0, done, caption }
+    this.openingScene.view.visible = true
+    this.explorationScene.view.visible = false
+    this.highlightGfx.visible = false
+    this.syncMoleVisibility()
+    this.updateOpening(0)
+  }
+
+  enableOpeningSound(): void { if (this.opening) this.openingSound.enable() }
+
+  /** 跳过与自然结束共用唯一出口；不触碰地图、角色记录或任务判定。 */
+  finishOpening(): void {
+    const opening = this.opening
+    if (!opening) return
+    this.opening = null
+    this.openingSound.stop()
+    this.openingScene.view.visible = false
+    this.explorationScene.view.visible = true
+    this.highlightGfx.visible = true
+    if (this.crystal) this.crystal.visible = true
+    this.refreshExploration()
+    this.manualCamera = false
+    this.focusHome()
+    if (this.app.canvas.dataset) this.app.canvas.dataset.openingPhase = 'finished'
+    opening.done()
+  }
+
+  private updateOpening(dt: number): void {
+    const opening = this.opening
+    if (!opening) return
+    opening.elapsed += dt
+    if (opening.elapsed >= OPENING_DURATION) { this.finishOpening(); return }
+    const destination = this.world!.exploration.explorer!
+    const frame = openingFrame(opening.elapsed, (destination.x + .5) * TILE_SIZE)
+    this.openingScene.update(frame)
+    this.openingSound.update(frame)
+    opening.caption(frame.speech || frame.caption)
+    if (this.crystal) this.crystal.visible = frame.clue > 0
+    const portrait = this.viewport.width < 600
+    const zoom = clampZoom(Math.min(2.1, this.viewport.width / (portrait ? 360 : 560), this.viewport.height / 285))
+    const close = centerOn(portrait ? 19.5 * TILE_SIZE : 21 * TILE_SIZE, frame.cameraY, this.viewport, zoom)
+    const home = this.homeCamera()
+    const k = frame.pullback
+    this.camera = { x: close.x + (home.x - close.x) * k, y: close.y + (home.y - close.y) * k, zoom: close.zoom + (home.zoom - close.zoom) * k }
+    this.applyCamera()
+    if (this.app.canvas.dataset) Object.assign(this.app.canvas.dataset, { openingPhase: frame.phase, openingTime: String(frame.t), openingX: String(frame.x), openingFootY: String(frame.footY) })
+  }
+
   /** 绑定世界数据（初始加载与替换时调用） */
   setWorld(world: WorldState): void {
+    this.lootFeedback.clear()
+    this.lightingScene.preview.clear()
+    this.partnerMotion.cancel()
+    this.roomPreview = null
+    this.partnerFeedback.reset()
     this.crystalFeedback.reset()
     this.spinUp = 0
     this.pendingCelebration = false
@@ -549,6 +664,7 @@ export class PixiWorldRenderer {
 
   /** 世界数据变化后刷新画面（收集 / 修复 / 载入 / 撤销后调用） */
   refresh(): void {
+    this.refreshRooms()
     this.refreshTerrain()
     this.rebuildLandmarks()
     this.refreshRelics()
@@ -559,12 +675,15 @@ export class PixiWorldRenderer {
   }
 
   /** 只重建种植槽与水管：种下、长大、收获、引水完成后调用 */
+  refreshRooms(): void { if (this.world) this.roomScene.refresh(this.world, this.roomPreview) }
+  setRoomPreview(value: RoomPreview | null): void { this.roomPreview = value; this.refreshRooms() }
+
   refreshFarm(): void {
     for (const child of this.farmLayer.removeChildren()) child.destroy({ children: true })
     const world = this.world
     if (!world) return
-    if (world.farm.waterSupplied) this.farmLayer.addChild(drawWaterLine(world))
-    for (const planter of world.farm.planters) this.farmLayer.addChild(drawPlanter(planter))
+    if (world.farm.waterSupplied) this.farmLayer.addChild(drawWaterLine(world, this.environmentTextures))
+    for (const planter of world.farm.planters) this.farmLayer.addChild(drawPlanter(planter, this.environmentTextures))
   }
 
   /** 水在管子里流动 + 熟了的槽呼吸：纯画面，每帧重画，不读也不写世界。 */
@@ -573,15 +692,26 @@ export class PixiWorldRenderer {
     g.clear()
     const world = this.world
     if (!world || !world.farm.waterSupplied) return
-    const column = world.exploration.shaftX
-    if (column !== null) {
-      const pipeX = (column + 0.5) * TILE_SIZE + 9
-      const top = 11 * TILE_SIZE + 12
-      const bottom = 21.8 * TILE_SIZE
+    const legacy = world.farm.planters.some((planter) => planter.y < 12)
+      || world.rooms.some((room) => room.kind === 'garden' && room.status !== 'blueprint')
+    if (legacy) {
+      const column = world.exploration.shaftX
+      if (column !== null) {
+        const pipeX = (column + 0.5) * TILE_SIZE + 9
+        const top = 11 * TILE_SIZE + 12
+        const bottom = 21.8 * TILE_SIZE
+        for (let i = 0; i < 6; i++) {
+          const progress = ((this.elapsed * 0.42 + i / 6) % 1)
+          g.circle(pipeX, bottom - progress * (bottom - top), 2.2).fill({ color: 0xd7f4ff, alpha: 0.75 })
+        }
+      }
+    } else {
+      const springX = (LANDMARKS.spring.x + 0.5) * TILE_SIZE
+      const barrelX = WATER_BARREL_X * TILE_SIZE
+      const pipeY = (WATER_BARREL_Y + 1) * TILE_SIZE - 8
       for (let i = 0; i < 6; i++) {
         const progress = ((this.elapsed * 0.42 + i / 6) % 1)
-        const y = bottom - progress * (bottom - top)
-        g.circle(pipeX, y, 2.2).fill({ color: 0xd7f4ff, alpha: 0.75 })
+        g.circle(springX + (barrelX - springX) * progress, pipeY, 2.2).fill({ color: 0xd7f4ff, alpha: 0.75 })
       }
     }
     drawRipeGlow(g, world, this.elapsed)
@@ -592,16 +722,61 @@ export class PixiWorldRenderer {
     this.rebuildFriends(arrivingPodId)
   }
 
+  playPartnerTravel(id: WorkerId, route: Cell[], step: (p: Cell) => void, done: () => void): void {
+    const friend = this.friends.find(f => f.partnerId === id)
+    if (!friend) return
+    this.finishLampReveal()
+    this.partnerMotion.travel(friend, route, step, done)
+  }
+  playPartnerWork(plan: WorkPlan, strike: () => void, done: () => void): void {
+    const friend = this.friends.find(f => f.partnerId === plan.worker)
+    if (friend) this.partnerMotion.work(friend, plan, strike, done)
+  }
+  cancelPartnerWork(): void { this.partnerMotion.cancel(); this.rebuildFriends() }
+
   /** 只重建遗物道具：挖到遗物、或撤销把遗物埋回去之后调用 */
   refreshRelics(): void {
     for (const child of this.relicLayer.removeChildren()) child.destroy({ children: true })
     const world = this.world
     if (!world) return
-    for (const relic of foundRelics(world)) this.relicLayer.addChild(drawRelic(relic))
+    this.relicLayer.addChild(drawCollection(world, this.collectionTextures))
   }
 
-  refreshExploration(): void { if (this.world) this.explorationScene.refresh(this.world) }
-  playExplorationTravel(points: Cell[], done: () => void): void { this.explorationScene.travel(points, done) }
+  refreshExploration(): void {
+    if (this.world) this.lightingScene.refresh(this.world)
+    if (this.world) this.explorationScene.refresh(this.world)
+    this.syncMoleVisibility()
+  }
+  setLampPreview(cell: Cell | null): void { if (this.world) this.lightingScene.showPreview(this.world, cell) }
+  playExplorationTravel(points: Cell[], done: () => void, step?: (cell: Cell) => void): void {
+    this.explorationScene.travel(points, done, step)
+    this.syncMoleVisibility()
+  }
+
+  private syncMoleVisibility(): void {
+    const atu = this.friends.find((friend) => friend.partnerId === 'atu')
+    if (atu) atu.view.visible = !this.opening && !this.explorationScene.visible
+  }
+
+  playSoilWork(plan: SoilPlan, strike: () => void, done: () => void): void { this.explorationScene.soil(plan, strike, done) }
+  setAtuTarget(target: Cell | null, stand?: Cell, lift = 0, text = ''): void { this.explorationScene.preview(target, stand, lift, text) }
+
+  private manualCamera = false
+  findAtu(): void {
+    const p = this.world?.exploration.explorer
+    if (p) { this.manualCamera = false; this.focusOn((p.x + .5) * TILE_SIZE, (p.y + .2) * TILE_SIZE) }
+  }
+
+  private followAtuAtEdge(dt: number): void {
+    if (this.manualCamera || this.overview || this.cameraTween || !this.explorationScene.animating) return
+    const p = this.explorationScene.speechAnchor
+    if (!p) return
+    const x = (p.x - this.camera.x) * this.camera.zoom, y = (p.y - this.camera.y) * this.camera.zoom
+    if (x < 85 || x > this.viewport.width - 85 || y < 60 || y > this.viewport.height - 60) {
+      const target = centerOn(p.x, p.y, this.viewport, this.camera.zoom), k = Math.min(1, dt * 3)
+      this.camera = { ...this.camera, x: this.camera.x + (target.x - this.camera.x) * k, y: this.camera.y + (target.y - this.camera.y) * k }; this.applyCamera()
+    }
+  }
 
   /** 是否有正在播出的探索演出（走路 / 挥镐）。 */
   get explorationAnimating(): boolean {
@@ -624,6 +799,14 @@ export class PixiWorldRenderer {
   /** 阿土的一句反应（蹦一下 + 嘴边短句）：纯画面，不锁输入。 */
   playMoleReaction(text: string): void {
     this.explorationScene.react(text)
+  }
+
+  playPartnerReaction(id: PartnerId, text: string): void {
+    this.partnerFeedback.show(text, () => {
+      if (id === 'atu' && this.explorationScene.visible) return this.explorationScene.speechAnchor
+      const friend = this.friends.find((friend) => friend.partnerId === id && friend.view.visible)
+      return friend ? { x: friend.view.x, y: friend.view.y - (friend.pose === 'rest' ? 20 : 40) } : null
+    })
   }
 
   /**
@@ -696,7 +879,7 @@ export class PixiWorldRenderer {
   refreshPods(): void {
     this.podEntrance = null
     for (const child of this.podLayer.removeChildren()) child.destroy({ children: true })
-    for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod(pod))
+    for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod({ ...pod, ...(!podBlocksPassage(this.world!, pod) ? { backWall: true as const } : {}) }, false, this.nestTextures.bunks))
   }
 
   /**
@@ -726,7 +909,7 @@ export class PixiWorldRenderer {
     }
     if (!cell) return
     const color = valid ? 0x8fe3a6 : 0xff947e
-    const room = drawSleepPod({ ...cell, door }, true)
+    const room = drawSleepPod({ ...cell, door }, true, this.nestTextures.bunks)
     room.alpha = 0.6
     const outline = new Graphics()
     outline.rect(cell.x * TILE_SIZE, cell.y * TILE_SIZE, POD_SIZE.w * TILE_SIZE, POD_SIZE.h * TILE_SIZE)
@@ -821,6 +1004,8 @@ export class PixiWorldRenderer {
     }
   }
 
+  playDigLoot(cell: Cell, tile: TileType): void { this.lootFeedback.show(cell, digLoot(cell.x, cell.y, tile)) }
+
   /** 一次性粒子爆发（收集 / 修复等关键互动的反馈） */
   playBurst(worldX: number, worldY: number, options: BurstOptions): void {
     const count = options.count ?? 10
@@ -912,11 +1097,15 @@ export class PixiWorldRenderer {
   focusHome(): void {
     this.overview = false
     this.cancelCameraTween()
+    this.camera = this.homeCamera()
+    this.applyCamera()
+  }
+
+  private homeCamera(): Camera {
     const zoom = clampZoom(Math.min(1.55, Math.max(0.9, this.viewport.width / 920), this.viewport.height / 530))
     const centerX = 17.8 * TILE_SIZE
     const centerY = 5.2 * TILE_SIZE
-    this.camera = centerOn(centerX, centerY, this.viewport, zoom)
-    this.applyCamera()
+    return centerOn(centerX, centerY, this.viewport, zoom)
   }
 
   /** 把某个世界坐标居中（"带我去看看"） */
@@ -930,6 +1119,7 @@ export class PixiWorldRenderer {
   panBy(dxScreen: number, dyScreen: number): void {
     if (this.overview) return
     this.cancelCameraTween()
+    this.manualCamera = true
     this.camera = panCamera(this.camera, dxScreen, dyScreen, this.viewport)
     this.applyCamera()
   }
@@ -954,9 +1144,25 @@ export class PixiWorldRenderer {
     return { x, y }
   }
 
+  /** 接受画布局部CSS像素。名字以外按真实身体范围命中，再提供触屏容错。 */
+  partnerAtScreen(screen: { x: number; y: number }): PartnerId | null {
+    if (this.overview) return null
+    const targets: PartnerHitTarget[] = this.friends.filter((friend) => friend.view.visible).map((friend) => {
+      const b = (friend.visual?.view ?? friend.body).getBounds()
+      return { id: friend.partnerId, x: b.minX, y: b.minY, width: b.maxX - b.minX, height: b.maxY - b.minY }
+    })
+    const explorer = this.explorationScene.hitBounds
+    if (explorer) targets.push({ id: 'atu', ...explorer })
+    return hitPartner(screen, targets) as PartnerId | null
+  }
+
   setHoverCell(cell: Cell | null): void {
     this.hoverCell = cell
     this.redrawHover()
+  }
+
+  hoverPartner(id: PartnerId | null): void {
+    for (const friend of this.friends) if (friend.nameLabel) friend.nameLabel.visible = friend.partnerId === id
   }
 
   focusWater(): void {
@@ -972,6 +1178,8 @@ export class PixiWorldRenderer {
   }
 
   destroy(): void {
+    this.opening = null
+    this.openingSound.stop()
     this.app.ticker.remove(this.tick)
     this.app.destroy(true, { children: true })
   }
@@ -981,23 +1189,28 @@ export class PixiWorldRenderer {
   private readonly tick = (ticker: Ticker): void => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
     this.elapsed += dt
+    this.roomScene.update(this.elapsed)
     this.frameCount += 1
     this.syncViewport()
     if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
     this.updateCameraTween(dt)
-    this.surfaceScene.update(this.elapsed)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
     if (this.powerSurge > 0) this.powerSurge = Math.max(0, this.powerSurge - dt)
     this.updateLighting(dt)
     this.drawHighlight()
     this.updateMachineGlow()
     this.updateFriends(dt)
+    this.partnerMotion.update(dt)
     this.updateEffects(dt)
     this.explorationScene.update(dt)
+    this.followAtuAtEdge(dt)
+    this.partnerFeedback.update(dt)
     this.drawFarmFlow()
     this.drawPowerLine()
     if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
+    this.updateOpening(dt)
+    this.surfaceScene.update(this.elapsed, this.opening ? openingWeatherAt(this.opening.elapsed) : undefined)
   }
 
   private syncViewport(): void {
@@ -1011,6 +1224,7 @@ export class PixiWorldRenderer {
 
   private applyCamera(): void {
     this.surfaceScene.setCamera(this.camera, this.viewport)
+    this.roomScene.setZoom(this.camera.zoom)
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
     this.app.canvas.dataset && Object.assign(this.app.canvas.dataset, { cameraX: String(this.camera.x), cameraY: String(this.camera.y), zoom: String(this.camera.zoom) })
@@ -1192,30 +1406,38 @@ export class PixiWorldRenderer {
   private rebuildFriends(arrivingPodId: number | null = null): void {
     this.podEntrance = null
     for (const child of this.friendsLayer.removeChildren()) child.destroy({ children: true })
+    for (const child of this.moleLayer.removeChildren()) child.destroy({ children: true })
     this.friends = []
     const world = this.world
     if (!world) return
     // 只渲染真的愿意来的伙伴：床位可能比人先建好（空床位留给还没来的朋友），
     // 但绝不能凭空画出一个人来。
-    const total = partnersWilling(world)
-    for (let i = 0; i < total; i++) {
-      const pod = i < world.pods.length * BEDS_PER_POD ? world.pods[Math.floor(i / BEDS_PER_POD)] : null
-      const bedIndex = i % BEDS_PER_POD
-      const spot = IDLE_SPOTS[i % IDLE_SPOTS.length]
+    for (const partner of availablePartners(world)) {
+      const assignment = partnerBed(world, partner.id)
+      const pod = assignment?.pod ?? null
+      const bedIndex = assignment?.slot ?? 0
+      const spot = IDLE_SPOTS[partner.id]
       const standing = friendWalkY(world, { x: Math.floor(spot.x), y: spot.y })
-      const partner = partnerAt(i)
       // 阿灯还没点亮时缩在角落：这是"点亮"的情感落点，不是一步任务。
       const hiding = !world.progress.coreRepaired && partner.id === 'adeng'
-      const bodyColor = FRIEND_COLORS[i % FRIEND_COLORS.length]
+      const bodyColor = FRIEND_COLORS[partner.id]
       const view = new Container()
       const body = new Graphics()
+      const visual = partner.id === 'atu' && this.moleTextures
+        ? new MoleVisual(this.moleTextures)
+        : createCompanionVisual(partner.id, this.companionTextures)
       const friend: FriendSprite = {
-        view, body, bodyColor, baseY: standing, phase: i * 1.7, pose: 'idle', bed: null, inEntrance: false,
+        view, body, visual, bodyColor, baseY: standing, phase: partner.bedSlot * 1.7, pose: 'idle', bed: null, inEntrance: false,
         podId: pod ? pod.id : null, spot: { x: spot.x, y: standing }, nameLabel: null,
         partnerName: partner.name, partnerId: partner.id, hidden: hiding, tailGlow: null,
       }
       // 已经入住的伙伴接着睡；正在入场的这一对站在原地等演出开始。
-      if (pod && pod.id !== arrivingPodId) {
+      const workerPosition = partner.id === 'atu' ? null : world.workers[partner.id]
+      if (workerPosition) {
+        friend.hidden = false
+        friend.baseY = (workerPosition.y + .6) * TILE_SIZE
+        view.position.set((workerPosition.x + .5) * TILE_SIZE, friend.baseY)
+      } else if (pod && pod.id !== arrivingPodId) {
         const bed = bedSlots(pod)[bedIndex]
         friend.bed = bed
         friend.pose = 'rest'
@@ -1231,8 +1453,9 @@ export class PixiWorldRenderer {
       } else {
         view.position.set(spot.x * TILE_SIZE, standing)
       }
-      paintFriend(body, bodyColor, friend.pose, friend.partnerId)
+      paintPartner(friend)
       view.addChild(body)
+      if (visual) view.addChild(visual.view)
       if (hiding) {
         // 只露一点点尾光：让玩家看见"角落里有个东西"，但看不清是谁。
         const glow = new Graphics()
@@ -1242,7 +1465,8 @@ export class PixiWorldRenderer {
       } else if (friend.pose !== 'rest') {
         this.createNameLabel(friend)
       }
-      this.friendsLayer.addChild(view)
+      const layer = visual && partner.id === 'atu' ? this.moleLayer : this.friendsLayer
+      layer.addChild(view)
       this.friends.push(friend)
     }
   }
@@ -1258,7 +1482,8 @@ export class PixiWorldRenderer {
       },
     })
     label.anchor.set(0.5)
-    label.position.set(0, -FRIEND_RADIUS - 12)
+    label.visible = false
+    label.position.set(0, friend.visual ? friend.visual.nameY ?? -38 : -FRIEND_RADIUS - 12)
     friend.nameLabel = label
     friend.view.addChild(label)
   }
@@ -1321,7 +1546,7 @@ export class PixiWorldRenderer {
     if (!world) return
     const friend = this.friends.find((item) => item.hidden)
     if (!friend) return
-    const spot = IDLE_SPOTS[1]
+    const spot = IDLE_SPOTS.adeng
     const to = { x: spot.x * TILE_SIZE, y: friendWalkY(world, { x: Math.floor(spot.x), y: spot.y }) }
     friend.hidden = false
     this.lampReveal = {
@@ -1340,6 +1565,7 @@ export class PixiWorldRenderer {
     if (this.celebrationTime > 0) this.celebrationTime = Math.max(0, this.celebrationTime - dt)
     const celebrating = this.celebrationTime > 0
     for (const friend of this.friends) {
+      friend.visual?.update(this.elapsed + friend.phase, friend.pose, friend.partnerId === 'atu' ? this.lightLevel : 1, friend.hidden)
       if (friend.inEntrance) continue
       // 正在飞出来的阿灯由补间驱动，别被呼吸动画覆盖
       if (this.lampReveal?.friend === friend) continue
@@ -1357,8 +1583,9 @@ export class PixiWorldRenderer {
         : repaired
           ? Math.sin(this.elapsed * 2 + friend.phase) * 0.8
           : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
-      friend.view.y = friend.baseY - bounce
+      friend.view.y = friend.baseY - (friend.visual && !celebrating ? 0 : bounce)
     }
+    this.syncMoleVisibility()
   }
 
   /**
@@ -1368,16 +1595,19 @@ export class PixiWorldRenderer {
   playPodEntrance(pod: SleepPod, onSettled: () => void): void {
     const world = this.world
     if (!world || this.friends.length === 0) return
+    // 专业伙伴保留床位，在设施旁待命；不重播将他们锁回床里的旧入睡演出。
+    if (Object.keys(world.workers).length) { onSettled(); return }
     // 阿灯可能还在飞：先让她落地，免得和入场演出打架。
     this.finishLampReveal()
     this.podEntrance = null
     const beds = bedSlots(pod)
-    const mates = this.friends.filter((friend) => friend.podId === pod.id)
+    const eligible = this.friends.filter(friend => friend.partnerId !== 'atu' || world.exploration.explorer === null)
+    const mates = eligible.filter(friend => friend.podId === pod.id || partnerBed(world, friend.partnerId)?.pod.id === pod.id)
     // 未知舱（路径兜底 / 早期存档）：把这间舱当作"还没上床的伙伴"的去处，别让人卡在半路。
     const travellers: PodTraveller[] = []
-    const moving = mates.length ? mates : this.friends.filter((friend) => friend.bed === null)
+    const moving = mates.length ? mates : eligible.filter(friend => friend.bed === null)
     moving.forEach((friend, i) => {
-      const bed = beds[i % BEDS_PER_POD]
+      const bed = beds[partnerBed(world, friend.partnerId)?.slot ?? i % BEDS_PER_POD]
       const from = { x: Math.floor(friend.view.x / TILE_SIZE), y: Math.floor(friend.view.y / TILE_SIZE) }
       const route = findEntranceRoute(world, from, pod)
       if (!route) return
@@ -1409,10 +1639,10 @@ export class PixiWorldRenderer {
       })
       friend.inEntrance = true
       friend.pose = 'walk'
-      paintFriend(friend.body, friend.bodyColor, 'walk', friend.partnerId)
+      paintPartner(friend)
     })
     if (travellers.length !== moving.length || travellers.length === 0) {
-      this.settleFriendsInBed(moving.map((friend, i) => ({ friend, bed: beds[i % BEDS_PER_POD] })))
+      this.settleFriendsInBed(moving.map((friend, i) => ({ friend, bed: beds[partnerBed(world, friend.partnerId)?.slot ?? i % BEDS_PER_POD] })))
       onSettled()
       return
     }
@@ -1429,7 +1659,7 @@ export class PixiWorldRenderer {
       friend.view.scale.set(FRIEND_REST_SCALE)
       friend.view.position.set(bed.x, bed.y)
       this.clearNameLabel(friend)
-      paintFriend(friend.body, friend.bodyColor, 'rest', friend.partnerId)
+      paintPartner(friend)
     }
   }
 
@@ -1455,7 +1685,7 @@ export class PixiWorldRenderer {
           friend.bed = { x: last.x, y: last.y }
           friend.view.position.set(last.x, last.y)
           this.clearNameLabel(friend)
-          paintFriend(friend.body, friend.bodyColor, 'rest', friend.partnerId)
+          paintPartner(friend)
         }
         continue
       }
@@ -1465,6 +1695,7 @@ export class PixiWorldRenderer {
       while (index < traveller.points.length - 2 && traveller.lengths[index + 1] < distance) index++
       const from = traveller.points[index]
       const to = traveller.points[index + 1]
+      friend.visual?.face(to.x - from.x)
       const segLength = traveller.lengths[index + 1] - traveller.lengths[index]
       const k = segLength > 0 ? Math.min(1, Math.max(0, (distance - traveller.lengths[index]) / segLength)) : 0
       let x = from.x + (to.x - from.x) * k
@@ -1484,7 +1715,7 @@ export class PixiWorldRenderer {
       }
       if (friend.pose !== pose) {
         friend.pose = pose
-        paintFriend(friend.body, friend.bodyColor, pose, friend.partnerId)
+        paintPartner(friend)
       }
       friend.view.position.set(x, y)
     }
@@ -1504,7 +1735,7 @@ export class PixiWorldRenderer {
   }
 
   /**
-   * 引水到家的演出：泉水那边起一大团水花，水一路顺着管子往上冒，镜头跟着管子走。
+   * 接水到菜园的演出：泉水那边起一大团水花，水沿第二层地面一路流到水缸。
    * 世界数据已经由会话层写好，这里只放画面。
    */
   playSupplyWater(): void {
@@ -1512,18 +1743,21 @@ export class PixiWorldRenderer {
     const springY = 22 * TILE_SIZE - 7
     this.playBurst(springX, springY, { color: 0xd9fdf6, count: 24, speed: 110, ring: true, ringRadius: 44 })
     this.playBurst(springX, springY - 4, { color: 0x9fe6e6, count: 14, speed: 50, gravity: -30 })
-    for (let row = 20; row >= 12; row -= 2) {
-      this.playBurst(springX, (row + 0.6) * TILE_SIZE, { color: 0xbfeef0, count: 6, speed: 26, gravity: -22 })
+    const legacy = this.world?.farm.planters.some((planter) => planter.y < 12)
+      || this.world?.rooms.some((room) => room.kind === 'garden' && room.status !== 'blueprint')
+    if (legacy) {
+      // 旧档：水沿梯道回到第一层的水缸。
+      for (let row = 20; row >= 12; row -= 2) {
+        this.playBurst(springX, (row + 0.6) * TILE_SIZE, { color: 0xbfeef0, count: 6, speed: 26, gravity: -22 })
+      }
+      this.playBurst(19.4 * TILE_SIZE, 11 * TILE_SIZE, { color: 0xbfe6f2, count: 16, speed: 70, ring: true, ringRadius: 38 })
+      return
     }
     const barrelX = WATER_BARREL_X * TILE_SIZE
-    this.playBurst(barrelX, 11 * TILE_SIZE, { color: 0xbfe6f2, count: 16, speed: 70, ring: true, ringRadius: 38 })
-    const column = this.world?.exploration.shaftX ?? 27
-    this.cameraTween = {
-      from: { ...this.camera },
-      to: centerOn((column + 0.5) * TILE_SIZE, 15.4 * TILE_SIZE, this.viewport, Math.max(0.9, this.camera.zoom)),
-      elapsed: 0,
-      duration: 1.1,
+    for (let x = springX + 28; x < barrelX; x += 34) {
+      this.playBurst(x, springY - 2, { color: 0xbfeef0, count: 6, speed: 26, gravity: -22 })
     }
+    this.playBurst(barrelX, (WATER_BARREL_Y + 0.6) * TILE_SIZE, { color: 0xbfe6f2, count: 16, speed: 70, ring: true, ringRadius: 38 })
   }
 
   /** 收菜：一格小爆发 + 上飘的叶子和光点 */
@@ -1543,7 +1777,7 @@ export class PixiWorldRenderer {
       this.playBurst(friend.view.x, friend.view.y - 18, { color: 0xff9db2, count: 7, speed: 38, gravity: -26 })
     }
     const barrelX = WATER_BARREL_X * TILE_SIZE
-    this.playBurst(barrelX, 11.2 * TILE_SIZE, { color: 0xbfe6f2, count: 10, speed: 44, gravity: -18 })
+    this.playBurst(barrelX, (WATER_BARREL_Y + 0.2) * TILE_SIZE, { color: 0xbfe6f2, count: 10, speed: 44, gravity: -18 })
   }
 
   private spawnConfetti(anchors: ReadonlyArray<{ x: number; y: number }> = REPAIR_CONFETTI_ANCHORS): void {
@@ -1567,6 +1801,7 @@ export class PixiWorldRenderer {
   }
 
   private updateEffects(dt: number): void {
+    this.lootFeedback.update(dt)
     const g = this.effects
     g.clear()
     if (this.particles.length === 0 && this.rings.length === 0) return

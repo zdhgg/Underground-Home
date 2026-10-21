@@ -1,0 +1,56 @@
+{
+  "mode": "production preview; isolated Chromium; pointer inputs; 50ms clock steps",
+  "checks": [
+    {
+      "case": "01-left-side.png",
+      "target": {
+        "x": 14,
+        "y": 11
+      },
+      "capturedAtMs": 750,
+      "completed": true,
+      "dugCount": 1
+    },
+    {
+      "case": "02-left-raised.png",
+      "target": {
+        "x": 14,
+        "y": 10
+      },
+      "capturedAtMs": 750,
+      "completed": true,
+      "dugCount": 1
+    },
+    {
+      "case": "03-left-stool.png",
+      "target": {
+        "x": 14,
+        "y": 9
+      },
+      "capturedAtMs": 1100,
+      "completed": true,
+      "dugCount": 1
+    },
+    {
+      "case": "04-right-side.png",
+      "target": {
+        "x": 26,
+        "y": 11
+      },
+      "capturedAtMs": 1550,
+      "completed": true,
+      "dugCount": 1
+    },
+    {
+      "case": "overhead-and-escape",
+      "completed": true,
+      "canceledTargetRemainsSoil": true,
+      "dugCount": 4
+    },
+    {
+      "case": "900x620-stool",
+      "completed": true
+    }
+  ],
+  "runtimeErrors": []
+}

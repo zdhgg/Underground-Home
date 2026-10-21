@@ -11,14 +11,26 @@ import {
   type WorldState,
   type SleepPod,
   type ExplorationState,
+  type Room,
+  type WorkerPositions,
   createInitialWorld,
   freshExploration,
   freshFarm,
+  freshInventory,
+  type Inventory,
+  type BuiltSite,
   BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
 import { canPlacePlanter, RIPE_STAGE } from './farm'
 import { canStand, explorationAccessIntact, HALL_START_Y, shaftConnected, SHAFT_LAST_Y, springVisible, walkingRoute } from './exploration'
+import { atuCanStand, initialAtuPosition } from './atu'
+import { checkRoom, checkRoomPlan, roomContains, ROOM_KINDS } from './rooms'
+import { ROOM_SPECS } from './roomConstruction'
+import { WORKERS, workerHomeRoute } from './partnerWork'
+import { partnerById } from './partners'
+import { hasWideLampAbility, WIDE_LAMP_ID } from './lighting'
+import { validBuiltSites } from './sites'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
@@ -31,6 +43,8 @@ export interface SavePayload {
   version: number
   savedAt: string
   world: {
+    inventory: Inventory
+    builtSites: BuiltSite[]
     width: number
     height: number
     dugCount: number
@@ -38,6 +52,10 @@ export interface SavePayload {
     tiles: number[][]
     progress: WorldProgress
     pods: SleepPod[]
+    rooms: Room[]
+    nextRoomId: number
+    workers: WorkerPositions
+    partnerUpgrades: string[]
     exploration: ExplorationState
     /** 引水与种植（v6 起） */
     farm: FarmState
@@ -51,12 +69,18 @@ export function serialize(world: WorldState): SavePayload {
     version: WORLD_VERSION,
     savedAt: new Date().toISOString(),
     world: {
+      inventory: { ...world.inventory },
+      builtSites: world.builtSites.map(site => ({ ...site })),
       width: world.width,
       height: world.height,
       dugCount: world.dugCount,
       tiles: world.tiles.map((row) => [...row]),
       progress: { ...world.progress },
       pods: world.pods.map((pod) => ({ ...pod })),
+      rooms: world.rooms.map(room => ({ ...room })),
+      nextRoomId: world.nextRoomId,
+      workers: structuredClone(world.workers),
+      partnerUpgrades: [...world.partnerUpgrades],
       exploration: structuredClone(world.exploration),
       farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
       powerDown: world.powerDown,
@@ -65,7 +89,7 @@ export function serialize(world: WorldState): SavePayload {
 }
 
 export type LoadResult =
-  | { ok: true; world: WorldState; savedAt: string }
+  | { ok: true; world: WorldState; savedAt: string; notice?: string }
   | { ok: false; error: string }
 
 const err = (error: string): LoadResult => ({ ok: false, error })
@@ -147,9 +171,11 @@ export function deserialize(raw: unknown): LoadResult {
       savedAt,
       world: {
         ...base.data,
+        inventory: freshInventory(), builtSites: [],
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
         pods: [],
+        rooms: [], nextRoomId: 1, workers: {}, partnerUpgrades: [],
         exploration: freshExploration(),
         farm: freshFarm(),
         powerDown: false,
@@ -157,7 +183,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -165,16 +191,30 @@ export function deserialize(raw: unknown): LoadResult {
   if (!progress) return err('存档进度字段无效')
 
   const world: WorldState = {
-    ...base.data, version: WORLD_VERSION, progress, pods: [],
+    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, workers: {}, partnerUpgrades: [],
+    inventory: freshInventory(), builtSites: [],
     exploration: freshExploration(), farm: freshFarm(), powerDown: false,
+  }
+  if (version >= 13) {
+    const data = payload.world as { inventory?: Inventory; builtSites?: BuiltSite[] }
+    if (!data.inventory || ![data.inventory.stone, data.inventory.wood].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 100000)) return err('存档物品栏材料无效')
+    if (!Array.isArray(data.builtSites) || data.builtSites.length > 5) return err('存档洞室建设数据无效')
+    world.inventory = { stone: data.inventory.stone, wood: data.inventory.wood }
+    // 洞室与设施的关联在全部原有数据加载后继续校验。
+    world.builtSites = data.builtSites.map(s => s && ({ id: s.id, kind: s.kind }))
   }
   if (version === 4) {
     // 仅在用户明确复制时调用；旧版第二层从不可操作，替换下部不会损失玩家建设。
     const blueprint = createInitialWorld()
     for (let y = 12; y < MAP_HEIGHT; y++) world.tiles[y] = [...blueprint.tiles[y]]
   }
+  if (version >= 11) {
+    const upgrades = (payload.world as { partnerUpgrades?: unknown }).partnerUpgrades
+    if (!Array.isArray(upgrades) || upgrades.length > 1 || upgrades.some(id => id !== WIDE_LAMP_ID)) return err('存档伙伴升级数据无效')
+    world.partnerUpgrades = [...upgrades]
+  }
   if (version >= 5) {
-    const exploration = validateExploration((payload.world as { exploration?: unknown }).exploration, world)
+    const exploration = validateExploration((payload.world as { exploration?: unknown }).exploration, world, version)
     if (!exploration) return err('存档探索进度或梯道无效')
     world.exploration = exploration
   }
@@ -186,20 +226,21 @@ export function deserialize(raw: unknown): LoadResult {
       if (typeof item !== 'object' || item === null) return err('存档睡眠舱数据无效')
       const pod = item as SleepPod
       if (!Number.isInteger(pod.id) || pod.id < 1 || ids.has(pod.id) || !Number.isInteger(pod.x) || !Number.isInteger(pod.y) || (pod.door !== 'left' && pod.door !== 'right')) return err('存档睡眠舱数据无效')
+      if (version >= 12 && pod.backWall !== undefined && pod.backWall !== true) return err('存档睡眠舱通行数据无效')
       ids.add(pod.id)
-      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door })
+      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door, ...(version >= 12 && pod.backWall ? { backWall: true as const } : {}) })
     }
     const pods = world.pods
     for (const pod of pods) {
       world.pods = pods.filter((other) => other.id !== pod.id)
-      if (!canPlacePod(world, pod.x, pod.y, pod.door).ok) return err('存档睡眠舱位置无效')
+      if (!canPlacePod(world, pod.x, pod.y, pod.door, !!pod.backWall).ok) return err('存档睡眠舱位置无效')
     }
     world.pods = pods
     if (world.exploration.clueFound && (!world.pods.length || !world.progress.coreRepaired)) return err('存档探索前置建设无效')
     if (!explorationAccessIntact(world)) return err('存档探索通路无效')
   }
   if (version >= 6) {
-    const farm = validateFarm((payload.world as { farm?: unknown }).farm, world)
+    const farm = validateFarm((payload.world as { farm?: unknown }).farm, world, version)
     if (!farm) return err('存档引水或种植数据无效')
     world.farm = farm
   }
@@ -210,16 +251,63 @@ export function deserialize(raw: unknown): LoadResult {
     if (powerDown && !(world.progress.coreRepaired && world.exploration.entered)) return err('存档供电状态无效')
     world.powerDown = powerDown
   }
+  if (hasWideLampAbility(world) && !(world.progress.coreRepaired && world.exploration.springFound && world.powerDown)) return err('存档照明升级前置成果无效')
 
+  if (version >= 9) {
+    const data = payload.world as { rooms?: unknown; nextRoomId?: unknown }
+    if (!Array.isArray(data.rooms) || data.rooms.length > MAP_WIDTH || !Number.isSafeInteger(data.nextRoomId) || Number(data.nextRoomId) < 1) return err('存档房间数据无效')
+    const ids = new Set<number>()
+    // 扩建蓝图依赖原房间，先校验并放入已建房间，再校验施工蓝图。
+    const ordered = [...data.rooms].sort((a, b) => Number((a as Room)?.status === 'blueprint') - Number((b as Room)?.status === 'blueprint'))
+    for (const rawRoom of ordered) {
+      if (!rawRoom || typeof rawRoom !== 'object') return err('存档房间数据无效')
+      const r = rawRoom as Room
+      if (!Number.isSafeInteger(r.id) || r.id < 1 || ids.has(r.id) || !ROOM_KINDS.includes(r.kind)) return err('存档房间身份或用途无效')
+      if (version >= 12 && (r.status !== undefined && r.status !== 'blueprint' || r.managed !== undefined && r.managed !== true || r.replaces !== undefined && (!Number.isSafeInteger(r.replaces) || r.status !== 'blueprint') || r.status === 'blueprint' && r.managed !== undefined)) return err('存档房间施工状态无效')
+      const plan = version >= 12 && r.status === 'blueprint'
+      if (plan && (r.w < ROOM_SPECS[r.kind].min || r.replaces !== undefined && world.rooms.some(other => other.replaces === r.replaces))) return err('存档房间蓝图无效')
+      const room: Room = { id: r.id, kind: r.kind, x: r.x, y: r.y, w: r.w, h: r.h, ...(plan ? { status: 'blueprint' as const, ...(r.replaces !== undefined ? { replaces: r.replaces } : {}) } : {}), ...(version >= 12 && r.managed ? { managed: true as const } : {}) }
+      if (!(plan ? checkRoomPlan(world, room, -1) : checkRoom(world, room, -1)).ok) return err('存档房间范围无效')
+      ids.add(r.id); world.rooms.push(room)
+    }
+    if (Number(data.nextRoomId) <= Math.max(0, ...ids)) return err('存档房间编号无效')
+    world.nextRoomId = Number(data.nextRoomId)
+    world.rooms.sort((a, b) => a.id - b.id)
+  }
+  if (world.farm.planters.some(p => p.roomId !== undefined && !world.rooms.some(r => r.id === p.roomId && r.managed && r.kind === 'garden' && r.status !== 'blueprint' && roomContains(r, p)))) return err('存档种植区设施归属无效')
+  if (!validBuiltSites(world)) return err('存档洞室用途或设施无效')
+  // v8将主角位置与发现裂纹解耦。旧档狭窄通道中的站位回退到安全大厅，地形与进度不改。
+  const actor = world.exploration.explorer
+  const relocated = version < 8 && actor !== null && !atuCanStand(world, actor, true)
+  if (relocated) world.exploration.explorer = initialAtuPosition(world)
+  if (version >= 8 && actor) {
+    if (!atuCanStand(world, actor, true) || (!world.exploration.entered && actor.y >= 19 && actor.x !== world.exploration.shaftX)
+      || ![18, 25].some(x => walkingRoute(world, { x, y: 11 }, actor))) return err('存档阿土位置或回家通路无效')
+  }
+  if (version >= 10) {
+    const positions = (payload.world as { workers?: unknown }).workers
+    if (!positions || typeof positions !== 'object' || Array.isArray(positions)) return err('存档伙伴站位数据无效')
+    for (const [key, rawPosition] of Object.entries(positions)) {
+      const id = WORKERS.find(id => id === key)
+      // 旧档里小满是"建好第一间床就加入"，可能还没有下过第二层。
+      // 新规则改成下到泉水层才遇见她；这类旧站位直接丢弃，不让整份存档读不出来。
+      if (id === 'xiaoman' && !world.exploration.entered && world.pods.length > 0) continue
+      if (!id || !partnerById(id)?.joins(world) || !world.progress.coreRepaired || !rawPosition || typeof rawPosition !== 'object') return err('存档伙伴身份或站位无效')
+      const p = rawPosition as { x: number; y: number }
+      if (!Number.isInteger(p.x) || !Number.isInteger(p.y) || !atuCanStand(world, p, true) || !workerHomeRoute(world, p)) return err('存档伙伴站位或回家通路无效')
+      world.workers[id] = { x: p.x, y: p.y }
+    }
+  }
   return {
     ok: true,
     savedAt,
     world,
+    ...(relocated ? { notice: '旧通道有点矮，阿土在大厅等你。地形和工具都保留啦。' } : {}),
   }
 }
 
 /** v6 起：引水状态、种植槽与食物。水必须先于种植，槽位也要仍在合法地面上。 */
-function validateFarm(raw: unknown, world: WorldState): FarmState | null {
+function validateFarm(raw: unknown, world: WorldState, version: number): FarmState | null {
   if (typeof raw !== 'object' || raw === null) return null
   const farm = raw as FarmState
   if (typeof farm.waterSupplied !== 'boolean') return null
@@ -237,8 +325,9 @@ function validateFarm(raw: unknown, world: WorldState): FarmState | null {
     if (!Number.isInteger(planter.id) || planter.id < 1 || ids.has(planter.id)) return null
     if (!Number.isInteger(planter.x) || !Number.isInteger(planter.y)) return null
     if (!Number.isInteger(planter.growth) || planter.growth < 0 || planter.growth > RIPE_STAGE) return null
+    if (version >= 12 && planter.roomId !== undefined && (!Number.isSafeInteger(planter.roomId) || planter.roomId < 1)) return null
     ids.add(planter.id)
-    planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth })
+    planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth, ...(version >= 12 && planter.roomId !== undefined ? { roomId: planter.roomId } : {}) })
   }
   const restored = world.farm
   world.farm = { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests }
@@ -253,14 +342,15 @@ function validateFarm(raw: unknown, world: WorldState): FarmState | null {
   }
 }
 
-function validateExploration(raw: unknown, world: WorldState): ExplorationState | null {
+function validateExploration(raw: unknown, world: WorldState, version: number): ExplorationState | null {
   if (!raw || typeof raw !== 'object') return null
   const e = raw as ExplorationState
   if (['clueFound', 'pickaxeUpgraded', 'entered', 'springFound'].some((key) => typeof (raw as Record<string, unknown>)[key] !== 'boolean')) return null
   if (e.shaftX !== null && !BREAKTHROUGHS.some((x) => x === e.shaftX)) return null
   if (e.clueFound !== (e.shaftX !== null) || (e.pickaxeUpgraded && !e.clueFound) || (e.entered && !e.pickaxeUpgraded) || (e.springFound && !e.entered)) return null
   if (e.explorer !== null && (!Number.isInteger(e.explorer?.x) || !Number.isInteger(e.explorer?.y))) return null
-  if (e.clueFound !== (e.explorer !== null) || !Array.isArray(e.lamps) || e.lamps.length > MAP_WIDTH) return null
+  if ((version < 8 && e.clueFound !== (e.explorer !== null)) || !Array.isArray(e.lamps) || e.lamps.length > MAP_WIDTH) return null
+  if (version >= 8 && e.clueFound && e.explorer === null) return null
   const blueprint = createInitialWorld()
   for (let y = 12; y < MAP_HEIGHT; y++) for (let x = 0; x < MAP_WIDTH; x++) {
     const tile = world.tiles[y][x], initial = blueprint.tiles[y][x]
@@ -271,16 +361,17 @@ function validateExploration(raw: unknown, world: WorldState): ExplorationState 
   }
   world.exploration = structuredClone(e)
   if (e.entered && !shaftConnected(world)) return null
-  if (e.explorer && (!canStand(world, e.explorer.x, e.explorer.y) || !walkingRoute(world, { x: e.shaftX!, y: HALL_START_Y }, e.explorer))) return null
+  if (version < 8 && e.explorer && (!canStand(world, e.explorer.x, e.explorer.y) || !walkingRoute(world, { x: e.shaftX!, y: HALL_START_Y }, e.explorer))) return null
   // 未抵达时阿土只在梯道里作业：梯口，或已经挖开的那一段梯子，不能提前进泉水层洞穴。
-  if (!e.entered && e.explorer && (e.explorer.x !== e.shaftX || e.explorer.y < HALL_START_Y || e.explorer.y > SHAFT_LAST_Y)) return null
+  if (version < 8 && !e.entered && e.explorer && (e.explorer.x !== e.shaftX || e.explorer.y < HALL_START_Y || e.explorer.y > SHAFT_LAST_Y)) return null
   if (e.springFound && !springVisible(world)) return null
   const seen = new Set<number>()
   for (const lamp of e.lamps) {
+    if (version >= 11 && lamp?.wide !== undefined && (lamp.wide !== true || !hasWideLampAbility(world))) return null
     if (!Number.isInteger(lamp?.x) || lamp.y !== 19 || lamp.x < 3 || lamp.x > 40 || seen.has(lamp.x) || BREAKTHROUGHS.some((x) => x === lamp.x) || Math.abs(lamp.x - LANDMARKS.spring.x) <= 2 || !e.springFound || ![19, 20, 21].every((y) => world.tiles[y][lamp.x] === TILE.EMPTY)) return null
     seen.add(lamp.x)
   }
-  return structuredClone(e)
+  return { ...structuredClone(e), lamps: e.lamps.map(l => ({ x: l.x, y: l.y, ...(version >= 11 && l.wide ? { wide: true as const } : {}) })) }
 }
 
 /** 只读取已存在的旧库；不存在时不创建空旧数据库。 */

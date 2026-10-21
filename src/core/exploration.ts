@@ -1,3 +1,4 @@
+import { podBlocksPassage } from './passages'
 import { BREAKTHROUGHS, HOME_FLOOR_Y, LANDMARKS, TILE, type Cell, type WorldState } from './world'
 
 export const isShaftColumn = (x: number): boolean => BREAKTHROUGHS.some((column) => column === x)
@@ -7,7 +8,7 @@ export const isShaftCell = (x: number, y: number): boolean => isShaftColumn(x) &
 /** 阿土在大厅地面的两个可达起点：还没进场时从这里出发，也用于检查裂纹可达。 */
 export const HALL_START_Y = HOME_FLOOR_Y - 1
 export const HALL_STARTS = [18, 25] as const
-const occupied = (world: WorldState, x: number, y: number): boolean => world.pods.some((p) => x >= p.x && x < p.x + 3 && y >= p.y && y < p.y + 2)
+const occupied = (world: WorldState, x: number, y: number): boolean => world.pods.some((p) => podBlocksPassage(world, p) && x >= p.x && x < p.x + 3 && y >= p.y && y < p.y + 2)
 
 export function suggestedBreakthrough(world: WorldState): number {
   return world.pods.some((p) => p.y <= 11 && p.y + 2 > 11 && p.x <= 27 && p.x + 3 > 25) ? 16 : 27
@@ -85,6 +86,7 @@ export function moleRoute(world: WorldState, to: Cell): Cell[] | null {
   const from = world.exploration.explorer
   const current = from ? walkingRoute(world, from, to) : null
   if (current) return current
+  if (from) return null
   for (const x of HALL_STARTS) {
     if (!canStand(world, x, HALL_START_Y)) continue
     const route = walkingRoute(world, { x, y: HALL_START_Y }, to)

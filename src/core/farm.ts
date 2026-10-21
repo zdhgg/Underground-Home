@@ -1,4 +1,4 @@
-import { LANDMARKS, STRATA, SURFACE_Y, TILE, isInside, type Cell, type Planter, type WorldState } from './world'
+import { LANDMARKS, STRATA, SURFACE_Y, TILE, WATER_FLOOR_Y, isInside, type Cell, type Planter, type WorldState } from './world'
 import { isShaftColumn } from './exploration'
 import { podRect } from './build'
 import { RELICS } from './relics'
@@ -6,15 +6,16 @@ import { RELICS } from './relics'
 /**
  * 引水与种植（规则层，与渲染无关）。
  *
- * 水要先从第二层引上来，第一层才成为生产空间；作物不用真实时间生长——
+ * 水在第二层的泉水边接通，菜园也建在第二层；作物不用真实时间生长——
  * 玩家每亲自做一件事（挖土、破岩、建造、安灯、收获）就长一档，孩子随时收。
+ * 旧存档里第一层的菜槽继续可用，只作为兼容，不再作为新玩家的引导目标。
  */
 export const RIPE_STAGE = 3
 
 export type FarmFailure = 'no-water' | 'layer' | 'bounds' | 'soil' | 'support' | 'reserved' | 'overlap'
 export type PlanterPlacement = { ok: true } | { ok: false; reason: FarmFailure }
 
-/** 找到泉水、但还没引到家里 */
+/** 找到泉水、但还没接进菜园 */
 export function canSupplyWater(world: WorldState): boolean {
   return world.exploration.springFound && !world.farm.waterSupplied
 }
@@ -26,15 +27,22 @@ export const ripePlanters = (world: WorldState): Planter[] => world.farm.planter
 export const planterAt = (world: WorldState, x: number, y: number): Planter | null =>
   world.farm.planters.find((planter) => planter.x === x && planter.y === y) ?? null
 
-/** 一格种植槽：第一层、已挖空、有承托，不压核心 / 竖井 / 睡眠舱 / 遗物 */
+/**
+ * 一格种植槽：已挖空、有承托，不压核心 / 竖井 / 睡眠舱 / 遗物 / 泉眼。
+ * 新菜园在第二层；第一层仍允许旧档里的菜槽通过校验，不再作为引导目标。
+ */
 export function canPlacePlanter(world: WorldState, x: number, y: number): PlanterPlacement {
   if (!isFarmUnlocked(world)) return { ok: false, reason: 'no-water' }
   if (!Number.isInteger(x) || !Number.isInteger(y) || !isInside(world, x, y)) return { ok: false, reason: 'bounds' }
-  // 只种在暖窝层：第二层留给以后的深层建设。
-  if (y < SURFACE_Y || y >= STRATA.home.bottom) return { ok: false, reason: 'layer' }
+  const onHome = y >= SURFACE_Y && y < STRATA.home.bottom
+  const onWater = y >= 18 && y < WATER_FLOOR_Y
+  if (!onHome && !onWater) return { ok: false, reason: 'layer' }
+  // 第二层要真正下去过，不能在梯子上隔着岩层种菜。
+  if (onWater && !world.exploration.entered) return { ok: false, reason: 'layer' }
   if (world.tiles[y][x] !== TILE.EMPTY) return { ok: false, reason: 'soil' }
   if (world.tiles[y + 1]?.[x] === TILE.EMPTY) return { ok: false, reason: 'support' }
   if (isShaftColumn(x) || (x >= LANDMARKS.shaft.x && x < LANDMARKS.shaft.x + LANDMARKS.shaft.w)) return { ok: false, reason: 'reserved' }
+  if (onWater && Math.abs(x - LANDMARKS.spring.x) <= 1) return { ok: false, reason: 'reserved' }
   const reserved = [LANDMARKS.generatorZone, { ...LANDMARKS.crystal, w: 1, h: 1 }]
   if (reserved.some((rect) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h)) return { ok: false, reason: 'reserved' }
   if (RELICS.some((relic) => relic.x === x && relic.y === y)) return { ok: false, reason: 'reserved' }

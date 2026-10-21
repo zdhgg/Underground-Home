@@ -1,0 +1,26 @@
+{
+  "url": "http://127.0.0.1:5197/",
+  "results": [
+    {
+      "case": "layer1-bed-step-has-direct-build-cta-and-home-extra",
+      "passed": true
+    },
+    {
+      "case": "guide-cta-opens-room-builder",
+      "passed": true
+    },
+    {
+      "case": "expanded-guide-lists-three-home-goals",
+      "passed": true
+    },
+    {
+      "case": "first-bed-does-not-spawn-rabbit-and-hints-voice-below",
+      "passed": true
+    },
+    {
+      "case": "arrival-meets-xiaoman-in-layer2-cave",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

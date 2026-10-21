@@ -19,12 +19,12 @@ function farmWorld(): WorldState {
   world.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
   placePod(world, 12, 10)
-  for (let x = 26; x <= 27; x++) dig(world, x, 11)
+  for (let x = 26; x <= 27; x++) { dig(world, x, 11); dig(world, x, 10) }
   inspectCrack(world, 27, 12)
   upgradePickaxe(world)
   for (let y = 12; y < 19; y++) if (world.tiles[y][27] !== TILE.EMPTY) dig(world, 27, y)
   world.exploration.entered = true
-  for (let x = 23; x >= 18; x--) dig(world, x, 21)
+  for (let x = 23; x >= 18; x--) { dig(world, x, 21); dig(world, x, 20) }
   world.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
   world.exploration.springFound = true
   for (let y = 9; y <= 11; y++) for (let x = 2; x <= 11; x++) if (world.tiles[y][x] === TILE.SOIL) dig(world, x, y)
@@ -202,6 +202,23 @@ describe('引水与种植（v6）', () => {
     const buried = JSON.parse(JSON.stringify(payload))
     buried.world.tiles[11][5] = TILE.SOIL
     expect(deserialize(buried).ok).toBe(false)
+  })
+})
+
+describe('伙伴站位迁移', () => {
+  it('旧档里“建好床就加入”的小满站位会被丢弃，整份存档仍能读取', () => {
+    const world = createInitialWorld()
+    world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
+    expect(placePod(world, 12, 10)).not.toBeNull()
+    world.workers = { adeng: { x: 24, y: 11 }, xiaoman: { x: 17, y: 11 } }
+
+    const result = deserialize(serialize(world))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.world.workers.adeng).toEqual({ x: 24, y: 11 })
+      expect(result.world.workers.xiaoman).toBeUndefined()
+    }
   })
 })
 

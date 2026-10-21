@@ -1,0 +1,19 @@
+{
+  "mode": "production preview, isolated Chromium context",
+  "checks": [
+    "direct click Atu",
+    "talk does not change world",
+    "drag does not talk",
+    "upgrade ready/equipped",
+    "no automatic rock digging",
+    "selected rock only",
+    "existing v7 upgrade restored",
+    "Escape closes",
+    "sleeping Atu and Adeng separately clickable",
+    "build placement priority",
+    "Xiaoman/Xiaoquan contextual responses",
+    "900x620 upgrade button usable"
+  ],
+  "runtimeErrors": [],
+  "save": "existing schema; own isolated test context"
+}

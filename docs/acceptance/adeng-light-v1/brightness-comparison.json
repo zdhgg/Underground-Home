@@ -1,0 +1,17 @@
+{
+  "new_space": {
+    "before": 18.95,
+    "after": 50.67,
+    "delta": 31.72
+  },
+  "unexcavated_soil": {
+    "before": 21.9,
+    "after": 21.9,
+    "delta": 0.0
+  },
+  "unchanged_rock": {
+    "before": 58.29,
+    "after": 58.29,
+    "delta": 0.0
+  }
+}

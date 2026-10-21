@@ -18,13 +18,13 @@ function readyForPower(): WorldState {
   for (let y = 9; y <= 11; y++) for (let x = 5; x <= 14; x++) if (world.tiles[y][x] === TILE.SOIL) dig(world, x, y)
   placePod(world, 7, 10)
   // 裂纹 → 换镐 → 挖通梯道 → 下到第二层
-  for (let x = 26; x <= 27; x++) dig(world, x, 11)
+  for (let x = 26; x <= 27; x++) { dig(world, x, 11); dig(world, x, 10) }
   inspectCrack(world, 27, 12)
   upgradePickaxe(world)
   for (let y = 12; y < 19; y++) if (world.tiles[y][27] !== TILE.EMPTY) dig(world, 27, y)
   world.exploration.entered = true
   // 沿泉水层地面挖到水边，阿土才站得住
-  for (let x = 23; x >= LANDMARKS.spring.x; x--) dig(world, x, 21)
+  for (let x = 23; x >= LANDMARKS.spring.x; x--) { dig(world, x, 21); dig(world, x, 20) }
   world.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
   world.exploration.springFound = true
   world.farm.waterSupplied = true

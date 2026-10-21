@@ -6,6 +6,7 @@ import { createDigHistory } from '../src/core/history'
 import { collectCrystal, repairCore } from '../src/core/interact'
 import { createInitialWorld, LANDMARKS, SURFACE_Y, TILE, TILE_SIZE, type SleepPod } from '../src/core/world'
 import { inspectCrack, moleRoute, shaftFrontier, upgradePickaxe } from '../src/core/exploration'
+import { initializeWorkers } from '../src/core/partnerWork'
 import { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { loadTerrainTextures, type TerrainTextures } from '../src/render/terrainTextures'
 import { loadEnergyCoreTexture } from '../src/render/energyCoreTexture'
@@ -13,8 +14,15 @@ import { loadCrystalTexture } from '../src/render/crystalTexture'
 import type { CrystalFeedback } from '../src/render/CrystalFeedback'
 import { LAMP_LOCATIONS, loadShelterFixtureTextures } from '../src/render/shelterFixtures'
 import { bedSlots } from '../src/render/sleepPods'
+import { loadNestTextures } from '../src/render/nestArt'
+import { loadLoungeTextures } from '../src/render/loungeArt'
+import { loadCollectionTextures } from '../src/render/collectionScene'
+import { loadMoleTextures, MOLE_HEIGHT, type MoleTextures } from '../src/render/moleVisual'
+import type { ExplorationScene } from '../src/render/explorationScene'
+import { loadCompanionTextures, type CompanionArt } from '../src/render/companionVisual'
 import { loadSurfaceTextures } from '../src/render/surfaceTextures'
 import type { SurfaceScene } from '../src/render/surfaceScene'
+import { OPENING_DURATION } from '../src/render/openingTimeline'
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -47,10 +55,29 @@ vi.mock('../src/render/shelterFixtures', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/shelterFixtures')>(),
   loadShelterFixtureTextures: vi.fn(),
 }))
-
+vi.mock('../src/render/moleVisual', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/moleVisual')>(),
+  loadMoleTextures: vi.fn(),
+}))
+vi.mock('../src/render/companionVisual', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/companionVisual')>(),
+  loadCompanionTextures: vi.fn(),
+}))
 vi.mock('../src/render/surfaceTextures', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/surfaceTextures')>(),
   loadSurfaceTextures: vi.fn(),
+}))
+vi.mock('../src/render/nestArt', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/nestArt')>(),
+  loadNestTextures: vi.fn(),
+}))
+vi.mock('../src/render/loungeArt', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/loungeArt')>(),
+  loadLoungeTextures: vi.fn(),
+}))
+vi.mock('../src/render/collectionScene', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/collectionScene')>(),
+  loadCollectionTextures: vi.fn(),
 }))
 
 function texture(size = 64): Texture {
@@ -69,6 +96,9 @@ interface TerrainProbe {
   surfaceScene: SurfaceScene
   camera: { x: number; y: number; zoom: number }
   viewport: { width: number; height: number }
+  moleLayer: Container
+  friendsLayer: Container
+  explorationScene: ExplorationScene
   tileSprites: { base: Sprite; edges: Sprite[] }[][]
   terrainLayer: Container
   hover: Graphics
@@ -122,6 +152,8 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   let view: TerrainProbe
   let art: TerrainTextures
   let world: ReturnType<typeof createInitialWorld>
+  let moleArt: MoleTextures
+  let companionArt: CompanionArt
 
   it('初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根', () => {
     for (const [width, height] of [[1440, 800], [1024, 600], [927, 482], [760, 360]]) {
@@ -136,7 +168,19 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   beforeEach(async () => {
     vi.stubGlobal('window', { devicePixelRatio: 1 })
     art = textures()
+    vi.mocked(loadNestTextures).mockResolvedValue({ shell: texture(1254), bunks: texture(1536) })
+    vi.mocked(loadLoungeTextures).mockResolvedValue({ shell: texture(1618), furniture: texture(2172) })
+    vi.mocked(loadCollectionTextures).mockResolvedValue({ shelf: texture(2172), items: { 'seed-pouch': texture(), wrench: texture(), 'lamp-shade': texture() } })
     vi.mocked(loadSurfaceTextures).mockResolvedValue({ horizon: texture(724), woodland: texture(724), entrance: texture(1024) })
+    moleArt = {
+      idle: new Texture({ source: new TextureSource({ width: 409, height: 512 }) }),
+      blink: new Texture({ source: new TextureSource({ width: 409, height: 512 }) }),
+      rest: new Texture({ source: new TextureSource({ width: 360, height: 271 }) }),
+    }
+    vi.mocked(loadMoleTextures).mockResolvedValue(moleArt)
+    const companion = () => ({ idle: texture(512), blink: texture(512), rest: texture(256) })
+    companionArt = { adeng: companion(), xiaoman: companion(), xiaoquan: companion() }
+    vi.mocked(loadCompanionTextures).mockResolvedValue(companionArt)
     vi.mocked(loadTerrainTextures).mockResolvedValue(art)
     vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({
       source: new TextureSource({ width: 1536, height: 1024 }),
@@ -155,6 +199,101 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     renderer.destroy()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it('开场自然结束与任意阶段跳过得到同一镜头和角色，世界始终不变', () => {
+    // Node 无 Canvas 字体测量；只替换测量入口，实际气泡排版由浏览器验收。
+    vi.spyOn(Text.prototype, 'width', 'get').mockImplementation(function (this: Text) { return this.text.length * 14 })
+    vi.spyOn(Text.prototype, 'height', 'get').mockReturnValue(18)
+    world.exploration.explorer = { x: 18, y: 11 }
+    renderer.setWorld(world)
+    renderer.focusHome()
+    const finalCamera = { ...view.camera }, before = JSON.stringify(world)
+    for (const seconds of [0, 1.8, 4, 6.3, 8.5, 10.8, 13.4, 14.7, OPENING_DURATION + .2]) {
+      const done = vi.fn()
+      renderer.playOpening(done, vi.fn())
+      for (let t = 0; t < seconds; t += .1) view.tick({ deltaMS: 100 } as Ticker)
+      if (seconds > OPENING_DURATION) expect(done).toHaveBeenCalledTimes(1)
+      renderer.finishOpening(); renderer.finishOpening()
+      expect(done).toHaveBeenCalledTimes(1)
+      expect(view.camera).toEqual(finalCamera)
+      expect(view.explorationScene.view.visible).toBe(true)
+      expect(JSON.stringify(world)).toBe(before)
+    }
+  })
+
+  it('专业伙伴按已保存站位待命，床位保留且不会出现床上分身；工作反馈不拉镜头', () => {
+    world.progress.coreRepaired = true
+    for (const x of [12, 13, 14]) for (const y of [9, 10, 11]) world.tiles[y][x] = TILE.EMPTY
+    const pod = placePod(world, 12, 10)!
+    initializeWorkers(world); renderer.setWorld(world)
+    for (const friend of view.friends.filter(f => f.partnerId !== 'atu')) {
+      const p = world.workers[friend.partnerId as 'adeng' | 'xiaoman']!
+      expect(friend.pose).toBe('idle'); expect(friend.bed).toBeNull()
+      expect(friend.view.x).toBe((p.x + .5) * TILE_SIZE)
+      expect(view.friends.filter(f => f.partnerId === friend.partnerId)).toHaveLength(1)
+    }
+    const settled = vi.fn(); renderer.playPodEntrance(pod, settled)
+    expect(settled).toHaveBeenCalledTimes(1)
+    const camera = view.cameraTween; renderer.playSupplyWater()
+    expect(view.cameraTween).toBe(camera)
+    const adeng = view.friends.find(f => f.partnerId === 'adeng')!
+    const route = [{ x: 24, y: 11 }, { x: 25, y: 11 }], done = vi.fn()
+    renderer.playPartnerTravel('adeng', route, p => { world.workers.adeng = p }, done)
+    for (let i = 0; i < 4; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(done).toHaveBeenCalledTimes(1); expect(adeng.view.x).toBe(25.5 * TILE_SIZE)
+    expect(world.workers.adeng).toEqual({ x: 25, y: 11 })
+  })
+
+  it('阿土用40px图片站在原地面；夜里脸部可辨，阿灯仍在黑暗下躲藏', () => {
+    const atu = view.friends[0]
+    const snapshot = JSON.stringify(world)
+    const sprite = atu.view.getChildByLabel('atu-sprite', true) as Sprite
+    expect(sprite.texture).toBe(moleArt.idle)
+    expect(sprite.height).toBe(MOLE_HEIGHT)
+    expect(sprite.width).toBeCloseTo(MOLE_HEIGHT * 409 / 512)
+    expect(sprite.anchor.y).toBe(1)
+    expect(atu.view.y + sprite.y).toBe(12 * TILE_SIZE)
+    expect(atu.body.visible).toBe(false)
+    expect(atu.view.parent).toBe(view.moleLayer)
+    expect(view.worldLayer.getChildIndex(view.moleLayer)).toBeGreaterThan(view.worldLayer.getChildIndex(view.darkness))
+    expect(view.friends[1].view.parent).toBe(view.friendsLayer)
+    expect(view.friends[1].hidden).toBe(true)
+    for (let i = 0; i < 80; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(JSON.stringify(world)).toBe(snapshot)
+    expect(atu.view.y + sprite.y).toBe(12 * TILE_SIZE)
+  })
+
+  it('探索使用同一个阿土；出发时隐藏大厅分身，取消未落盘的移动后恢复', () => {
+    const atu = view.friends[0]
+    const explorerSprite = view.explorationScene.view.getChildByLabel('atu-sprite', true) as Sprite
+    expect(explorerSprite.texture).toBe(moleArt.idle)
+    const snapshot = JSON.stringify(world)
+    const done = vi.fn()
+    renderer.playExplorationTravel([{ x: 18, y: 11 }, { x: 19, y: 11 }], done)
+    expect(atu.view.visible).toBe(false)
+    expect(view.explorationScene.visible).toBe(true)
+    renderer.cancelExplorationAnimation()
+    view.tick({ deltaMS: 16 } as Ticker)
+    expect(atu.view.visible).toBe(true)
+    expect(done).not.toHaveBeenCalled()
+    expect(JSON.stringify(world)).toBe(snapshot)
+  })
+
+  it('阿土素材加载失败仍能进入游戏、画出备用角色并继续探索', async () => {
+    vi.mocked(loadMoleTextures).mockResolvedValueOnce(null)
+    const fallback = await PixiWorldRenderer.create({ appendChild: vi.fn() } as unknown as HTMLElement)
+    try {
+      fallback.setWorld(world)
+      const probe = fallback as unknown as TerrainProbe
+      expect(probe.friends[0].body.visible).toBe(true)
+      expect(probe.friends[0].body.context.instructions.length).toBeGreaterThan(0)
+      expect(probe.friends[0].view.getChildByLabel('atu-sprite', true)).toBeNull()
+      expect(probe.explorationScene.view.getChildByLabel('atu-sprite', true)).toBeNull()
+      fallback.playExplorationTravel([{ x: 18, y: 11 }, { x: 19, y: 11 }], () => {})
+      probe.tick({ deltaMS: 100 } as Ticker)
+      expect(fallback.explorationAnimating).toBe(true)
+    } finally { fallback.destroy() }
   })
 
   it('64px PNG 换入空精灵后仍为32×32，锚点和网格不变', () => {
@@ -376,8 +515,10 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
   it('梯架和7盏未通电灯具位于原坐标、黑暗遮罩之下，刷新复用静态精灵', () => {
     const fixtures = [...view.shelterFixtures.children] as Sprite[]
-    expect(fixtures).toHaveLength(8)
-    const [ladder, ...lamps] = fixtures
+    expect(fixtures).toHaveLength(9)
+    const [ladder, extension, ...lamps] = fixtures
+    expect(extension.x).toBe(ladder.x)
+    expect(extension.y + extension.height).toBe(12 * TILE_SIZE)
     expect([ladder.x, ladder.y]).toEqual([(LANDMARKS.shaft.x + LANDMARKS.shaft.w / 2) * TILE_SIZE, LANDMARKS.shaft.y * TILE_SIZE])
     expect(ladder.height).toBe((LANDMARKS.shaft.h + 1) * TILE_SIZE)
     expect(ladder.scale.x).toBe(ladder.scale.y)
@@ -400,7 +541,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     view.lightLevel = 0.2
     view.drawLighting()
     expect(view.lamps.context.instructions).toHaveLength(6) // 前3盏：每盏光晕+灯芯
-    const lampSprites = view.shelterFixtures.children.slice(1) as Sprite[]
+    const lampSprites = view.shelterFixtures.children.slice(2) as Sprite[]
     expect(lampSprites[0].tint).toBeGreaterThan(lampSprites[3].tint)
     expect(lampSprites[6].tint).toBe(0x666666)
     view.lightLevel = 1
@@ -481,6 +622,10 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       expect(adeng.nameLabel).toBeNull()
       expect(adeng.tailGlow).not.toBeNull()
       expect(adeng.view.alpha).toBeLessThan(0.8)
+      const sprite = adeng.view.getChildByLabel('adeng-sprite', true) as Sprite
+      expect(sprite.texture).toBe(companionArt.adeng!.idle)
+      const light = adeng.view.getChildByLabel('adeng-tail-light', true) as Graphics
+      expect(light.context.instructions).toHaveLength(0)
       // 她躲在右边角落，和阿土分开
       expect(adeng.view.x).toBeGreaterThan(atu.view.x)
     })
@@ -503,6 +648,8 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       expect(adeng.view.alpha).toBeCloseTo(1, 2)
       expect(adeng.nameLabel?.text).toBe('阿灯')
       expect(adeng.tailGlow).toBeNull()
+      const light = adeng.view.getChildByLabel('adeng-tail-light', true) as Graphics
+      expect(light.context.instructions.length).toBeGreaterThan(0)
     })
 
     it('每个伙伴带着自己的物种 id：画出来的不是同一个球', () => {
@@ -514,8 +661,13 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       placePod(world, 12, 10)
       renderer.refreshPods()
       renderer.refreshFriends()
-      // 建好床小满就来，此时大厅里有三位：阿土、阿灯、小满
+      // 只建好第一层的床，小满还在下面，不会有第三位。
+      expect(view.friends.map((friend) => friend.partnerId)).toEqual(['atu', 'adeng'])
+      world.exploration.entered = true
+      renderer.refreshFriends()
+      // 下到泉水层才遇见小满；她站在下面的洞穴里。
       expect(view.friends.map((friend) => friend.partnerId)).toEqual(['atu', 'adeng', 'xiaoman'])
+      expect(view.friends[2].view.x).toBeCloseTo(25.4 * TILE_SIZE, 5)
     })
 
     it('已点亮的存档直接站着，不重播飞出来的演出', () => {
@@ -537,13 +689,76 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     return next
   }
 
-  it('载入带睡眠舱的存档时：老住户直接睡在床上，新来的小满站在大厅等床', () => {
+  it('四位伙伴保留各自轮廓、原落点和名字；播放动画不改变世界', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.entered = true
+    next.exploration.springFound = true
+    renderer.setWorld(next)
+    const snapshot = JSON.stringify(next)
+    for (const id of ['adeng', 'xiaoman', 'xiaoquan'] as const) {
+      const friend = view.friends.find((friend) => friend.partnerId === id)!
+      const sprite = friend.view.getChildByLabel(`${id}-sprite`, true) as Sprite
+      expect(sprite).not.toBeNull()
+      expect(friend.body.visible).toBe(false)
+      expect(sprite.texture).toBe(friend.pose === 'rest' ? companionArt[id]!.rest : companionArt[id]!.idle)
+      if (friend.pose !== 'rest') {
+        // 小满在泉水层、小泉在大厅：两人都不该凭空出现在同一块地面。
+        expect(friend.nameLabel?.text).toBe(id === 'xiaoman' ? '小满' : '小泉')
+      }
+    }
+    const rabbit = view.friends[2].view.getChildByLabel('xiaoman-sprite', true) as Sprite
+    const otter = view.friends[3].view.getChildByLabel('xiaoquan-sprite', true) as Sprite
+    expect(rabbit.height).toBe(44)
+    expect(otter.height).toBe(40)
+    for (let i = 0; i < 70; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(JSON.stringify(next)).toBe(snapshot)
+  })
+
+  it('某一位素材失败只使用她的备用造型，其他伙伴继续使用图片', async () => {
+    vi.mocked(loadCompanionTextures).mockResolvedValueOnce({ ...companionArt, adeng: null })
+    const fallback = await PixiWorldRenderer.create({ appendChild: vi.fn() } as unknown as HTMLElement)
+    try {
+      const next = carvedWorld()
+      placePod(next, 12, 10)
+      next.exploration.entered = true
+      next.exploration.springFound = true
+      fallback.setWorld(next)
+      const probe = fallback as unknown as TerrainProbe
+      expect(probe.friends[1].body.visible).toBe(true)
+      expect(probe.friends[1].view.getChildByLabel('adeng-sprite', true)).toBeNull()
+      expect(probe.friends[2].view.getChildByLabel('xiaoman-sprite', true)).not.toBeNull()
+      expect(probe.friends[3].view.getChildByLabel('xiaoquan-sprite', true)).not.toBeNull()
+      expect(probe.friends[0].view.getChildByLabel('atu-sprite', true)).not.toBeNull()
+    } finally { fallback.destroy() }
+  })
+
+  it('四位入住后使用各自闭眼头部，32px兔耳也装得进原床位', () => {
+    const next = carvedWorld()
+    placePod(next, 12, 10)
+    next.exploration.entered = true
+    next.exploration.springFound = true
+    for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
+    placePod(next, 7, 10)
+    renderer.setWorld(next)
+    for (const id of ['adeng', 'xiaoman', 'xiaoquan'] as const) {
+      const friend = view.friends.find((friend) => friend.partnerId === id)!
+      const sprite = friend.view.getChildByLabel(`${id}-sprite`, true) as Sprite
+      expect(sprite.texture).toBe(companionArt[id]!.rest)
+      expect(friend.view.getChildByLabel(`${id}-quilt`, true)?.visible).toBe(true)
+      expect(sprite.height * friend.view.scale.y).toBeLessThan(24)
+      expect(friend.nameLabel).toBeNull()
+    }
+  })
+
+  it('载入带睡眠舱的存档时：老住户直接睡在床上，第二层的小满在洞穴里等床', () => {
     const saved = carvedWorld()
     const pod = placePod(saved, 12, 10)!
+    saved.exploration.entered = true
     renderer.setWorld(saved)
     const beds = bedSlots(pod)
     expect(view.podEntrance).toBeNull()
-    // 阿土和阿灯睡在床上；小满闻到家的味道来了，还站着等第二张床。
+    // 阿土和阿灯睡在床上；小满在泉水层的洞穴里，还等着自己的床。
     expect(view.friends).toHaveLength(3)
     const sleeping = view.friends.filter((friend) => friend.pose === 'rest')
     expect(sleeping).toHaveLength(2)
@@ -556,6 +771,13 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     const waiting = view.friends.find((friend) => friend.pose === 'idle')
     expect(waiting?.bed).toBeNull()
     expect(waiting?.nameLabel?.text).toBe('小满')
+    expect(waiting?.view.x).toBeCloseTo(25.4 * TILE_SIZE, 5)
+    expect(waiting?.view.y).toBe(22 * TILE_SIZE - 13)
+    const atu = sleeping[0]
+    const sprite = atu.view.getChildByLabel('atu-sprite', true) as Sprite
+    expect(sprite.texture).toBe(moleArt.rest)
+    expect(atu.view.getChildByLabel('atu-quilt', true)?.visible).toBe(true)
+    expect(sprite.height * atu.view.scale.y).toBeLessThan(24)
   })
 
   it('建成刷新只重建舱体，伙伴仍留在避难所等待出发', () => {
@@ -570,7 +792,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.podLayer.children).toHaveLength(1)
   })
 
-  it('建好第一间床：小满带着名字出现在大厅，等她自己的床', () => {
+  it('建好第一间床：只有老住户入住；下到第二层才遇见小满', () => {
     const next = carvedWorld()
     renderer.setWorld(next)
     // 还没有床：阿土和阿灯站着，各自带着名字
@@ -578,15 +800,21 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     const pod = placePod(next, 12, 10)!
     renderer.refreshPods()
     renderer.refreshFriends(pod.id)
-    // 入场前：新舱两位站着，小满也来了
-    expect(view.friends).toHaveLength(3)
-    expect(view.friends.map((friend) => friend.nameLabel?.text)).toEqual(['阿土', '阿灯', '小满'])
+    // 第一层的床只让老住户入住，不会凭空多出一只兔子。
+    expect(view.friends).toHaveLength(2)
     renderer.playPodEntrance(pod, () => {})
     for (let i = 0; i < 240; i++) view.tick({ deltaMS: 16 } as Ticker)
-    // 阿土和阿灯躺下后名字消失；小满还在等，名字留着
-    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'idle'])
-    expect(view.friends.slice(0, 2).every((friend) => friend.nameLabel === null)).toBe(true)
-    expect(view.friends[2].nameLabel?.text).toBe('小满')
+    expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest'])
+    expect(view.friends.every((friend) => friend.nameLabel === null)).toBe(true)
+
+    // 下到泉水层：小满出现在下面的洞穴里，名字牌亮着。
+    next.exploration.entered = true
+    renderer.refreshFriends()
+    expect(view.friends).toHaveLength(3)
+    const rabbit = view.friends.find((friend) => friend.partnerId === 'xiaoman')!
+    expect(rabbit.pose).toBe('idle')
+    expect(rabbit.nameLabel?.text).toBe('小满')
+    expect(rabbit.view.x).toBeCloseTo(25.4 * TILE_SIZE, 5)
   })
 
   it('建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调', () => {
@@ -627,9 +855,10 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.friends.every((friend) => friend.pose === 'rest')).toBe(true)
   })
 
-  it('水还没找到就建了第二间床：只渲染三位伙伴，空一个床位等小泉', () => {
+  it('进入第二层、水还没找到就建了第二间床：只渲染三位伙伴，空一个床位等小泉', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
+    next.exploration.entered = true
     for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
     expect(placePod(next, 7, 10)).not.toBeNull()
     renderer.setWorld(next)
@@ -637,9 +866,10 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.friends.map((friend) => friend.pose)).toEqual(['rest', 'rest', 'rest'])
   })
 
-  it('找到水之后大厅里多出两位等床的新朋友', () => {
+  it('找到水之后，泉水层和营地各多出一位等床的新朋友', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
+    next.exploration.entered = true
     next.exploration.springFound = true
     renderer.setWorld(next)
     expect(view.friends).toHaveLength(4)
@@ -649,6 +879,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('第二间舱的入场只搬新舱那两位，老住户继续睡在自己的床上', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
+    next.exploration.entered = true
     next.exploration.springFound = true
     renderer.setWorld(next)
     for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
@@ -674,6 +905,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('种植槽与水管：按档位画出不同外观，引水之后才出现水管', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
+    next.exploration.entered = true
     next.exploration.springFound = true
     for (let y = 9; y <= 11; y++) for (let x = 5; x < 11; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
     next.farm.planters.push(
@@ -702,6 +934,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('两间舱的存档重新载入：四位伙伴各自睡在自己的舱里', () => {
     const next = carvedWorld()
     placePod(next, 12, 10)
+    next.exploration.entered = true
     next.exploration.springFound = true
     for (let y = 9; y <= 11; y++) for (let x = 5; x < 15; x++) if (next.tiles[y][x] === TILE.SOIL) dig(next, x, y)
     placePod(next, 7, 10)

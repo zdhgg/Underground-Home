@@ -1,0 +1,105 @@
+{
+  "url": "http://127.0.0.1:5194/",
+  "results": [
+    {
+      "case": "desktop-cold",
+      "at": 1.6,
+      "speech": "好冷呀……",
+      "passed": true
+    },
+    {
+      "case": "desktop-notice",
+      "at": 3.55,
+      "speech": "咦？那边有个入口！",
+      "passed": true
+    },
+    {
+      "case": "desktop-approach",
+      "at": 6.2,
+      "speech": "",
+      "passed": true
+    },
+    {
+      "case": "desktop-shelter",
+      "at": 8.5,
+      "speech": "啊，暖和一点了！",
+      "passed": true
+    },
+    {
+      "case": "desktop-climb",
+      "at": 10.8,
+      "speech": "",
+      "passed": true
+    },
+    {
+      "case": "desktop-core",
+      "at": 13.4,
+      "speech": "",
+      "passed": true
+    },
+    {
+      "case": "desktop-clue",
+      "at": 14.8,
+      "speech": "",
+      "passed": true
+    },
+    {
+      "case": "natural-end-first-mission-0-of-4",
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 0,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 1.6,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 4.2,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 6.2,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 7.2,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 8.5,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 10.8,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 13.4,
+      "passed": true
+    },
+    {
+      "case": "skip-same-camera-and-first-mission",
+      "at": 14.8,
+      "passed": true
+    },
+    {
+      "case": "full-playback-900x620",
+      "passed": true
+    },
+    {
+      "case": "full-playback-390x844",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

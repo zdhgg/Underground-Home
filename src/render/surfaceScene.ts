@@ -2,7 +2,7 @@ import { Container, Graphics, Sprite } from 'pixi.js'
 import { LANDMARKS, MAP_WIDTH, SURFACE_Y, TILE_SIZE as T } from '../core/world'
 import type { Camera, Viewport } from './camera'
 import type { SurfaceTextures } from './surfaceTextures'
-import { SurfaceWeather } from './surfaceWeather'
+import { SurfaceWeather, type SurfaceWeatherProfile } from './surfaceWeather'
 
 const WIDTH = MAP_WIDTH * T
 const GROUND = SURFACE_Y * T
@@ -106,8 +106,8 @@ export class SurfaceScene {
     }
   }
 
-  update(seconds: number): void {
-    const gust = this.weather.update(seconds)
+  update(seconds: number, weather?: SurfaceWeatherProfile): void {
+    const gust = this.weather.update(seconds, weather)
     for (const { sprite, phase } of this.trees) {
       sprite.skew.x = -0.012 - Math.sin(seconds * 1.5 + phase) * 0.009 * gust
     }

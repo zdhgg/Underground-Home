@@ -1,0 +1,62 @@
+{
+  "url": "http://127.0.0.1:5193/",
+  "results": [
+    {
+      "case": "complete-playback",
+      "seconds": 7.6,
+      "camera": {
+        "x": "109.60000000000002",
+        "y": "-108.95211267605632",
+        "zoom": "1.5434782608695652"
+      },
+      "passed": true
+    },
+    {
+      "case": "restore-untouched-save-no-replay",
+      "passed": true
+    },
+    {
+      "case": "skip",
+      "at": 0.1,
+      "escape": false,
+      "sameWorldCameraMission": true
+    },
+    {
+      "case": "skip",
+      "at": 1.9,
+      "escape": false,
+      "sameWorldCameraMission": true
+    },
+    {
+      "case": "skip",
+      "at": 3.1,
+      "escape": true,
+      "sameWorldCameraMission": true
+    },
+    {
+      "case": "skip",
+      "at": 5.35,
+      "escape": false,
+      "sameWorldCameraMission": true
+    },
+    {
+      "case": "skip",
+      "at": 6.35,
+      "escape": false,
+      "sameWorldCameraMission": true
+    },
+    {
+      "case": "narrow-900x620-skip",
+      "passed": true
+    },
+    {
+      "case": "restore-progressed-v12-world-unchanged",
+      "passed": true
+    },
+    {
+      "case": "skip-unlocks-real-digging",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

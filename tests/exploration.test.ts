@@ -15,7 +15,7 @@ function readyWorld(podX = 12): WorldState {
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = podX; x < podX + 3; x++) dig(w, x, y)
   expect(placePod(w, podX, 10)).not.toBeNull()
-  for (let x = 26; x <= 27; x++) dig(w, x, 11)
+  for (let x = 26; x <= 27; x++) { dig(w, x, 11); dig(w, x, 10) }
   return w
 }
 function openShaft(w: WorldState, x = 27): void {
@@ -165,13 +165,14 @@ describe('首次突破岩层闭环', () => {
     for (let y = 13; y <= 17; y++) dig(w, 27, y)
     enter(w)
     for (let x = 23; x >= 17; x--) dig(w, x, 21)
+    for (let x = 23; x >= 18; x--) dig(w, x, 20)
     w.exploration.explorer = { ...LANDMARKS.spring }; w.exploration.springFound = true
     w.exploration.lamps.push({ x: 30, y: 19 })
     loaded = deserialize(serialize(w))
     expect(loaded.ok && loaded.world).toEqual(w)
-    // 找到水之后还有三步：引水到家里 → 安顿新朋友 → 种出第一份收成
+    // 找到水之后还有三步：接到菜园 → 安顿新朋友 → 种出第一份收成
     expect(waitingPartners(w)).toBe(2)
-    expect(explorationGuide(w)).toMatchObject({ title: '把水引到家里', done: 5, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
     w.farm.waterSupplied = true
     expect(explorationGuide(w)).toMatchObject({ title: '安顿新朋友', done: 6, total: 9, finished: false })
     carve(w, 5, 14, 9, 11)
@@ -179,7 +180,7 @@ describe('首次突破岩层闭环', () => {
     expect(second).not.toBeNull()
     expect(second?.door).toBe('left')
     expect(waitingPartners(w)).toBe(0)
-    expect(explorationGuide(w)).toMatchObject({ title: '种出第一份食物', done: 7, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '在泉水边种出第一份食物', done: 7, total: 9, finished: false })
 
     // 种下一槽菜：干三件事长熟一档一档往上走，收一次就完成主线
     expect(placePlanter(w, 5, 11)).not.toBeNull()
@@ -278,7 +279,8 @@ describe('施工委托：阿土自动前往', () => {
     const inCave = structuredClone(w)
     for (let y = 12; y < 19; y++) if (inCave.tiles[y][27] !== TILE.EMPTY) dig(inCave, 27, y)
     inCave.exploration.explorer = { x: 27, y: 21 } // 还没抵达就想站到泉水层
-    expect(deserialize(serialize(inCave)).ok).toBe(false)
+    // v8可恢复沿已接通梯道下行的安全中途位置；抵达/泉水发现仍不自动完成。
+    expect(deserialize(serialize(inCave)).ok).toBe(true)
     const offShaft = structuredClone(w)
     offShaft.exploration.explorer = { x: 26, y: 13 }
     expect(deserialize(serialize(offShaft)).ok).toBe(false)

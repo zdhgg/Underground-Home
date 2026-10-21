@@ -1,0 +1,13 @@
+{
+  "mode": "Production preview, isolated desktop and true-touch Chromium contexts",
+  "checks": [
+    "Fresh game: Atu digs, collects stone and repairs core through actual controls",
+    "Function/size preview -> persistent blueprint without excavation -> real ground/upward/stool digging -> reload continuation -> confirm creates beds",
+    "Capacity expansion retains old room until completion; automatic additional bed; Atu walks through both beds; undo preserves excavated space; v12 reload",
+    "Real v8 spring save migrates; five-wide garden excavated from soil; dry room awaits water; Xiaoquan connects water and automatically enables two crops; reload retains crops",
+    "v11 existing rooms/bed, farm food and growth, water/electricity, upgraded lamp and all actors preserved exactly",
+    "900x620 planning panel accessible; invalid blueprint save reports failure and is not overwritten",
+    "900x620 true touch: saved blueprint selection, drag without digging, actual excavation, cancel + undo retain terrain, upper/stool work, confirm and reload"
+  ],
+  "runtimeErrors": []
+}

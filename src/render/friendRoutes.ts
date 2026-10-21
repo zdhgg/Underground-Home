@@ -1,3 +1,4 @@
+import { podBlocksPassage } from '../core/passages'
 import { LANDMARKS, SURFACE_Y, TILE, isInside, type Cell, type SleepPod, type WorldState } from '../core/world'
 import { contains, podDoor, podRect } from '../core/build'
 
@@ -21,7 +22,7 @@ function isWalkable(world: WorldState, x: number, y: number): boolean {
   if (!isInside(world, x, y) || y < SURFACE_Y) return false
   if (world.tiles[y][x] !== TILE.EMPTY) return false
   if (contains(LANDMARKS.generatorZone, x, y)) return false
-  if (world.pods.some((pod) => contains(podRect(pod), x, y))) return false
+  if (world.pods.some((pod) => podBlocksPassage(world, pod) && contains(podRect(pod), x, y))) return false
   return true
 }
 

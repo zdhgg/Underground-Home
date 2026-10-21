@@ -3,7 +3,7 @@ import { Assets, Sprite, Texture, TextureSource } from 'pixi.js'
 import { LANDMARKS, MAP_WIDTH, SURFACE_Y, TILE_SIZE } from '../src/core/world'
 import { SurfaceScene, SURFACE_ENTRANCE } from '../src/render/surfaceScene'
 import { loadSurfaceTextures } from '../src/render/surfaceTextures'
-import { LIGHTNING_DURATION, LIGHTNING_PERIOD, snowflakeAt, stormAt } from '../src/render/surfaceWeather'
+import { LIGHTNING_DURATION, LIGHTNING_PERIOD, SurfaceWeather, snowflakeAt, stormAt } from '../src/render/surfaceWeather'
 
 function texture(width: number, height: number): Texture {
   return new Texture({ source: new TextureSource({ width, height }) })
@@ -85,6 +85,16 @@ describe('表面风暴约束', () => {
     expect(stormAt(4.01).lightning).toBeLessThan(0.01)
     expect(stormAt(4 + LIGHTNING_PERIOD + LIGHTNING_DURATION / 2).boltX).not.toBe(stormAt(4.7).boltX)
     for (let seconds = 6; seconds < 22; seconds++) expect(stormAt(seconds).lightning).toBe(0)
+  })
+
+  it('开场风倍率会放大风雪反馈，默认天气保持原强度', () => {
+    const weather = new SurfaceWeather()
+    expect(weather.update(4.7)).toBeCloseTo(stormAt(4.7).gust)
+    expect(weather.update(4.7, { wind: 1.5, snow: 1.45, cloud: .9 })).toBeCloseTo(stormAt(4.7).gust * 1.5)
+    const calm = snowflakeAt(3, 10, 0, 100000)
+    const windy = snowflakeAt(3, 10, 0, 100000, 1.5)
+    expect(windy.x).toBeGreaterThan(calm.x)
+    weather.view.destroy({ children: true })
   })
 })
 

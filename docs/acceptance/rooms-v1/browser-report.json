@@ -1,0 +1,22 @@
+{
+  "mode": "Production preview, isolated Chromium context",
+  "checks": [
+    "v8 migration preserves existing map/facilities",
+    "old two-high bed room",
+    "preview and cancel do not save",
+    "change purpose and undo",
+    "remove marker keeps bed",
+    "undo restores marker",
+    "real right-wing excavation",
+    "garden reserve does not supply water or crops",
+    "width five to six",
+    "lounge in separate space",
+    "drag pans without defining room",
+    "room markers do not block actor",
+    "v9 reload",
+    "900x620 room editing",
+    "unassigned old bed remains usable",
+    "invalid room save feedback and no overwrite"
+  ],
+  "runtimeErrors": []
+}

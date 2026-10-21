@@ -1,0 +1,14 @@
+{
+  "url": "http://127.0.0.1:5197/",
+  "results": [
+    {
+      "case": "layer2-planter-tool-places-and-saves-at-spring",
+      "passed": true
+    },
+    {
+      "case": "home-goals-remain-layer1",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

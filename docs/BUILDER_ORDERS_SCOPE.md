@@ -1,5 +1,7 @@
 # 施工委托式探索：实施决策与风险
 
+> 2026-10-18后续实施：[阿土移动与实际挖掘第1阶段](acceptance/atu-control-v1/README.md)已将普通泥土改为走近后动手挖，并恢复空地移动与安全取消；下文“普通泥土立刻挖开”“空地不移动”属于历史决策。裂纹工具、真实施工及地层边界仍保留。
+
 基线：`b1fb502`（首次突破岩层试玩版）；开发分支：`codex/first-spring-breakthrough`。依据 AGENTS.md、GAME_BRIEF v0.5、PHASES 与 `docs/FIRST_BREAKTHROUGH_SCOPE.md`。本轮为同一分支上的操作定位收口，未发布。
 
 ## 为什么改

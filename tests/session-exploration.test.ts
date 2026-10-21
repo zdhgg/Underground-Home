@@ -2,14 +2,23 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LANDMARKS, createInitialWorld, TILE, type Cell, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { placePod } from '../src/core/build'
-import { serialize } from '../src/core/persistence'
+import { deserialize, serialize } from '../src/core/persistence'
+import type { PartnerConversation } from '../src/core/partnerInteractions'
 import { inspectCrack, shaftConnected, upgradePickaxe } from '../src/core/exploration'
-import { createGameSession } from '../src/app/session'
+import { createGameSession as createSession, type SessionHooks } from '../src/app/session'
+import type { SoilPlan } from '../src/core/atu'
+import type { SiteUI } from '../src/app/siteEditor'
+import type { WorkPlan } from '../src/core/partnerWork'
+import type { WorkerId } from '../src/core/world'
+import { lightField, WIDE_LAMP_ID } from '../src/core/lighting'
+import { finishRoom, planRoom } from '../src/core/roomConstruction'
+import { roomFromPoint } from '../src/core/rooms'
 
 const harness = vi.hoisted(() => {
   const store = { load: vi.fn(), save: vi.fn(), clear: vi.fn() }
   const renderer = {
-    canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(),
+    playOpening: vi.fn((done: () => void, _caption: (text: string) => void) => done()), finishOpening: vi.fn(), enableOpeningSound: vi.fn(),
+    canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
     refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(),
@@ -17,6 +26,14 @@ const harness = vi.hoisted(() => {
     playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
     playBurst: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
+    partnerAtScreen: vi.fn().mockReturnValue(null), playPartnerReaction: vi.fn(),
+    setAtuTarget: vi.fn(), hoverPartner: vi.fn(), findAtu: vi.fn(),
+    setRoomPreview: vi.fn(), refreshRooms: vi.fn(),
+    setLampPreview: vi.fn(), playDigLoot: vi.fn(),
+    playPartnerTravel: vi.fn((_id: WorkerId, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
+    playPartnerWork: vi.fn((_plan: WorkPlan, hit: () => void, done: () => void) => { hit(); done() }),
+    cancelPartnerWork: vi.fn(),
+    playSoilWork: vi.fn((_plan: SoilPlan, strike: () => void, done: () => void) => { strike(); done() }),
     // 累计帧数：看门狗用它判断画面是不是真的冻住了
     frames: 0,
     // 破岩演出在真实渲染里要挥完镐才回调；测试里立即落镐。
@@ -25,9 +42,8 @@ const harness = vi.hoisted(() => {
   const pointer = { detach: vi.fn(), reset: vi.fn() }
   return {
     store, renderer, pointer,
-    handlers: null as unknown as { onTap: (cell: Cell) => void },
+    handlers: null as unknown as { onTap: (cell: Cell) => void; onPanBy: (delta: Cell) => void; onHover: (cell: Cell | null) => void },
     listeners: { document: new Map<string, () => void>(), window: new Map<string, () => void>() },
-    legacy: vi.fn(),
   }
 })
 vi.mock('../src/render/PixiRenderer', () => ({ PixiWorldRenderer: { create: async () => harness.renderer } }))
@@ -38,11 +54,8 @@ vi.mock('../src/render/waterSound', () => ({
   playWaterClue: vi.fn(), playRockHit: vi.fn(), playBreakthrough: vi.fn(), playLayerArrival: vi.fn(), playSpringFound: vi.fn(),
   playWaterSupplied: vi.fn(), playHarvest: vi.fn(), playMealTime: vi.fn(),
 }))
-vi.mock('../src/core/persistence', async (importOriginal) => ({
-  ...await importOriginal<typeof import('../src/core/persistence')>(),
-  createIndexedDbStore: () => harness.store,
-  loadLegacySave: harness.legacy,
-}))
+// 存储仅在规则回归中显式注入，实际试玩默认不读写浏览器存档。
+const createGameSession = (host: HTMLElement, hooks: SessionHooks) => createSession(host, hooks, { store: harness.store })
 
 function readySave() {
   const w = createInitialWorld()
@@ -50,7 +63,18 @@ function readySave() {
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
   placePod(w, 12, 10)
+  for (const x of [26, 27]) { dig(w, x, 11); dig(w, x, 10) }
   return serialize(w)
+}
+
+function clueSave(upgraded = false) {
+  const result = deserialize(readySave())
+  if (!result.ok) throw new Error(result.error)
+  const world = result.world
+  dig(world, 26, 11); dig(world, 27, 11)
+  inspectCrack(world, 27, 12)
+  if (upgraded) upgradePickaxe(world)
+  return serialize(world)
 }
 
 /** 已经找到泉水、引水到家、左翼挖出一带地面的存档：用来测种植与收获 */
@@ -65,7 +89,7 @@ function farmedSave() {
   upgradePickaxe(w)
   for (let y = 12; y < 19; y++) if (w.tiles[y][27] !== TILE.EMPTY) dig(w, 27, y)
   w.exploration.entered = true
-  for (let x = 23; x >= 18; x--) dig(w, x, 21)
+  for (let x = 23; x >= 18; x--) { dig(w, x, 21); dig(w, x, 20) }
   w.exploration.explorer = { x: LANDMARKS.spring.x, y: 21 }
   w.exploration.springFound = true
   for (let y = 9; y <= 11; y++) for (let x = 2; x <= 11; x++) if (w.tiles[y][x] === TILE.SOIL) dig(w, x, y)
@@ -73,7 +97,27 @@ function farmedSave() {
   return serialize(w)
 }
 
+function lampSave() {
+  const raw = farmedSave()
+  for (const x of [26, 27]) raw.world.tiles[10][x] = TILE.EMPTY
+  for (let x = 18; x <= 38; x++) for (const y of [19, 20, 21]) raw.world.tiles[y][x] = TILE.EMPTY
+  raw.world.powerDown = true
+  raw.world.exploration.lamps = [{ x: 31, y: 19 }]
+  return raw
+}
+
 const LISTEN = { x: 27, y: 12 }
+
+/** 旧集成用例自动完成普通土的走位；专门的行动用例另检查落爪前后和过期回调。 */
+function tapAndFinishSoil(x: number, y: number): void {
+  const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+  const soil = w.tiles[y][x] === TILE.SOIL, calls = harness.renderer.playExplorationTravel.mock.calls.length
+  harness.handlers.onTap({ x, y })
+  if (soil && harness.renderer.playExplorationTravel.mock.calls.length > calls) {
+    const travel = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    travel[1]()
+  }
+}
 
 describe('探索会话与存档集成', () => {
   beforeEach(() => {
@@ -91,15 +135,505 @@ describe('探索会话与存档集成', () => {
     })
     vi.stubGlobal('indexedDB', {})
     harness.store.save.mockResolvedValue(undefined)
+    harness.renderer.partnerAtScreen.mockReturnValue(null)
+    harness.renderer.playOpening.mockReset().mockImplementation(done => done())
+    harness.renderer.finishOpening.mockReset()
+    harness.renderer.playPartnerTravel.mockReset().mockImplementation((_id, route, step, done) => { route.forEach(step); done() })
+    harness.renderer.playPartnerWork.mockReset().mockImplementation((_plan, hit, done) => { hit(); done() })
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+  it('仅空存档播放开场；演出屏蔽点挖、拖图和缩放，结束保存原任务', async () => {
+    harness.store.load.mockResolvedValue(null)
+    let finish = () => {}
+    harness.renderer.playOpening.mockImplementationOnce(done => { finish = done })
+    harness.renderer.finishOpening.mockImplementation(() => finish())
+    const opening = vi.fn(), progress = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onOpening: opening })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = serialize(w)
+    harness.handlers.onTap({ x: 16, y: 11 }); harness.handlers.onPanBy({ x: 100, y: 80 })
+    expect(serialize(w)).toEqual(before); expect(harness.renderer.panBy).not.toHaveBeenCalled()
+    expect(opening.mock.calls.at(-1)![0].active).toBe(true)
+    session.skipOpening(); session.skipOpening()
+    expect(opening.mock.calls.at(-1)![0].active).toBe(false)
+    expect(harness.store.save).toHaveBeenCalledTimes(1)
+    expect(serialize(w)).toEqual(before)
+    expect(progress.mock.calls.at(-1)![0].done).toBe(0)
+    session.destroy()
+  })
+
+  it('包括未挖一格的新存档在内，恢复时都不播放开场', async () => {
+    harness.store.load.mockResolvedValue(serialize(createInitialWorld()))
+    const opening = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onOpening: opening })
+    expect(harness.renderer.playOpening).not.toHaveBeenCalled()
+    expect(opening).toHaveBeenLastCalledWith({ active: false, caption: '' })
+    session.destroy()
+  })
+
+  it('开场切到后台走同一收尾出口，恢复存档不会出现半途角色位置', async () => {
+    harness.store.load.mockResolvedValue(null)
+    let finish = () => {}
+    harness.renderer.playOpening.mockImplementationOnce(done => { finish = done })
+    harness.renderer.finishOpening.mockImplementation(() => finish())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const before = serialize(harness.renderer.setWorld.mock.calls[0][0] as WorldState)
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
+    harness.listeners.document.get('visibilitychange')!()
+    expect(harness.renderer.finishOpening).toHaveBeenCalled()
+    expect(harness.store.save.mock.calls.at(-1)![0]).toEqual(before)
+    session.destroy()
+  })
+
+  it('阿灯学习不自动改灯；加装走到现场才落手，重复结算无效，撤销只退灯罩', async () => {
+    harness.store.load.mockResolvedValue(lampSave())
+    const conversation = vi.fn(), session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: conversation })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.talkToPartner('adeng')
+    expect(conversation.mock.calls.at(-1)![0].action.id).toBe('learn-wide-lamp')
+    const farm = structuredClone(w.farm), actor = { ...w.exploration.explorer! }, before = lightField(w)
+    session.partnerAction()
+    expect(w.partnerUpgrades).toEqual([WIDE_LAMP_ID]); expect(lightField(w)).toEqual(before)
+    expect(conversation.mock.calls.at(-1)![0].action.id).toBe('place-wide-lamp')
+    session.partnerAction() // 只进入工具，灯不改变。
+    expect(harness.renderer.focusOn).toHaveBeenLastCalledWith(31.5 * 32, 20.5 * 32)
+    let hit = () => {}, done = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_p, strike, finish) => { hit = strike; done = finish })
+    harness.handlers.onTap({ x: 31, y: 19 })
+    expect(harness.renderer.playPartnerTravel.mock.calls.at(-1)![1].at(-1)).toEqual({ x: 31, y: 21 })
+    expect(w.exploration.lamps[0].wide).toBeUndefined()
+    harness.handlers.onTap({ x: 31, y: 19 }); hit(); hit(); done()
+    expect(w.exploration.lamps).toEqual([{ x: 31, y: 19, wide: true }])
+    expect(lightField(w).length).toBeGreaterThan(before.length)
+    expect(w.farm).toEqual(farm); expect(w.exploration.explorer).toEqual(actor)
+    session.undo()
+    expect(w.exploration.lamps).toEqual([{ x: 31, y: 19 }]); expect(w.partnerUpgrades).toEqual([WIDE_LAMP_ID])
+    expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('取消或切后台不会补加装；刷新恢复学习成果，已加装灯不能重复工作', async () => {
+    const raw = lampSave(); raw.world.partnerUpgrades = [WIDE_LAMP_ID]
+    harness.store.load.mockResolvedValue(raw)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    let hit = () => {}, done = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_p, strike, finish) => { hit = strike; done = finish })
+    session.toggleLamp(); harness.handlers.onTap({ x: 31, y: 19 })
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    harness.listeners.document.get('visibilitychange')!(); hit(); done()
+    expect(w.exploration.lamps[0].wide).toBeUndefined(); expect(w.partnerUpgrades).toEqual([WIDE_LAMP_ID])
+    session.toggleLamp(); harness.handlers.onTap({ x: 31, y: 19 })
+    expect(w.exploration.lamps[0].wide).toBe(true)
+    const count = harness.renderer.playPartnerTravel.mock.calls.length
+    session.toggleLamp(); harness.handlers.onTap({ x: 31, y: 19 })
+    expect(harness.renderer.playPartnerTravel.mock.calls.length).toBe(count)
+    const saved = serialize(w); session.destroy(); harness.store.load.mockResolvedValue(saved)
+    const restored = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const reloaded = harness.renderer.setWorld.mock.calls.at(-1)![0] as WorldState
+    expect(reloaded.partnerUpgrades).toEqual([WIDE_LAMP_ID]); expect(reloaded.exploration.lamps[0].wide).toBe(true)
+    restored.destroy()
+  })
+
+  it('学会后新灯带灯罩，撤销新灯保留旧灯、能力和房间；非法升级档不覆盖', async () => {
+    const raw = lampSave(); raw.world.partnerUpgrades = [WIDE_LAMP_ID]
+    harness.store.load.mockResolvedValue(raw)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.toggleLamp(); harness.handlers.onTap({ x: 35, y: 19 })
+    expect(w.exploration.lamps).toEqual([{ x: 31, y: 19 }, { x: 35, y: 19, wide: true }])
+    session.undo(); expect(w.exploration.lamps).toEqual([{ x: 31, y: 19 }]); expect(w.partnerUpgrades).toEqual([WIDE_LAMP_ID])
+    session.destroy()
+    harness.store.save.mockClear(); raw.world.partnerUpgrades = ['bad-upgrade']; harness.store.load.mockResolvedValue(raw)
+    const warning = vi.fn(), failed = await createGameSession({} as HTMLElement, { onMessage: warning, onProgress: vi.fn() })
+    await vi.advanceTimersByTimeAsync(450); failed.destroy()
+    expect(warning.mock.calls.some(([s]) => s.includes('升级') && s.includes('不覆盖原档'))).toBe(true)
+    expect(harness.store.save).not.toHaveBeenCalled()
+  })
+
+  it('伙伴工作阻止误挖和多开，切后台取消后旧回调无效；恢复仍能收菜', async () => {
+    const raw = farmedSave()
+    for (let x = 26; x <= 32; x++) for (const y of [10, 11]) raw.world.tiles[y][x] = TILE.EMPTY
+    raw.world.farm.planters = [{ id: 1, x: 31, y: 11, growth: 3 }]
+    harness.store.load.mockResolvedValue(raw)
+    const work = vi.fn(), session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onWork: work })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, actor = { ...w.exploration.explorer! }
+    let hit = () => {}, done = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_plan, strike, finish) => { hit = strike; done = finish })
+    harness.renderer.partnerAtScreen.mockReturnValue('xiaoman') // 菜槽命中优先于人物触屏容错。
+    harness.handlers.onTap({ x: 31, y: 11 }); expect(work.mock.calls.at(-1)![0]).toMatchObject({ name: '小满', phase: 'working' })
+    harness.handlers.onTap({ x: 31, y: 11 }); harness.handlers.onTap({ x: 33, y: 11 })
+    expect(w.tiles[11][33]).toBe(TILE.SOIL); expect(w.farm.food).toBe(0)
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    harness.listeners.document.get('visibilitychange')!(); hit(); done()
+    expect(work.mock.calls.at(-1)![0]).toBeNull(); expect(w.farm.food).toBe(0)
+    harness.handlers.onTap({ x: 31, y: 11 })
+    expect(w.farm.food).toBe(1); expect(w.exploration.explorer).toEqual(actor)
+    expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('伙伴让开床位时取消不建床，重试后实际退让且旧站位不会被埋进舱内', async () => {
+    const raw = farmedSave()
+    for (let x = 24; x <= 35; x++) for (const y of [10, 11]) raw.world.tiles[y][x] = TILE.EMPTY
+    raw.world.workers = { adeng: { x: 32, y: 11 } }
+    harness.store.load.mockResolvedValue(raw)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    let arrive = () => {}
+    harness.renderer.playPartnerTravel.mockImplementationOnce((_id, _route, _step, done) => { arrive = done })
+    session.setBuildMode('pod'); harness.handlers.onTap({ x: 32, y: 11 }); session.confirmBuild()
+    expect(w.pods).toHaveLength(1)
+    session.cancelAction(); arrive(); expect(w.pods).toHaveLength(1)
+    session.confirmBuild()
+    expect(w.pods).toHaveLength(2); expect(w.workers.adeng!.x).toBeLessThan(31)
+    expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('退出会话后专业工作的旧落手回调不能结算', async () => {
+    const raw = farmedSave(); raw.world.farm.planters = [{ id: 1, x: 17, y: 11, growth: 3 }]
+    harness.store.load.mockResolvedValue(raw)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    let hit = () => {}, done = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_plan, strike, finish) => { hit = strike; done = finish })
+    harness.handlers.onTap({ x: 17, y: 11 }); session.destroy(); hit(); done()
+    expect(w.farm.food).toBe(0)
+  })
+
+  it('专业工作画面停止出帧时看门狗取消，旧抵达回调不能补收获', async () => {
+    const raw = farmedSave(); raw.world.farm.planters = [{ id: 1, x: 17, y: 11, growth: 3 }]
+    harness.store.load.mockResolvedValue(raw)
+    const work = vi.fn(), session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onWork: work })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    let arrive = () => {}
+    harness.renderer.playPartnerTravel.mockImplementationOnce((_id, _route, _step, done) => { arrive = done })
+    harness.handlers.onTap({ x: 17, y: 11 })
+    expect(work.mock.calls.at(-1)![0]).toMatchObject({ name: '小满', phase: 'walking' })
+    await vi.advanceTimersByTimeAsync(4000); arrive()
+    expect(work.mock.calls.at(-1)![0]).toBeNull(); expect(w.farm.food).toBe(0)
+    session.destroy()
+  })
+
+  it('第一层建首床不再提前出现小满；撤销后站位与存档仍然合法', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const onMilestone = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onMilestone })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
+    for (const x of [12, 13, 14]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
+    session.setBuildMode('pod'); harness.handlers.onTap({ x: 13, y: 11 }); session.confirmBuild()
+    expect(w.workers.xiaoman).toBeUndefined(); expect(w.pods).toHaveLength(1)
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '第一夜的家' }))
+    session.undo(); expect(w.pods).toHaveLength(0); expect(w.workers.xiaoman).toBeUndefined()
+    expect(w.workers.adeng).toBeDefined(); expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('点预设洞室只预览；拖图和关闭面板不会挖土、扣材料或抢成聊天', async () => {
+    const raw = readySave(); raw.world.pods = []
+    harness.store.load.mockResolvedValue(raw)
+    const onSites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
+    harness.renderer.partnerAtScreen.mockReturnValue('atu')
+    harness.handlers.onTap({ x: 13, y: 11 }); harness.handlers.onPanBy({ x: 40, y: 10 })
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'first-nest', canBuild: true })
+    expect(world).toEqual(before)
+    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
+    expect(harness.renderer.partnerAtScreen).not.toHaveBeenCalled()
+    session.cancelAction()
+    expect((onSites.mock.calls.at(-1)![0] as SiteUI).active).toBe(false)
+    expect(world).toEqual(before)
+    session.destroy()
+  })
+
+  it('挖材料模式下蓝图仍优先命中，悬停不框土，点击只打开洞室且拖动仍平移', async () => {
+    const raw = readySave(); raw.world.pods = []
+    harness.store.load.mockResolvedValue(raw)
+    const onSites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const before = structuredClone(world)
+    session.setBuildMode('none')
+    harness.handlers.onHover({ x: 28, y: 10 })
+    expect(harness.renderer.setHoverCell).toHaveBeenLastCalledWith(null)
+    expect(harness.renderer.setCursor).toHaveBeenLastCalledWith('pointer')
+    harness.handlers.onTap({ x: 28, y: 10 })
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'home-lounge' })
+    expect(world).toEqual(before)
+    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
+    harness.handlers.onPanBy({ x: 40, y: 10 })
+    expect(harness.renderer.panBy).toHaveBeenLastCalledWith(40, 10)
+    session.destroy()
+  })
+
+  it('背包打开时拦住地图点击拖图和Esc，关闭后仍可操作，收藏定位不改变世界', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const onBagRequested = vi.fn(), onBag = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onBagRequested, onBag })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
+    expect(onBag.mock.calls.at(-1)![0]).toHaveLength(5)
+    session.setInputBlocked(true)
+    harness.handlers.onTap({ x: 18, y: 8 }); harness.handlers.onTap({ x: 26, y: 10 })
+    const panCount = harness.renderer.panBy.mock.calls.length
+    harness.handlers.onPanBy({ x: 40, y: 20 })
+    const preventDefault = vi.fn()
+    ;(harness.listeners.window.get('keydown') as unknown as (e: unknown) => void)({ key: 'Escape', preventDefault })
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(world).toEqual(before); expect(onBagRequested).not.toHaveBeenCalled()
+    expect(harness.renderer.panBy.mock.calls.length).toBe(panCount)
+    session.setInputBlocked(false)
+    harness.handlers.onTap({ x: 18, y: 8 }); expect(onBagRequested).toHaveBeenCalledOnce()
+    session.focusCollection(); session.focusRelic('seed-pouch')
+    expect(harness.renderer.focusOn).toHaveBeenCalled()
+    expect(world).toEqual(before)
+    session.destroy()
+  })
+
+  it('旧床原样保留，预设洞室识别已有设施，不重建或扣材料', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const onSites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
+    session.selectSite('first-nest'); session.buildSite(); session.closeRooms()
+    expect(world).toEqual(before)
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ built: true, canBuild: false })
+    expect(deserialize(serialize(world)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('点一次开工，阿土真实施工后自动建成，撤销退回材料并保留洞室空间', async () => {
+    const raw = readySave(); raw.world.pods = []
+    harness.store.load.mockResolvedValue(raw)
+    const onSites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, beforeTiles = structuredClone(world.tiles)
+    session.openRooms()
+    expect(world.tiles).toEqual(beforeTiles); expect(world.pods).toHaveLength(0)
+    session.buildSite()
+    expect(world.tiles).toEqual(beforeTiles); expect(world.pods).toHaveLength(0)
+    const cancellations = harness.renderer.cancelExplorationAnimation.mock.calls.length
+    harness.handlers.onTap({ x: 26, y: 11 })
+    expect(onSites.mock.calls.at(-1)![0].working).toBe(true)
+    expect(harness.renderer.cancelExplorationAnimation.mock.calls.length).toBe(cancellations)
+    let seen = 0
+    while (onSites.mock.calls.at(-1)![0].working && seen < 20) {
+      const call = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+      call[1](); seen++
+    }
+    expect(seen).toBeGreaterThan(0); expect(seen).toBeLessThan(20)
+    expect(harness.renderer.playSoilWork).toHaveBeenCalled()
+    expect(world.pods).toHaveLength(1); expect(world.pods[0].backWall).toBe(true)
+    expect(world.rooms[0].status).toBeUndefined(); expect(world.builtSites).toEqual([{ id: 'first-nest', kind: 'home' }])
+    expect(deserialize(serialize(world)).ok).toBe(true)
+    const materials = { ...world.inventory }
+    session.undo(); expect(world.pods).toHaveLength(0); expect(world.rooms).toEqual([])
+    expect(world.builtSites).toEqual([])
+    expect(world.inventory).toEqual({ stone: materials.stone + 3, wood: materials.wood + 2 })
+    expect(world.tiles[9][12]).toBe(TILE.EMPTY)
+    session.destroy()
+  })
+
+  it('旧档未完成的蓝图仍可从兼容入口继续，不被预设覆盖', async () => {
+    const loaded = deserialize(readySave()); expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    const change = planRoom(loaded.world, roomFromPoint({ x: 30, y: 11 }, 5, 'lounge'))!
+    expect(change).not.toBeNull()
+    harness.store.load.mockResolvedValue(serialize(loaded.world))
+    const onRooms = vi.fn(), onSites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onRooms, onSites })
+    session.openRooms(); session.selectRoom(change.after!.id)
+    expect(onSites.mock.calls.at(-1)![0].active).toBe(false)
+    expect(onRooms.mock.calls.at(-1)![0]).toMatchObject({ active: true, construction: true, selectedId: change.after!.id })
+    session.destroy()
+  })
+
+  it('小泉实际接水后启用先前建好的干种植区，不重复工作或重置旧成果', async () => {
+    const raw = farmedSave(); raw.world.farm.waterSupplied = false
+    for (const x of [26, 27]) raw.world.tiles[10][x] = TILE.EMPTY
+    const loaded = deserialize(raw); expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    const p = planRoom(loaded.world, roomFromPoint({ x: 8, y: 11 }, 5, 'garden'))!
+    expect(finishRoom(loaded.world, p.after!.id)).not.toBeNull()
+    harness.store.load.mockResolvedValue(serialize(loaded.world))
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(world.farm.planters).toHaveLength(0)
+    session.supplyWater()
+    expect(world.farm.waterSupplied).toBe(true); expect(world.farm.planters).toHaveLength(2)
+    const farm = structuredClone(world.farm); session.supplyWater(); expect(world.farm).toEqual(farm)
+    expect(deserialize(serialize(world)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('损坏的房间存档提示原因，临时试玩和退出不覆盖失败数据', async () => {
+    const raw = readySave()
+    raw.world.rooms.push({ id: 1, kind: 'unknown' as 'home', x: 12, y: 10, w: 3, h: 2 }); raw.world.nextRoomId = 2
+    harness.store.load.mockResolvedValue(raw)
+    const onMessage = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn() })
+    await vi.advanceTimersByTimeAsync(400); session.destroy()
+    expect(onMessage.mock.calls.some(([text]) => text.includes('房间') && text.includes('不覆盖原档'))).toBe(true)
+    expect(harness.store.save).not.toHaveBeenCalled()
+  })
+
+  it('新开局阿土走到土旁才动手；取消后旧落爪与退出后的回调都无效', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    let strike = () => {}, done = () => {}
+    harness.renderer.playSoilWork.mockImplementationOnce((_plan, hit, finish) => { strike = hit; done = finish })
+    harness.handlers.onTap({ x: 14, y: 9 })
+    expect(world.tiles[9][14]).toBe(TILE.SOIL)
+    const [, arrive] = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    arrive()
+    expect(world.exploration.explorer).toEqual({ x: 15, y: 11 })
+    expect(harness.renderer.playSoilWork.mock.calls.at(-1)![0].lift).toBe(1)
+    session.cancelAction(); strike(); done()
+    expect(world.tiles[9][14]).toBe(TILE.SOIL)
+    session.destroy(); arrive(); strike()
+    expect(world.dugCount).toBe(0)
+  })
+
+  it('能源石已经收集后，附近空地仍可让阿土走过去', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    harness.handlers.onTap({ x: 15, y: 11 })
+    const [route, arrive] = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    expect(route.at(-1)).toEqual({ x: 15, y: 11 }); arrive()
+    expect((harness.renderer.setWorld.mock.calls[0][0] as WorldState).exploration.explorer).toEqual({ x: 15, y: 11 })
+    session.destroy()
+  })
+
+  it('建床先让阿土退开；让位途中取消，旧抵达回调不得继续建造', async () => {
+    const saved = readySave()
+    for (const y of [10, 11]) saved.world.tiles[y][28] = TILE.EMPTY
+    saved.world.exploration.explorer = { x: 27, y: 11 }
+    harness.store.load.mockResolvedValue(saved)
+    const onBuild = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onBuild })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.setBuildMode('pod'); harness.handlers.onTap({ x: 27, y: 11 }); session.confirmBuild()
+    const [, arrive] = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    expect(world.pods).toHaveLength(1)
+    session.cancelAction(); arrive()
+    expect(world.pods).toHaveLength(1)
+    expect(onBuild.mock.calls.at(-1)![0].mode).toBe('none')
+    expect(deserialize(serialize(world)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('撤销头顶刚挖的土前，阿土先沿真实通道退到安全格', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
+    tapAndFinishSoil(14, 11); tapAndFinishSoil(14, 10)
+    harness.handlers.onTap({ x: 14, y: 11 }); arrive()
+    expect(world.exploration.explorer).toEqual({ x: 14, y: 11 })
+    session.undo()
+    expect(world.tiles[10][14]).toBe(TILE.EMPTY)
+    arrive()
+    expect(world.tiles[10][14]).toBe(TILE.SOIL)
+    expect(world.exploration.explorer).toEqual({ x: 15, y: 11 })
+    expect(deserialize(serialize(world)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('点伙伴只交流；拖动关闭对话，随后仍能自由挖土', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const before = structuredClone(world)
+    harness.renderer.partnerAtScreen.mockReturnValueOnce('atu')
+    harness.handlers.onTap({ x: 18, y: 11 })
+    expect((onPartner.mock.calls.at(-1)![0] as PartnerConversation).partnerId).toBe('atu')
+    expect(world).toEqual(before)
+    harness.handlers.onPanBy({ x: 30, y: 0 })
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    session.setBuildMode('none')
+    tapAndFinishSoil(26, 9)
+    expect(world.tiles[9][26]).toBe(TILE.EMPTY)
+    expect(world.dugCount).toBe(before.dugCount + 1)
+    session.destroy()
+  })
+
+  it('角色点击容错不抢走实心泥土，也不抢走建造选址', async () => {
+    const raw = readySave(); raw.world.pods = []
+    harness.store.load.mockResolvedValue(raw)
+    const onPartner = vi.fn(), onBuild = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onBuild, onPartnerConversation: onPartner })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.renderer.partnerAtScreen.mockReturnValue('atu')
+    session.setBuildMode('none')
+    tapAndFinishSoil(26, 9)
+    expect(world.tiles[9][26]).toBe(TILE.EMPTY)
+    expect(harness.renderer.partnerAtScreen).not.toHaveBeenCalled()
+    session.setBuildMode('pod')
+    harness.handlers.onTap({ x: 18, y: 11 })
+    expect(onBuild.mock.calls.at(-1)![0].selected).toBe(true)
+    expect(harness.renderer.partnerAtScreen).not.toHaveBeenCalled()
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    session.destroy()
+  })
+
+  it('从阿土对话升级后更新装备、保存原字段；不会自动挖岩石', async () => {
+    harness.store.load.mockResolvedValue(clueSave())
+    const onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.talkToPartner('atu')
+    expect(onPartner.mock.calls.at(-1)![0].upgrade.state).toBe('ready')
+    const before = structuredClone(world)
+    session.partnerAction()
+    expect(world).toEqual({ ...before, exploration: { ...before.exploration, pickaxeUpgraded: true } })
+    expect(onPartner.mock.calls.at(-1)![0].upgrade.state).toBe('equipped')
+    expect(harness.renderer.playRockBreak).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(harness.store.save).toHaveBeenCalledTimes(1)
+    session.partnerAction()
+    expect(harness.store.save).toHaveBeenCalledTimes(1)
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    session.destroy()
+  })
+
+  it('阿土站在裂纹上方时，点击实心岩块仍然发起施工', async () => {
+    harness.store.load.mockResolvedValue(clueSave(true))
+    const onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner })
+    harness.renderer.partnerAtScreen.mockReturnValue('atu')
+    harness.handlers.onTap({ x: 27, y: 12 })
+    expect(harness.renderer.partnerAtScreen).not.toHaveBeenCalled()
+    expect(harness.renderer.playExplorationTravel).toHaveBeenCalledTimes(1)
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    session.destroy()
+  })
+
+  it('旧档的已升级铁镐直接显示已装备，未知伙伴不会回退为阿土', async () => {
+    harness.store.load.mockResolvedValue(clueSave(true))
+    const onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.talkToPartner('unknown')
+    expect(onPartner.mock.calls.at(-1)?.[0] ?? null).toBeNull()
+    session.talkToPartner('atu')
+    expect(onPartner.mock.calls.at(-1)![0].upgrade.state).toBe('equipped')
+    const before = structuredClone(world)
+    session.partnerAction()
+    expect(world).toEqual(before)
+    expect(harness.store.save).not.toHaveBeenCalled()
+    session.destroy()
+  })
 
   /** 建好家园、听水声、换上小铁镐，停在"可以开始破岩"的那一步 */
   async function startExploring(message = vi.fn(), onMilestone = vi.fn()) {
     harness.store.load.mockResolvedValue(readySave())
     const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onMilestone })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
     /** 把当前这一段走路演出推到位；委托已经取消时再调用是空操作 */
     const advance = (times = 1) => { for (let i = 0; i < times; i++) arrive() }
@@ -107,6 +641,7 @@ describe('探索会话与存档集成', () => {
     tap(LISTEN.x, LISTEN.y)
     arrive()
     session.upgradeTool()
+    harness.renderer.cancelExplorationAnimation.mockClear()
     return { session, w, tap, arrive, advance, message, onMilestone }
   }
 
@@ -120,11 +655,11 @@ describe('探索会话与存档集成', () => {
     const message = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn() })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     const lastTravel = () => harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
     const arrive = () => lastTravel()[1]()
     tap(26, 11); tap(27, 11)
-    expect(w.exploration.explorer).toBeNull()
+    expect(w.exploration.explorer).toEqual({ x: 18, y: 11 })
     // 听水声：先走路，走到才算发现；路上点别处 / 撤销都不改世界
     tap(27, 12)
     expect(w.exploration.clueFound).toBe(false)
@@ -254,11 +789,11 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
-  it('阿土只会为看见的目标出动：点泥土直接挖，点空地不再移动他，点泉水才走过去', async () => {
+  it('普通泥土走近才挖，空地可移动，泉水必须抵达才发现', async () => {
     harness.store.load.mockResolvedValue(readySave())
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
     tap(26, 11); tap(27, 11); tap(27, 12); arrive()
     session.upgradeTool()
@@ -267,21 +802,20 @@ describe('探索会话与存档集成', () => {
     expect(shaftConnected(w)).toBe(true)
     session.travel(); arrive()
     expect(w.exploration.entered).toBe(true)
-    // 普通泥土点一下直接挖开，不需要先走人
+    // 每列先清底部再清身体净空，走近施工才挖开。
     const travelsBeforeDig = harness.renderer.playExplorationTravel.mock.calls.length
-    for (let x = 23; x >= 18; x--) tap(x, 21)
+    for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     expect(w.tiles[21][23]).toBe(TILE.EMPTY)
-    expect(harness.renderer.playExplorationTravel.mock.calls.length).toBe(travelsBeforeDig)
+    expect(harness.renderer.playExplorationTravel.mock.calls.length).toBeGreaterThan(travelsBeforeDig)
     expect(w.exploration.springFound).toBe(false)
-    // 点已经挖空的空地：不再让阿土到处走
+    // 空地可移动，不会提前发现泉水；新目标可替换尚未完成的移动。
     tap(26, 21); tap(25, 20)
-    expect(harness.renderer.playExplorationTravel.mock.calls.length).toBe(travelsBeforeDig)
-    expect(w.exploration.explorer).toEqual({ x: 27, y: 21 })
+    expect(w.exploration.explorer).toEqual({ x: 19, y: 21 })
     // 点露面的泉水：阿土自己沿地面走到水边才算发现
     tap(18, 21)
     expect(w.exploration.springFound).toBe(false)
     const [route] = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
-    expect(route[0]).toEqual({ x: 27, y: 21 })
+    expect(route[0]).toEqual({ x: 19, y: 21 })
     expect(route.at(-1)).toEqual({ x: 18, y: 21 })
     arrive()
     expect(w.exploration.springFound).toBe(true)
@@ -295,7 +829,7 @@ describe('探索会话与存档集成', () => {
     const progress = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onMilestone })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
     tap(26, 11); tap(27, 11); tap(27, 12); arrive(); session.upgradeTool()
     tap(27, 12); arrive(); tap(27, 13); arrive(); tap(27, 14)
@@ -304,7 +838,7 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.entered).toBe(true)
     // 抵达第二层：里程碑卡片 + 阿土的反应各来一次
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '抵达第 2 层 · 泉水层' }))
-    for (let x = 23; x >= 18; x--) tap(x, 21)
+    for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     expect(w.exploration.springFound).toBe(false)
     tap(18, 21)
     expect(w.exploration.springFound).toBe(false)
@@ -312,8 +846,8 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.springFound).toBe(true)
     expect(harness.renderer.playSpringDiscovery).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
-    // 找到水之后还没走完：要先把水引到家里，再安顿新朋友、种出第一份收成
-    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水引到家里', done: 5, total: 9, finished: false })
+    // 找到水之后还没走完：要先把水接到菜园，再安顿新朋友、种出第一份收成
+    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
     session.toggleLamp(); tap(25, 19)
     expect(w.exploration.lamps).toEqual([{ x: 25, y: 19 }])
     session.undo()
@@ -328,7 +862,7 @@ describe('探索会话与存档集成', () => {
     harness.store.load.mockResolvedValue(readySave())
     const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onMilestone, onFarm })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
     /** 提示是否说过这句话（onMessage 带第二个参数，所以只比第一句） */
     const said = (fragment: string) => message.mock.calls.some(([text]) => String(text).includes(fragment))
@@ -336,46 +870,44 @@ describe('探索会话与存档集成', () => {
     tap(27, 12); arrive(); tap(27, 13); arrive(); tap(27, 14)
     for (let i = 0; i < 8 && !shaftConnected(w); i++) arrive()
     session.travel(); arrive()
-    for (let x = 23; x >= 18; x--) tap(x, 21)
+    for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     tap(18, 21); arrive()
     expect(w.exploration.springFound).toBe(true)
     expect(onFarm).toHaveBeenLastCalledWith(expect.objectContaining({ canSupplyWater: true, unlocked: false }))
 
-    // 引水：阿土亲自走到泉边接水管
+    // 引水：小泉到泉边动手接管，阿土的位置不改变。
+    const atuBefore = { ...w.exploration.explorer! }
+    let connect = () => {}, finish = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_plan, hit, done) => { connect = hit; finish = done })
     session.supplyWater()
     expect(w.farm.waterSupplied).toBe(false)
-    arrive()
+    connect(); finish()
     expect(w.farm.waterSupplied).toBe(true)
+    expect(w.exploration.explorer).toEqual(atuBefore)
     expect(harness.renderer.refreshFarm).toHaveBeenCalled()
     expect(harness.renderer.playSupplyWater).toHaveBeenCalledTimes(1)
-    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '水到家啦！' }))
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '水到菜园啦！' }))
     expect(onFarm).toHaveBeenLastCalledWith(expect.objectContaining({ unlocked: true, canSupplyWater: false }))
 
-    // 种菜：先挖空一格，再选"种植槽"
-    tap(5, 11)
-    expect(w.tiles[11][5]).toBe(TILE.EMPTY)
+    // 新菜槽只在第二层建造；自由摆放仍可用，材料会扣除。
     session.setBuildMode('planter')
-    tap(5, 11)
+    tap(25, 21)
     session.confirmBuild()
     expect(w.farm.planters).toHaveLength(1)
     expect(said('种下一槽菜')).toBe(true)
 
-    // 干三件事：挖三格土，菜一档一档长熟（先切回挖掘工具）
-    expect(w.tiles[10][5]).toBe(TILE.SOIL)
+    // 探索上方三格软土，作物随真实劳动生长。
     session.setBuildMode('none')
-    tap(5, 10); tap(5, 9); tap(6, 10)
+    tap(23, 19); tap(22, 19); tap(21, 19)
     expect(w.farm.planters[0].growth).toBe(3)
     expect(said('长熟啦')).toBe(true)
-
-    // 收菜：点成熟的槽，换到一份食物
-    tap(5, 11)
+    tap(25, 21)
     expect(w.farm.food).toBe(1)
     expect(w.farm.harvests).toBe(1)
     expect(w.farm.planters[0].growth).toBe(0)
     expect(harness.renderer.playHarvest).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '第一份收成！' }))
-    // 没熟的槽点一下只会被提示
-    tap(5, 11)
+    tap(25, 21)
     expect(w.farm.food).toBe(1)
 
     // 开饭：伙伴吃一份
@@ -386,13 +918,35 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
+  it('第二层菜园：引导打开预设洞室，也可以切到自由摆放菜槽', async () => {
+    harness.store.load.mockResolvedValue(farmedSave())
+    const onBuild = vi.fn(), onFarm = vi.fn(), onMessage = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onBuild, onFarm })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(w.farm.waterSupplied).toBe(true)
+
+    session.startPlanting()
+    expect(harness.renderer.focusWater).toHaveBeenCalled()
+    expect(onBuild.mock.calls.at(-1)![0]).toMatchObject({ mode: 'none', planterAvailable: true })
+    session.setBuildMode('planter')
+
+    harness.handlers.onTap({ x: 25, y: 21 })
+    expect(onBuild.mock.calls.at(-1)![0]).toMatchObject({ mode: 'planter', selected: true, valid: true })
+    session.confirmBuild()
+    expect(w.farm.planters).toHaveLength(1)
+    expect(w.farm.planters[0]).toMatchObject({ x: 25, y: 21 })
+    expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ planterCount: 1 })
+    expect(onMessage.mock.calls.some(([text]) => String(text).includes('菜园'))).toBe(true)
+    session.destroy()
+  })
+
   it('种植槽可以撤销；撤销之后那一格恢复成空地', async () => {
     harness.store.load.mockResolvedValue(farmedSave())
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    const tap = (x: number, y: number) => harness.handlers.onTap({ x, y })
+    const tap = tapAndFinishSoil
     session.setBuildMode('planter')
-    tap(5, 11)
+    tap(25, 21)
     session.confirmBuild()
     expect(w.farm.planters).toHaveLength(1)
     session.undo()
@@ -412,27 +966,93 @@ describe('探索会话与存档集成', () => {
     expect(message.mock.calls.some(([text]) => text.includes('不覆盖原档'))).toBe(true)
   })
 
-  it('仅明确点复制时读取v4；成功后另存，重复复制和加载期间点击被忽略', async () => {
-    harness.store.load.mockResolvedValue(null)
-    const v4 = readySave(); v4.version = 4
-    const before = structuredClone(v4)
-    harness.legacy.mockResolvedValue(v4)
-    let finishSave!: () => void
-    harness.store.save.mockImplementationOnce(() => new Promise<void>((resolve) => { finishSave = resolve }))
-    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
-    expect(harness.legacy).not.toHaveBeenCalled()
-    const copying = session.importLegacy()
-    await Promise.resolve(); await Promise.resolve()
-    harness.handlers.onTap({ x: 12, y: 10 })
+  it('当前试玩默认从头开始，不打开IndexedDB、不读取旧进度、不写存档', async () => {
+    const open = vi.fn(() => { throw new Error('不应访问浏览器存档') })
+    vi.stubGlobal('indexedDB', { open })
+    harness.store.load.mockResolvedValue(lampSave())
+    const session = await createSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
     const initial = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     expect(initial.dugCount).toBe(0)
-    finishSave(); await copying
-    const copied = harness.renderer.setWorld.mock.calls.at(-1)![0] as WorldState
-    expect(copied.pods).toEqual(v4.world.pods)
-    expect(copied.tiles.slice(0, 12)).toEqual(v4.world.tiles.slice(0, 12))
-    await session.importLegacy()
-    expect(harness.legacy).toHaveBeenCalledOnce()
-    expect(v4).toEqual(before)
+    expect(initial.progress.coreRepaired).toBe(false)
+    expect(harness.renderer.playOpening).toHaveBeenCalledOnce()
+    harness.handlers.onTap({ x: 14, y: 11 })
+    await vi.advanceTimersByTimeAsync(400)
+    session.destroy()
+    expect(open).not.toHaveBeenCalled()
+    expect(harness.store.load).not.toHaveBeenCalled()
+    expect(harness.store.save).not.toHaveBeenCalled()
+  })
+
+  it('进入页预加载不播放开场，点击开始才播放且不能重复启动', async () => {
+    const opening = vi.fn()
+    const session = await createSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onOpening: opening }, { deferOpening: true })
+    expect(harness.renderer.playOpening).not.toHaveBeenCalled()
+    expect(opening).not.toHaveBeenCalled()
+    session.startOpening(); session.enableOpeningSound(); session.startOpening()
+    expect(harness.renderer.playOpening).toHaveBeenCalledOnce()
+    expect(harness.renderer.enableOpeningSound).toHaveBeenCalledOnce()
+    expect(opening).toHaveBeenLastCalledWith({ active: false, caption: '' })
+    session.destroy()
+  })
+
+  it('进入页能读出上次进度；继续游戏不重播开场', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const opening = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onOpening: opening })
+    const save = session.titleSave()
+    expect(save.status).toBe('ready')
+    if (save.status !== 'ready') throw new Error('应读到存档')
+    expect(save.summary.phase).toBe('泉水与家园')
+    expect(save.summary.missionTitle).toBe('楼下有谁在喊饿')
+    expect(save.summary.total).toBe(9)
+    expect(save.savedAt).not.toBe('')
+    expect(harness.renderer.playOpening).not.toHaveBeenCalled()
+
+    session.startOpening()
+    expect(harness.renderer.playOpening).not.toHaveBeenCalled()
+    session.destroy()
+  })
+
+  it('只是为了看进入页不写新档；重新开始会清掉旧档并回到初始世界', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const idle = await createSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() }, { store: harness.store, deferOpening: true })
+    expect(idle.titleSave()).toEqual({ status: 'none' })
+    idle.destroy()
+    expect(harness.store.save).not.toHaveBeenCalled()
+
+    harness.store.load.mockResolvedValue(readySave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    expect(session.titleSave().status).toBe('ready')
+    harness.store.save.mockClear()
+
+    await session.startNewGame()
+    expect(harness.store.clear).toHaveBeenCalledOnce()
+    const fresh = harness.renderer.setWorld.mock.calls.at(-1)![0] as WorldState
+    expect(fresh.dugCount).toBe(0)
+    expect(fresh.progress.coreRepaired).toBe(false)
+    expect(fresh.pods).toEqual([])
+    expect(session.titleSave()).toEqual({ status: 'none' })
+
+    session.startOpening()
+    expect(harness.renderer.playOpening).toHaveBeenCalledOnce()
+    expect(harness.store.save).toHaveBeenCalledOnce()
+    session.destroy()
+  })
+
+  it('损坏存档在进入页给出原因；重新开始后恢复自动保存', async () => {
+    harness.store.load.mockResolvedValue({ version: 5, world: {} })
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const broken = session.titleSave()
+    expect(broken.status).toBe('broken')
+    if (broken.status !== 'broken') throw new Error('应识别为损坏存档')
+    expect(broken.error.length).toBeGreaterThan(0)
+
+    await session.startNewGame()
+    expect(harness.store.clear).toHaveBeenCalledOnce()
+    expect(session.titleSave()).toEqual({ status: 'none' })
+    harness.store.save.mockClear()
+    session.startOpening()
+    expect(harness.store.save).toHaveBeenCalledOnce()
     session.destroy()
   })
 })

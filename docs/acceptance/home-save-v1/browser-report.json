@@ -1,0 +1,38 @@
+{
+  "url": "http://127.0.0.1:5197/",
+  "results": [
+    {
+      "case": "fresh-title-does-not-write-save",
+      "passed": true
+    },
+    {
+      "case": "update-notes-open-and-readable",
+      "passed": true
+    },
+    {
+      "case": "dig-is-autosaved-to-indexeddb",
+      "passed": true
+    },
+    {
+      "case": "reload-shows-continue-with-progress-and-time",
+      "passed": true
+    },
+    {
+      "case": "continue-skips-opening-and-keeps-progress",
+      "passed": true
+    },
+    {
+      "case": "restart-confirm-cancel-and-clear-save",
+      "passed": true
+    },
+    {
+      "case": "title-with-save-900x620",
+      "passed": true
+    },
+    {
+      "case": "title-with-save-390x844",
+      "passed": true
+    }
+  ],
+  "runtimeErrors": []
+}

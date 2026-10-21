@@ -1,0 +1,26 @@
+{
+  "mode": "production preview, isolated headless Chromium",
+  "viewports": [
+    [
+      1440,
+      960
+    ],
+    [
+      900,
+      620
+    ]
+  ],
+  "checks": [
+    "6 character PNGs loaded",
+    "repair core by real pointer",
+    "Adeng hiding / flight / settled",
+    "Xiaoman after first bed",
+    "Xiaoquan after spring",
+    "two beds sleep and reload",
+    "narrow viewport",
+    "block only Xiaoman images: initialize with fallback"
+  ],
+  "runtimeErrors": [],
+  "normalWarnings": [],
+  "seed": "current serialize/deserialize validated fixtures in independent browser storage"
+}
