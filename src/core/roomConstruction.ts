@@ -1,7 +1,7 @@
 import { canPlacePod } from './build'
 import { canPlacePlanter, placePlanter } from './farm'
 import { checkRoom, checkRoomPlan, roomContains, type RoomChange } from './rooms'
-import { HOME_FLOOR_Y, TILE, type Room, type RoomKind, type WorldState } from './world'
+import { HOME_FLOOR_Y, TILE, type Rect, type Room, type RoomKind, type WorldState } from './world'
 
 /** 新用途只需增加规格和设施布局；施工不负责角色寻路或动画。 */
 export const ROOM_SPECS: Record<RoomKind, { width: number; min: number; purpose: string }> = {
@@ -13,7 +13,7 @@ export function roomCapacity(r: Room): string {
   return r.kind === 'home' ? `${Math.floor(r.w / 3) * 2}个床位`
     : r.kind === 'garden' ? `${Math.floor((r.w - 1) / 2)}个菜槽` : `${Math.max(1, Math.floor((r.w - 2) / 2))}组休息座`
 }
-export function excavationLeft(w: WorldState, r: Room): number {
+export function excavationLeft(w: WorldState, r: Rect): number {
   let count = 0
   for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (w.tiles[y]?.[x] !== TILE.EMPTY) count++
   return count

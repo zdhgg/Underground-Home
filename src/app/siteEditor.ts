@@ -1,11 +1,11 @@
 import { BUILDING_SITES, finishSite, nextSiteDig, siteBlocker, siteBuilt, siteById, siteRoom, siteVisible, siteWorkCells, type BuildingSite, type SiteChange } from '../core/sites'
 import { materialText } from '../core/materials'
-import { TILE, type Cell, type RoomKind, type WorldState } from '../core/world'
+import { TILE, type Cell, type SiteKind, type WorldState } from '../core/world'
 import type { RoomPreview } from './roomEditor'
 
 export interface SiteUI {
-  active: boolean; working: boolean; selected: string | null; kind: RoomKind; name: string; icon: string
-  description: string; message: string; cost: string; canBuild: boolean; built: boolean; choices: readonly RoomKind[]
+  active: boolean; working: boolean; selected: string | null; kind: SiteKind; name: string; icon: string
+  description: string; message: string; cost: string; canBuild: boolean; built: boolean; choices: readonly SiteKind[]
   sites: { id: string; name: string; icon: string; layer: 'home' | 'water'; built: boolean }[]
 }
 export const emptySiteUI = (): SiteUI => ({ active: false, working: false, selected: null, kind: 'home', name: '', icon: '', description: '', message: '', cost: '', canBuild: false, built: false, choices: [], sites: [] })
@@ -15,7 +15,7 @@ export class SiteEditor {
   active = false
   working = false
   private selected: BuildingSite | null = null
-  private kind: RoomKind = 'home'
+  private kind: SiteKind = 'home'
   private serial = 0
   constructor(private readonly ports: {
     world(): WorldState; busy(): boolean; emit(ui: SiteUI): void; preview(value: RoomPreview | null): void
@@ -45,7 +45,7 @@ export class SiteEditor {
     this.active = true; this.selected = s; this.kind = this.ports.world().builtSites.find(b => b.id === id)?.kind ?? s.kinds[0]
     this.ports.focus(s); this.refresh()
   }
-  choose(kind: RoomKind): void { if (!this.working && this.selected?.kinds.includes(kind)) { this.kind = kind; this.refresh() } }
+  choose(kind: SiteKind): void { if (!this.working && this.selected?.kinds.includes(kind)) { this.kind = kind; this.refresh() } }
   close(): void { this.active = false; this.refresh() }
   cancel(): void {
     this.serial++; const wasWorking = this.working; this.working = false

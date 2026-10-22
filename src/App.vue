@@ -53,7 +53,7 @@ const progress = ref<SessionProgress>({
 })
 const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
-const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false })
+const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false, kitchen: false, dining: false, mealReady: false, mealActive: false })
 const exploration = ref<ExplorationUI>({ wideLighting: false, lightUpgradeReady: false, clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
@@ -69,7 +69,12 @@ const legendHint = computed(() => {
   if (!exploration.value.entered) return '⛏ 点裂纹岩：阿土一镐一镐往下挖　🪨 坚硬基岩保留'
   if (!exploration.value.found) return '🟫 点泥土挖过去　💧 看见泉水点一下它'
   if (!farm.value.unlocked) return '🚰 泉水找到啦 · 点「把水接到菜园」'
+  if (farm.value.mealActive) return '🍲 大家正在吃饭 · 点地图或「停下来」可以先结束'
   if (farm.value.ripe > 0) return '🥕 有菜熟了 · 点菜槽，小满来收'
+  if (farm.value.mealReady && farm.value.food > 0) return '🍲 灶台和餐桌都好了 · 做饭请大家吃饭'
+  if (farm.value.mealReady) return '🍲 灶台和餐桌都好了 · 收点菜就能开饭'
+  if (!farm.value.kitchen) return '🔨 点「泉边建设」修一个灶台'
+  if (!farm.value.dining) return '🍽 再摆一张餐桌，大家就能围坐'
   return '🌱 点泉边小菜园就能建设 · 熟了叫小满来收'
 })
 
@@ -259,7 +264,7 @@ onBeforeUnmount(() => {
           <button v-else-if="exploration.clue && !exploration.upgraded" class="talk-action" type="button" :disabled="exploration.traveling || build.mode !== 'none' || exploration.lampMode" @click="session?.talkToPartner('atu')">⛏ 和阿土聊聊新工具</button>
           <button v-else-if="exploration.lightUpgradeReady" class="talk-action" type="button" :disabled="exploration.traveling || build.mode !== 'none' || exploration.lampMode" @click="session?.talkToPartner('adeng')">🏮 阿灯有个新办法</button>
           <button v-else-if="exploration.canChain" class="adventure-action chain" type="button" :disabled="exploration.traveling" @click="session?.digToBottom()">{{ exploration.chaining ? `阿土正在挖……（还剩 ${exploration.remaining} 段）` : '⛏ 一路挖到底' }}</button>
-          <button v-else-if="farm.harvested && farm.food > 0" class="adventure-action meal" type="button" :disabled="exploration.traveling" @click="session?.feed()">🍽 请大家吃饭（食物 {{ farm.food }}）</button>
+          <button v-else-if="farm.harvested && farm.food > 0" class="adventure-action meal" type="button" :disabled="exploration.traveling || farm.mealActive" @click="session?.feed()">{{ farm.mealActive ? '🍲 大家正在吃饭……' : farm.mealReady ? `🍲 做饭并请大家吃饭（食物 ${farm.food}）` : `🍽 请大家吃饭（食物 ${farm.food}）` }}</button>
           <p v-if="homeExtra" class="home-extra">家里还能做：{{ homeExtra }}</p>
         </template>
         <p class="mole-speech">{{ progress.speech }}</p>
@@ -278,7 +283,7 @@ onBeforeUnmount(() => {
         <button v-if="farm.canSupplyWater" type="button" class="adventure-action water" :disabled="farm.supplying || exploration.traveling" @click="session?.supplyWater()">{{ farm.supplying ? '🚰 小泉在接水管……' : '🚰 把水接到菜园' }}</button>
         <button v-if="farmStep && farm.unlocked" type="button" class="talk-action" :disabled="exploration.traveling" @click="session?.startPlanting()">🌱 去第二层种菜</button>
         <button v-if="farm.canSendPower" type="button" class="adventure-action power" :disabled="farm.powering || exploration.traveling" @click="session?.sendPower()">{{ farm.powering ? '⚡ 阿土在铺电线……' : '⚡ 把电送到下面' }}</button>
-        <button v-if="farm.harvested" type="button" class="adventure-action meal" :disabled="farm.food === 0 || exploration.traveling" @click="session?.feed()">{{ farm.food > 0 ? `🍽 请大家吃饭（食物 ${farm.food}）` : '🍽 先收点菜再开饭' }}</button>
+        <button v-if="farm.harvested" type="button" class="adventure-action meal" :disabled="farm.food === 0 || exploration.traveling || farm.mealActive" @click="session?.feed()">{{ farm.mealActive ? '🍲 大家正在吃饭……' : farm.food > 0 ? farm.mealReady ? `🍲 做饭并请大家吃饭（食物 ${farm.food}）` : `🍽 请大家吃饭（食物 ${farm.food}）` : '🍽 先收点菜再开饭' }}</button>
         <section v-if="showHomeGoals" class="home-goals" aria-label="家里的小清单">
           <strong>家里的小清单</strong>
           <ul>

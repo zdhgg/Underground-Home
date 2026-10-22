@@ -3,10 +3,10 @@ import { canPlacePlanter, placePlanter } from './farm'
 import { canAfford, changeMaterials, materialText } from './materials'
 import { canFinishRoom, finishRoom, planRoom } from './roomConstruction'
 import { checkRoomPlan, roomContains, undoRoom, type RoomChange } from './rooms'
-import { TILE, type BuiltSite, type Cell, type Inventory, type Rect, type Room, type RoomKind, type WorldState } from './world'
+import { TILE, type BuiltSite, type Cell, type Inventory, type Rect, type Room, type RoomKind, type SiteKind, type WorldState } from './world'
 
 export interface BuildingSite extends Rect {
-  id: string; name: string; icon: string; layer: 'home' | 'water'; kinds: readonly RoomKind[]; cost: Inventory; description: string
+  id: string; name: string; icon: string; layer: 'home' | 'water'; kinds: readonly SiteKind[]; cost: Inventory; description: string
 }
 /** 第一层定用途；第二层有一个二选一洞室，右侧其余软土继续自由探索。 */
 export const BUILDING_SITES: readonly BuildingSite[] = [
@@ -15,10 +15,14 @@ export const BUILDING_SITES: readonly BuildingSite[] = [
   { id: 'friends-nest', name: '新朋友的小窝', icon: '🛏', layer: 'home', x: 9, y: 9, w: 3, h: 3, kinds: ['home'], cost: { stone: 3, wood: 2 }, description: '给楼下遇见的新朋友留两张床。' },
   { id: 'spring-garden', name: '泉边小菜园', icon: '🌱', layer: 'water', x: 28, y: 19, w: 3, h: 3, kinds: ['garden'], cost: { stone: 2, wood: 2 }, description: '摆上两个菜槽，让小满种出新鲜蔬菜。' },
   { id: 'water-corner', name: '泉边小洞室', icon: '🌿', layer: 'water', x: 32, y: 19, w: 4, h: 3, kinds: ['garden', 'lounge'], cost: { stone: 2, wood: 2 }, description: '这里由你决定：种菜，还是放休息座椅？' },
+  { id: 'spring-kitchen', name: '泉边灶台', icon: '🍲', layer: 'water', x: 10, y: 19, w: 3, h: 3, kinds: ['kitchen'], cost: { stone: 2, wood: 2 }, description: '修一个灶台，把收成做熟。' },
+  { id: 'spring-table', name: '围坐餐桌', icon: '🍽', layer: 'water', x: 13, y: 19, w: 4, h: 3, kinds: ['dining'], cost: { stone: 2, wood: 3 }, description: '摆一张餐桌，大家坐下来一起吃。' },
 ]
 export const siteById = (id: string): BuildingSite | undefined => BUILDING_SITES.find(s => s.id === id)
 export const siteAt = (p: Cell): BuildingSite | undefined => BUILDING_SITES.find(s => roomContains(s, p))
-export const siteRoom = (s: BuildingSite, kind: RoomKind): Room => ({ id: 0, kind, x: s.x, y: s.y, w: s.w, h: s.h })
+export const isRoomKind = (kind: SiteKind): kind is RoomKind => kind === 'home' || kind === 'garden' || kind === 'lounge'
+export type PreviewRoom = Omit<Room, 'kind'> & { kind: SiteKind }
+export const siteRoom = (s: BuildingSite, kind: SiteKind): PreviewRoom => ({ id: 0, kind, x: s.x, y: s.y, w: s.w, h: s.h })
 const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y
 export function siteBuilt(w: WorldState, s: BuildingSite): boolean {
   return w.builtSites.some(b => b.id === s.id)
@@ -28,13 +32,14 @@ export function siteBuilt(w: WorldState, s: BuildingSite): boolean {
 export function siteVisible(w: WorldState, s: BuildingSite): boolean {
   return w.progress.coreRepaired && (s.layer === 'home' || w.exploration.entered) && (s.id !== 'friends-nest' || w.exploration.entered)
 }
-export function siteBlocker(w: WorldState, s: BuildingSite, kind: RoomKind): string {
+export function siteBlocker(w: WorldState, s: BuildingSite, kind: SiteKind): string {
   if (!siteVisible(w, s)) return '先点亮家园，再来看看。'
   if (!s.kinds.includes(kind)) return '这里不适合这个用途。'
   if (siteBuilt(w, s)) return '这里已经建好啦！'
   if (kind === 'garden' && !w.farm.waterSupplied) return '先请小泉把水接到菜园。'
   if (w.rooms.some(r => overlaps(r, s)) || w.farm.planters.some(p => roomContains(s, p))) return '这里保留了原来的设施，去另一个洞室看看吧。'
-  if (s.layer === 'home' && !checkRoomPlan(w, siteRoom(s, kind)).ok) return '这里有原来的设施，先保留它们吧。'
+  if (s.layer === 'home' && !isRoomKind(kind)) return '这里不适合这个用途。'
+  if (s.layer === 'home' && !checkRoomPlan(w, siteRoom(s, kind) as Room).ok) return '这里有原来的设施，先保留它们吧。'
   if (!canAfford(w, s.cost)) return `还需要${materialText({ stone: Math.max(0, s.cost.stone - w.inventory.stone), wood: Math.max(0, s.cost.wood - w.inventory.wood) })}，挖旁边的泥土就能找到。`
   return ''
 }
@@ -59,14 +64,15 @@ export function nextSiteDig(w: WorldState, s: BuildingSite): Cell | null {
   return siteWorkCells(w, s).find(p => w.tiles[p.y]?.[p.x] === TILE.SOIL && soilPlan(w, actor, p).ok) ?? null
 }
 export interface SiteChange { site: BuiltSite; cost: Inventory; room?: RoomChange; addedPlanters: number[] }
-export function finishSite(w: WorldState, s: BuildingSite, kind: RoomKind): SiteChange | null {
+export function finishSite(w: WorldState, s: BuildingSite, kind: SiteKind): SiteChange | null {
   if (siteBlocker(w, s, kind) || siteWorkCells(w, s).some(p => w.tiles[p.y]?.[p.x] !== TILE.EMPTY)) return null
   const actor = w.exploration.explorer
   if (!actor || !atuRoute(w, actor, { x: s.x, y: s.y + s.h - 1 })) return null
   const change: SiteChange = { site: { id: s.id, kind }, cost: { ...s.cost }, addedPlanters: [] }
   if (s.layer === 'home') {
+    if (!isRoomKind(kind)) return null
     // 在副本上完成，任何失败都不会留下一份半提交蓝图。
-    const copy = structuredClone(w), draft = siteRoom(s, kind)
+    const copy = structuredClone(w), draft = siteRoom(s, kind) as Room
     const plan = planRoom(copy, draft)
     if (!plan || !canFinishRoom(copy, plan.after!).ok) return null
     change.room = finishRoom(copy, plan.after!.id)!

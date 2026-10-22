@@ -1,18 +1,23 @@
 import { Container, Graphics, Text } from 'pixi.js'
-import { ROOM_NAMES } from '../core/rooms'
-import { TILE, TILE_SIZE as T, type Room, type RoomKind, type WorldState } from '../core/world'
+import { SITE_NAMES } from '../core/rooms'
+import { TILE, TILE_SIZE as T, type Room, type SiteKind, type WorldState } from '../core/world'
 import { excavationLeft } from '../core/roomConstruction'
 import type { RoomPreview } from '../app/roomEditor'
 import { BUILDING_SITES, siteBuilt, siteVisible } from '../core/sites'
 import { nestShell, type NestTextures } from './nestArt'
 import { drawLounge, type LoungeTextures } from './loungeArt'
 import { siteBlueprint } from './siteBlueprint'
+import { drawDiningTable, drawStove } from './mealProps'
 
-const COLORS: Record<RoomKind, { floor: number; wall: number; ink: number }> = {
+const COLORS: Record<SiteKind, { floor: number; wall: number; ink: number }> = {
   home: { floor: 0xbfa075, wall: 0xdac6a4, ink: 0x594d39 },
   garden: { floor: 0x83a989, wall: 0xb7d0a5, ink: 0x385b43 },
   lounge: { floor: 0x7faaaa, wall: 0xb4d1cd, ink: 0x385657 },
+  kitchen: { floor: 0xb58b62, wall: 0xd6b892, ink: 0x5c4634 },
+  dining: { floor: 0xb58b62, wall: 0xd6b892, ink: 0x5c4634 },
 }
+/** 第二层建成的预设设施也会用同一套房间外观绘制。 */
+type DrawnRoom = Omit<Room, 'kind'> & { kind: SiteKind }
 
 /** 岩层中的地面、角部饰条与小标牌；全部是视觉，不参与碰撞。 */
 export class RoomScene {
@@ -48,7 +53,7 @@ export class RoomScene {
         g.roundRect(r.x * T + 2, r.y * T + 2, r.w * T - 4, r.h * T - 4, 6).fill({ color, alpha: .12 }).stroke({ width: 2, color, alpha: .9 })
         this.overlay.addChild(g)
       } else g.destroy()
-      const label = new Text({ text: preview.valid ? `${ROOM_NAMES[r.kind]} · 就在这里` : '这里还没准备好', style: {
+      const label = new Text({ text: preview.valid ? `${SITE_NAMES[r.kind]} · 就在这里` : '这里还没准备好', style: {
         fontFamily: '"Microsoft YaHei", sans-serif', fontSize: 11, fill: preview.valid ? 0xe3f3dc : 0xffd6b4,
         fontWeight: '600', stroke: { color: 0x243d39, width: 3 },
       } })
@@ -58,7 +63,7 @@ export class RoomScene {
     }
     this.setZoom(this.zoom)
   }
-  private drawRoom(r: Room, world: WorldState): Container {
+  private drawRoom(r: DrawnRoom, world: WorldState): Container {
     const view = new Container(), g = new Graphics(), c = COLORS[r.kind]
     const x = r.x * T, y = r.y * T, width = r.w * T, height = r.h * T
     if (r.status === 'blueprint') {
@@ -68,7 +73,7 @@ export class RoomScene {
         if (!empty) g.moveTo(cx * T + 9, cy * T + 23).lineTo(cx * T + 23, cy * T + 9).stroke({ width: 1, color: 0xb6e5e9, alpha: .65 })
       }
       g.rect(x + 1, y + 1, width - 2, height - 2).stroke({ width: 2, color: 0x9ccfd2, alpha: .85 })
-      const label = new Text({ text: `${ROOM_NAMES[r.kind]}蓝图 · 还剩${excavationLeft(world, r)}格`, style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 11, fill: 0xd9f1ef, stroke: { color: 0x243d39, width: 3 } } })
+      const label = new Text({ text: `${SITE_NAMES[r.kind]}蓝图 · 还剩${excavationLeft(world, r)}格`, style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 11, fill: 0xd9f1ef, stroke: { color: 0x243d39, width: 3 } } })
       label.anchor.set(.5, 1); label.position.set(x + width / 2, y - 4); label.label = 'room-name'
       view.addChild(g, label); return view
     }
@@ -109,7 +114,9 @@ export class RoomScene {
           .moveTo(edge, y + height - 16).lineTo(edge, y + height - 6).stroke({ width: 2, color: c.floor, alpha: .75 })
       }
     }
-    const name = ROOM_NAMES[r.kind], labelWidth = name.length * 11 + 18, mid = x + width / 2
+    if (r.managed && r.kind === 'kitchen') view.addChild(drawStove(x, y, width, height))
+    if (r.managed && r.kind === 'dining') view.addChild(drawDiningTable(x, y, width, height))
+    const name = SITE_NAMES[r.kind], labelWidth = name.length * 11 + 18, mid = x + width / 2
     const badge = new Container(), plate = new Graphics()
     plate.roundRect(mid - labelWidth / 2, y - 20, labelWidth, 19, 5).fill(0xf4f2df).stroke({ width: 1, color: c.floor })
     const label = new Text({ text: name, style: { fontFamily: '"Microsoft YaHei", sans-serif', fontSize: 11, fill: c.ink, fontWeight: '600' } })

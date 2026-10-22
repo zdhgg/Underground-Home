@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import type { SiteUI } from '../app/siteEditor'
-import type { RoomKind } from '../core/world'
+import type { SiteKind } from '../core/world'
 import shellUrl from '../assets/art/rooms/nest-shell-v1.png'
 import bunksUrl from '../assets/art/rooms/nest-bunks-v1.png'
 import loungeShellUrl from '../assets/art/rooms/lounge-shell-v1.png'
 import loungeFurnitureUrl from '../assets/art/rooms/lounge-furniture-v1.png'
 defineProps<{ state: SiteUI }>()
-defineEmits<{ close: []; select: [id: string]; kind: [kind: RoomKind]; build: []; stop: []; dig: [] }>()
-const labels: Partial<Record<RoomKind, string>> = { garden: '🌱 小菜园', lounge: '☕ 休息角' }
+defineEmits<{ close: []; select: [id: string]; kind: [kind: SiteKind]; build: []; stop: []; dig: [] }>()
+const labels: Partial<Record<SiteKind, string>> = { garden: '🌱 小菜园', lounge: '☕ 休息角' }
 </script>
 
 <template>
@@ -21,6 +21,12 @@ const labels: Partial<Record<RoomKind, string>> = { garden: '🌱 小菜园', lo
       <div v-else-if="state.kind === 'lounge'" class="lounge-illustration">
         <img class="lounge-shell" :src="loungeShellUrl" alt="" :draggable="false" />
         <img class="lounge-furniture" :src="loungeFurnitureUrl" alt="" :draggable="false" />
+      </div>
+      <div v-else-if="state.kind === 'kitchen'" class="meal-illustration">
+        <span class="ceiling-lamp">✦</span><span class="furniture">🍲 🔥</span><span class="walkway" />
+      </div>
+      <div v-else-if="state.kind === 'dining'" class="meal-illustration">
+        <span class="ceiling-lamp">✦</span><span class="furniture">🍽 🥕 🍲</span><span class="walkway" />
       </div>
       <template v-else><span class="ceiling-lamp">✦</span><span class="furniture">🌱 🥕 🌱</span><span class="walkway" /></template>
     </div>

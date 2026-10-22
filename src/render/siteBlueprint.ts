@@ -39,6 +39,20 @@ export function siteBlueprint(site: BuildingSite): Container {
     art.moveTo(60, 27).lineTo(60, 36).stroke(line)
     art.roundRect(56, 13, 7, 7, 2).stroke(line)
     art.moveTo(64, 14).lineTo(67, 14).lineTo(67, 18).lineTo(64, 18).stroke(line)
+  } else if (site.kinds[0] === 'kitchen') {
+    // 灶台：石台、锅、火苗和热气。
+    art.roundRect(8, 22, 56, 14, 4).fill({ color: 0x78a99f, alpha: .22 }).stroke(line)
+    art.roundRect(14, 18, 44, 5, 2).stroke(line)
+    art.roundRect(24, 10, 24, 9, 3).fill({ color: ink, alpha: .18 }).stroke(line)
+    art.moveTo(30, 8).lineTo(30, 3).moveTo(36, 8).lineTo(36, 1).moveTo(42, 8).lineTo(42, 3).stroke({ ...line, alpha: .55 })
+    art.moveTo(20, 29).lineTo(17, 24).lineTo(20, 25).lineTo(23, 22).lineTo(23, 29).stroke(line)
+    art.rect(48, 27, 10, 3).stroke(line)
+  } else if (site.kinds[0] === 'dining') {
+    // 餐桌：桌面、四条腿、四只盘子和中间的小锅。
+    art.roundRect(6, 18, 60, 8, 3).fill({ color: 0x78a99f, alpha: .22 }).stroke(line)
+    art.moveTo(12, 26).lineTo(12, 36).moveTo(60, 26).lineTo(60, 36).moveTo(34, 26).lineTo(34, 36).stroke(line)
+    for (const x of [14, 27, 40, 53]) art.ellipse(x, 17, 6, 2.2).stroke(line)
+    art.roundRect(30, 11, 12, 6, 2).stroke(line)
   } else {
     for (const x of [2, 40]) {
       art.moveTo(x + 2, 26).lineTo(x + 5, 36).lineTo(x + 27, 36).lineTo(x + 30, 26)

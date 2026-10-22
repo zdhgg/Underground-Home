@@ -1,10 +1,12 @@
-import { BREAKTHROUGHS, HOME_FLOOR_Y, HOME_ROOM_TOP, LANDMARKS, TILE, type Cell, type Rect, type Room, type RoomKind, type WorldState, type SleepPod, type Planter } from './world'
+import { BREAKTHROUGHS, HOME_FLOOR_Y, HOME_ROOM_TOP, LANDMARKS, TILE, type Cell, type Rect, type Room, type RoomKind, type SiteKind, type WorldState, type SleepPod, type Planter } from './world'
 import { atuCanStand, atuRoute, initialAtuPosition, workersSafe } from './atu'
 
 export const ROOM_MIN_WIDTH = 3
 export const ROOM_MAX_WIDTH = 9
 export const ROOM_KINDS: readonly RoomKind[] = ['home', 'garden', 'lounge']
 export const ROOM_NAMES: Record<RoomKind, string> = { home: '住处', garden: '种植区', lounge: '客厅' }
+/** 设施标牌：第二层的灶台／餐桌也沿用同一套房间外观。 */
+export const SITE_NAMES: Record<SiteKind, string> = { ...ROOM_NAMES, kitchen: '灶台', dining: '餐桌' }
 export const roomContains = (r: Rect, p: Cell): boolean => p.x >= r.x && p.x < r.x + r.w && p.y >= r.y && p.y < r.y + r.h
 const overlaps = (a: Rect, b: Rect): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
 const encloses = (outer: Rect, inner: Rect): boolean => inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h

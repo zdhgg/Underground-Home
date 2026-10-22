@@ -23,6 +23,8 @@ const harness = vi.hoisted(() => {
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
     refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(),
     playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
+    playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
+    finishMealGather: vi.fn(), cancelMealGather: vi.fn(),
     playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
     playBurst: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
@@ -95,6 +97,19 @@ function farmedSave() {
   for (let y = 9; y <= 11; y++) for (let x = 2; x <= 11; x++) if (w.tiles[y][x] === TILE.SOIL) dig(w, x, y)
   w.farm.waterSupplied = true
   return serialize(w)
+}
+
+/** 已经接好水、食物充足，并且灶台和餐桌都建好的存档。 */
+function sharedMealSave() {
+  const raw = farmedSave()
+  raw.world.tiles[10][26] = TILE.EMPTY
+  raw.world.tiles[10][27] = TILE.EMPTY
+  raw.world.tiles[21][17] = TILE.EMPTY
+  raw.world.tiles[20][17] = TILE.EMPTY
+  raw.world.builtSites.push({ id: 'spring-kitchen', kind: 'kitchen' }, { id: 'spring-table', kind: 'dining' })
+  raw.world.farm.food = 3
+  raw.world.inventory = { stone: 10, wood: 10 }
+  return raw
 }
 
 function lampSave() {
@@ -915,6 +930,102 @@ describe('探索会话与存档集成', () => {
     session.feed()
     expect(w.farm.food).toBe(0)
     expect(harness.renderer.playMealCelebration).toHaveBeenCalledTimes(1)
+    session.destroy()
+  })
+
+  it('建成灶台和餐桌后，实体共餐与旧入口共用结算，演出期间重复点击不再扣食物', async () => {
+    const onFarm = vi.fn(), onMessage = vi.fn()
+    harness.store.load.mockResolvedValue(sharedMealSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onFarm })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ kitchen: true, dining: true, mealReady: true, mealActive: false })
+    const pods = w.pods.length, built = w.builtSites.length
+
+    session.feed()
+    expect(w.farm.food).toBe(2)
+    expect(harness.renderer.playKitchenCooking).toHaveBeenCalledTimes(1)
+    expect(harness.renderer.playMealGather).toHaveBeenCalledTimes(1)
+    expect(harness.renderer.playMealCelebration).toHaveBeenCalledTimes(1)
+    expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ mealActive: true })
+    session.feed(); session.feed()
+    expect(w.farm.food).toBe(2)
+
+    vi.advanceTimersByTime(3000)
+    expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ mealActive: false })
+    expect(harness.renderer.finishMealGather).toHaveBeenCalled()
+
+    session.feed()
+    expect(w.farm.food).toBe(1)
+    expect(harness.renderer.playMealGather).toHaveBeenCalledTimes(2)
+    expect(w.builtSites).toHaveLength(built)
+    expect(w.pods).toHaveLength(pods)
+    expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('没有灶台和餐桌的旧存档仍能用原来的吃饭入口，不播放围坐', async () => {
+    const raw = farmedSave()
+    raw.world.farm.food = 2
+    harness.store.load.mockResolvedValue(raw)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(w.builtSites).toEqual([])
+    session.feed()
+    expect(w.farm.food).toBe(1)
+    expect(harness.renderer.playMealGather).not.toHaveBeenCalled()
+    expect(harness.renderer.playMealCelebration).toHaveBeenCalledTimes(1)
+    session.feed()
+    expect(w.farm.food).toBe(1)
+    session.destroy()
+  })
+
+  it('没有食物时不能开始共餐，也不会播放庆祝', async () => {
+    const onMessage = vi.fn()
+    harness.store.load.mockResolvedValue(farmedSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    session.feed()
+    expect(w.farm.food).toBe(0)
+    expect(harness.renderer.playMealCelebration).not.toHaveBeenCalled()
+    expect(onMessage.mock.calls.some(([text]) => String(text).includes('先收点菜'))).toBe(true)
+    session.destroy()
+  })
+
+  it('从泉边建设面板可以开工灶台和餐桌，完工才扣材料', async () => {
+    const raw = farmedSave()
+    raw.world.tiles[10][26] = TILE.EMPTY
+    raw.world.tiles[10][27] = TILE.EMPTY
+    raw.world.farm.food = 1
+    raw.world.inventory = { stone: 8, wood: 8 }
+    harness.store.load.mockResolvedValue(raw)
+    const messages: string[] = []
+    const session = await createGameSession({} as HTMLElement, { onMessage: (text) => { messages.push(text) }, onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    /** 施工仍是真实逐格委托：测试里替玩家把每一段走位播完。 */
+    const finishSiteWork = () => {
+      for (let handled = 0, guard = 0; guard < 40; guard++) {
+        const calls = harness.renderer.playExplorationTravel.mock.calls
+        if (calls.length === handled) break
+        const travel = calls[handled++] as unknown as [Cell[], () => void]
+        travel[1]()
+      }
+    }
+    session.selectSite('spring-kitchen')
+    expect(w.inventory).toEqual({ stone: 8, wood: 8 })
+    session.buildSite()
+    finishSiteWork()
+    expect(w.builtSites).toContainEqual({ id: 'spring-kitchen', kind: 'kitchen' })
+    // 挖开 x17 的两格泥土地也带来两块石料；完工只扣灶台成本。
+    expect(w.inventory).toEqual({ stone: 8, wood: 6 })
+    session.buildSite()
+    expect(w.builtSites.filter((site) => site.id === 'spring-kitchen')).toHaveLength(1)
+
+    session.selectSite('spring-table')
+    session.buildSite()
+    finishSiteWork()
+    expect(w.builtSites).toContainEqual({ id: 'spring-table', kind: 'dining' })
+    expect(w.inventory).toEqual({ stone: 6, wood: 3 })
+    expect(deserialize(serialize(w)).ok).toBe(true)
     session.destroy()
   })
 

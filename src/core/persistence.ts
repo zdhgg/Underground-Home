@@ -30,7 +30,7 @@ import { ROOM_SPECS } from './roomConstruction'
 import { WORKERS, workerHomeRoute } from './partnerWork'
 import { partnerById } from './partners'
 import { hasWideLampAbility, WIDE_LAMP_ID } from './lighting'
-import { validBuiltSites } from './sites'
+import { BUILDING_SITES, validBuiltSites } from './sites'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
@@ -198,7 +198,7 @@ export function deserialize(raw: unknown): LoadResult {
   if (version >= 13) {
     const data = payload.world as { inventory?: Inventory; builtSites?: BuiltSite[] }
     if (!data.inventory || ![data.inventory.stone, data.inventory.wood].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 100000)) return err('存档物品栏材料无效')
-    if (!Array.isArray(data.builtSites) || data.builtSites.length > 5) return err('存档洞室建设数据无效')
+    if (!Array.isArray(data.builtSites) || data.builtSites.length > BUILDING_SITES.length) return err('存档洞室建设数据无效')
     world.inventory = { stone: data.inventory.stone, wood: data.inventory.wood }
     // 洞室与设施的关联在全部原有数据加载后继续校验。
     world.builtSites = data.builtSites.map(s => s && ({ id: s.id, kind: s.kind }))

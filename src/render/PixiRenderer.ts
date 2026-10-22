@@ -36,6 +36,7 @@ import { podBlocksPassage } from '../core/passages'
 import type { RoomPreview } from '../app/roomEditor'
 import { PartnerMotion } from './partnerMotion'
 import type { WorkPlan } from '../core/partnerWork'
+import type { MealMove } from '../core/meal'
 import { LightingScene } from './lightingScene'
 import { powerLinePath } from '../core/power'
 import { drawCollection, loadCollectionTextures, type CollectionTextures } from './collectionScene'
@@ -191,6 +192,23 @@ interface PodEntrance {
   elapsed: number
   travellers: PodTraveller[]
   onSettled: () => void
+}
+
+/** 一次性共餐走位：每位伙伴沿真实通路走到餐桌前的座位，不产生持续 AI。 */
+interface MealTraveller {
+  friend: FriendSprite
+  points: { x: number; y: number }[]
+  lengths: number[]
+  total: number
+  duration: number
+  delay: number
+}
+
+interface MealGather {
+  elapsed: number
+  travellers: MealTraveller[]
+  onDone: () => void
+  notified: boolean
 }
 
 interface CameraTween {
@@ -470,6 +488,7 @@ export class PixiWorldRenderer {
   private readonly partnerMotion = new PartnerMotion()
   private readonly lightingScene = new LightingScene()
   private podEntrance: PodEntrance | null = null
+  private mealGather: MealGather | null = null
   private particles: Particle[] = []
   private readonly lootFeedback = new LootFeedback()
   private rings: Ring[] = []
@@ -1199,6 +1218,7 @@ export class PixiWorldRenderer {
     this.updateLighting(dt)
     this.drawHighlight()
     this.updateMachineGlow()
+    this.advanceMealGather(dt)
     this.updateFriends(dt)
     this.partnerMotion.update(dt)
     this.updateEffects(dt)
@@ -1405,6 +1425,7 @@ export class PixiWorldRenderer {
    */
   private rebuildFriends(arrivingPodId: number | null = null): void {
     this.podEntrance = null
+    this.mealGather = null
     for (const child of this.friendsLayer.removeChildren()) child.destroy({ children: true })
     for (const child of this.moleLayer.removeChildren()) child.destroy({ children: true })
     this.friends = []
@@ -1778,6 +1799,100 @@ export class PixiWorldRenderer {
     }
     const barrelX = WATER_BARREL_X * TILE_SIZE
     this.playBurst(barrelX, (WATER_BARREL_Y + 0.2) * TILE_SIZE, { color: 0xbfe6f2, count: 10, speed: 44, gravity: -18 })
+  }
+
+  /** 灶台做饭的一小段反馈：热气、火苗和一圈暖光。 */
+  playKitchenCooking(site: { x: number; y: number; w: number; h: number }): void {
+    const x = (site.x + site.w / 2) * TILE_SIZE
+    const y = (site.y + site.h - 1) * TILE_SIZE - 10
+    this.playBurst(x, y - 10, { color: 0xf6e7c8, count: 16, speed: 34, gravity: -38 })
+    this.playBurst(x, y, { color: 0xf2a04a, count: 12, speed: 56, gravity: -10 })
+    this.rings.push({ x, y, age: 0, life: 0.9, maxRadius: 46, color: 0xffd58a })
+  }
+
+  /**
+   * 共餐走位：伙伴沿会话层规划好的真实通路走到餐桌前。
+   * 只播一次；结束时把 baseY 留在座位上，庆祝期间继续坐着。
+   */
+  playMealGather(moves: readonly MealMove[], onDone: () => void): void {
+    const world = this.world
+    this.finishLampReveal()
+    this.podEntrance = null
+    this.partnerMotion.cancel()
+    if (!world) { onDone(); return }
+    const travellers: MealTraveller[] = []
+    moves.forEach((move, index) => {
+      const friend = this.friends.find((item) => item.partnerId === move.id && item.view.visible)
+      if (!friend) return
+      const points = [{ x: friend.view.x, y: friend.view.y }]
+      for (const cell of move.route.slice(1)) points.push({ x: (cell.x + 0.5) * TILE_SIZE, y: friendWalkY(world, cell) })
+      const seat = { x: (move.seat.x + 0.5) * TILE_SIZE, y: friendWalkY(world, move.seat) }
+      const last = points[points.length - 1]
+      if (Math.abs(last.x - seat.x) > 0.5 || Math.abs(last.y - seat.y) > 0.5) points.push(seat)
+      const lengths = [0]
+      for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1] + Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y))
+      travellers.push({
+        friend, points, lengths, total: lengths[lengths.length - 1],
+        duration: Math.min(2.4, Math.max(0.65, (points.length - 1) * 0.14)),
+        delay: index * 0.1,
+      })
+      friend.inEntrance = true
+      friend.pose = 'walk'
+      friend.baseY = points[0].y
+    })
+    if (travellers.length === 0) { onDone(); return }
+    this.mealGather = { elapsed: 0, travellers, onDone, notified: false }
+  }
+
+  /** 演出结束 / 被打断：伙伴回到自己的记录站位，输入和后续建造不受影响。 */
+  finishMealGather(): void {
+    if (!this.mealGather) return
+    this.mealGather = null
+    this.rebuildFriends()
+  }
+
+  cancelMealGather(): void { this.finishMealGather() }
+
+  private advanceMealGather(dt: number): void {
+    const gather = this.mealGather
+    if (!gather) return
+    gather.elapsed += dt
+    let allArrived = true
+    for (const traveller of gather.travellers) {
+      const local = gather.elapsed - traveller.delay
+      if (local < 0) { allArrived = false; continue }
+      const friend = traveller.friend
+      const last = traveller.points[traveller.points.length - 1]
+      if (local >= traveller.duration) {
+        if (friend.inEntrance) {
+          friend.inEntrance = false
+          friend.pose = 'idle'
+          friend.view.position.set(last.x, last.y)
+          friend.baseY = last.y
+          paintPartner(friend)
+        }
+        continue
+      }
+      allArrived = false
+      const distance = (local / traveller.duration) * traveller.total
+      let index = 0
+      while (index < traveller.points.length - 2 && traveller.lengths[index + 1] < distance) index++
+      const from = traveller.points[index]
+      const to = traveller.points[index + 1]
+      const segment = traveller.lengths[index + 1] - traveller.lengths[index]
+      const k = segment > 0 ? Math.min(1, Math.max(0, (distance - traveller.lengths[index]) / segment)) : 0
+      const x = from.x + (to.x - from.x) * k
+      const y = from.y + (to.y - from.y) * k
+      friend.inEntrance = true
+      friend.pose = 'walk'
+      friend.visual?.face(to.x - from.x)
+      friend.view.position.set(x, y)
+      friend.baseY = y
+    }
+    if (allArrived && !gather.notified) {
+      gather.notified = true
+      gather.onDone()
+    }
   }
 
   private spawnConfetti(anchors: ReadonlyArray<{ x: number; y: number }> = REPAIR_CONFETTI_ANCHORS): void {

@@ -69,8 +69,10 @@ export type WorkerPositions = Partial<Record<WorkerId, Cell>>
 export interface WallLamp extends Cell { wide?: true }
 
 export type RoomKind = 'home' | 'garden' | 'lounge'
+/** 可建设施用途：第一层房间用途，以及第二层的灶台／餐桌。 */
+export type SiteKind = RoomKind | 'kitchen' | 'dining'
 export interface Inventory { stone: number; wood: number }
-export interface BuiltSite { id: string; kind: RoomKind }
+export interface BuiltSite { id: string; kind: SiteKind }
 /** 避难所留下的少量材料，保证第一间住处可以直接开工。 */
 export const freshInventory = (): Inventory => ({ stone: 4, wood: 3 })
 /** 蓝图不改变地形；扩建蓝图完成前，原房间继续使用。 */

@@ -115,6 +115,38 @@ describe('预设洞室与挖掘材料', () => {
     editor.build(); expect(editor.working).toBe(true); expect(states.at(-1)?.working).toBe(true)
   })
 
+  it('v13 整层设施存档：第一层三间房加第二层四件设施都能保存并重新加载', () => {
+    const w = powered()
+    w.inventory = { stone: 80, wood: 80 }
+    const plan = [
+      ['first-nest', 'home'],
+      ['home-lounge', 'lounge'],
+      ['friends-nest', 'home'],
+      ['spring-garden', 'garden'],
+      ['water-corner', 'lounge'],
+      ['spring-kitchen', 'kitchen'],
+      ['spring-table', 'dining'],
+    ] as const
+    for (const [id, kind] of plan.slice(0, 2)) {
+      excavate(w, id)
+      expect(finishSite(w, siteById(id)!, kind), id).not.toBeNull()
+    }
+    // 第一层之后补上第二层的探索成果；不在左翼预挖，免得挡住第一间小窝的施工面。
+    for (const x of [26, 27]) { dig(w, x, 11); dig(w, x, 10) }
+    inspectCrack(w, 27, 12); upgradePickaxe(w)
+    for (let y = 12; y < 19; y++) if (w.tiles[y][27] !== TILE.EMPTY) dig(w, 27, y)
+    w.exploration.entered = true; w.exploration.explorer = { x: 27, y: 21 }
+    for (let x = 23; x >= 18; x--) { dig(w, x, 21); dig(w, x, 20) }
+    w.exploration.springFound = true; w.farm.waterSupplied = true
+    for (const [id, kind] of plan.slice(2)) {
+      excavate(w, id)
+      expect(finishSite(w, siteById(id)!, kind), id).not.toBeNull()
+    }
+    expect(w.builtSites).toHaveLength(plan.length)
+    expect(validBuiltSites(w)).toBe(true)
+    expect(deserialize(serialize(w))).toMatchObject({ ok: true })
+  })
+
   it('v13保存材料和建造结果，v12迁移保留成果并补齐物品栏，损坏字段明确拒绝', () => {
     const w = powered(); excavate(w, 'first-nest'); finishSite(w, BUILDING_SITES[0], 'home')
     const raw = serialize(w); expect(raw.version).toBe(WORLD_VERSION); expect(deserialize(raw)).toMatchObject({ ok: true, world: w })

@@ -1,6 +1,7 @@
 import { checkRoom, checkRoomPlan, removeRoom, roomAt, roomFromPoint, roomSummary, ROOM_HINTS, ROOM_MAX_WIDTH, ROOM_NAMES, type RoomChange } from '../core/rooms'
 import { canFinishRoom, excavationLeft, finishRoom, planRoom, roomCapacity, ROOM_SPECS } from '../core/roomConstruction'
 import { HOME_ROOM_TOP, HOME_FLOOR_Y, type Cell, type Room, type RoomKind, type WorldState } from '../core/world'
+import type { PreviewRoom } from '../core/sites'
 
 export interface RoomUI {
   active: boolean; available: boolean; kind: RoomKind; width: number; minWidth: number; selectedId: number | null
@@ -8,7 +9,7 @@ export interface RoomUI {
   construction: boolean; completed: boolean; action: string; left: number; busy: boolean
   items: { id: number; kind: RoomKind; width: number; name: string; built: boolean }[]
 }
-export interface RoomPreview { room: Room; valid: boolean; hint: string }
+export interface RoomPreview { room: PreviewRoom; valid: boolean; hint: string }
 
 /** 选址草稿可取消；保存蓝图后才进入逐格施工，关闭面板不会丢失蓝图。 */
 export class RoomEditor {
