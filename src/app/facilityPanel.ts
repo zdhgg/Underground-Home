@@ -1,10 +1,11 @@
 import { planterAt, RIPE_STAGE } from '../core/farm'
 import { sharedMealReady } from '../core/meal'
 import { DINING_SITE_ID, KITCHEN_SITE_ID, siteById } from '../core/sites'
+import { foundRelics, RELICS } from '../core/relics'
 import type { WorldState } from '../core/world'
 
 /**
- * 设施面板（S2 试点）：已建设施的交互面。
+ * 设施面板（S2 试点 + S4 储物架）：已建设施的交互面。
  *
  * 设施表在这里声明每个设施的标题、状态摘要和"当前最该做的一件事"；
  * 面板按钮只负责派发目标——收菜/浇水/开饭仍由伙伴沿真实通路到场执行，
@@ -12,9 +13,9 @@ import type { WorldState } from '../core/world'
  * 本批次不出现"升级"入口；升级入口留给后续内容批次（2C 育苗等）。
  */
 
-/** 第一批接入面板的设施：泉边菜园、灶台、餐桌。 */
+/** 有交互面板的设施：预设洞室（菜园/灶台/餐桌）+ 自由摆放的储物架。 */
 export const PANEL_FACILITY_IDS = ['spring-garden', KITCHEN_SITE_ID, DINING_SITE_ID] as const
-export type FacilityId = (typeof PANEL_FACILITY_IDS)[number]
+export type FacilityId = (typeof PANEL_FACILITY_IDS)[number] | 'storage-shelf'
 
 /** 菜园面板的状态图示：每一槽菜的生长档位。 */
 export interface FacilitySlot { stage: number }
@@ -24,6 +25,8 @@ export type FacilityPrimary =
   | { kind: 'watering'; label: string; x: number; y: number }
   | { kind: 'plant'; label: string }
   | { kind: 'meal'; label: string }
+  | { kind: 'find-relic'; label: string }
+  | { kind: 'browse-relics'; label: string }
   | { kind: 'none'; label: string }
 
 export interface FacilityUI {
@@ -66,9 +69,20 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
       canPlant: true,
     }
   }
+  if (id === 'storage-shelf') {
+    const found = foundRelics(world)
+    return {
+      active: true, id, title: '储物架', icon: '📦', slots: [],
+      summary: `石料 ${world.inventory.stone} · 旧木料 ${world.inventory.wood} · 旧物 ${found.length}/${RELICS.length}`,
+      primary: found.length < RELICS.length
+        ? { kind: 'find-relic', label: '找找没挖到的旧物' }
+        : { kind: 'browse-relics', label: '翻翻旧物的故事' },
+      hint: found.length > 0 ? '架子上摆着旧住户留下的东西。' : '挖到的旧物会摆上来，先去找找吧。',
+      canPlant: false,
+    }
+  }
   const kitchen = id === KITCHEN_SITE_ID
-  if (kitchen) {
-    const ready = sharedMealReady(world)
+  if (kitchen) {    const ready = sharedMealReady(world)
     const primary: FacilityPrimary = !ready
       ? { kind: 'none', label: '再配上餐桌' }
       : world.farm.food > 0
@@ -99,6 +113,7 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
 
 /** 点到的格子是不是这批有面板的已建设施（菜槽本身走直点，不开面板）。 */
 export function panelFacilityAt(world: WorldState, x: number, y: number): FacilityId | null {
+  if (world.shelves.some(shelf => shelf.x === x && shelf.y === y)) return 'storage-shelf'
   const site = PANEL_FACILITY_IDS
     .map((id) => siteById(id)!)
     .find((s) => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h)

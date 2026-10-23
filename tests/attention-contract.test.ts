@@ -100,6 +100,22 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     assertAttention(stage, 'guide')
   })
 
+  it('储物架面板同样只占一个主面板和一个主要操作', async () => {
+    const { host, stage, hooks } = await mountGame()
+    hooks.onFacility?.(facilityState({
+      id: 'storage-shelf', title: '储物架', icon: '📦', slots: [],
+      summary: '石料 3 · 旧木料 2 · 旧物 1/5',
+      primary: { kind: 'find-relic', label: '找找没挖到的旧物' },
+      hint: '架子上摆着旧住户留下的东西。', canPlant: false,
+    })); await nextTick()
+    assertAttention(stage, 'facility')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('找找没挖到的旧物')
+    host.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); await nextTick()
+    expect(harness.facilityPrimary).toHaveBeenCalledTimes(1)
+    hooks.onFacility?.(emptyFacilityUI()); await nextTick()
+    assertAttention(stage, 'guide')
+  })
+
   it('第二层章末：第一顿饭是引导主操作；章末后主操作轮换为做一顿饭，不新增面板', async () => {    const { host, stage, hooks } = await mountGame()
     const progress = (over: Partial<SessionProgress>): SessionProgress => ({
       title: '请大家吃第一顿饭', speech: '灶台和餐桌都好啦！', outcome: '第一顿饭吃完，第二层就完整啦。',

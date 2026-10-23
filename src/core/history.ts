@@ -25,6 +25,7 @@ type WorldAction =
   | { kind: 'dig'; x: number; y: number; tile?: TileType }
   | { kind: 'pod'; id: number }
   | { kind: 'planter'; id: number; cost?: Inventory }
+  | { kind: 'shelf'; id: number; cost: Inventory }
   | { kind: 'lamp'; x: number; y: number }
   | { kind: 'lamp-retrofit'; x: number }
   | { kind: 'room'; change: RoomChange }
@@ -82,6 +83,13 @@ export function createWorldHistory(limit = 200) {
           if (index < 0) continue
           world.farm.planters.splice(index, 1)
           if (action.cost) changeMaterials(world, action.cost)
+          return action
+        }
+        if (action.kind === 'shelf') {
+          const index = world.shelves.findIndex((shelf) => shelf.id === action.id)
+          if (index < 0) continue
+          world.shelves.splice(index, 1)
+          changeMaterials(world, action.cost)
           return action
         }
         if (action.kind === 'pod') {

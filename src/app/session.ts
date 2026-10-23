@@ -9,6 +9,7 @@ import { primaryGuideAction, type GuideAction } from './guideAction'
 import type { ConversationAnchor } from '../render/conversationAnchor'
 import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
 import { canAfford, changeMaterials, digLoot, materialText, PLANTER_COST } from '../core/materials'
+import { canPlaceShelf, placeShelf, SHELF_COST, type ShelfFailure } from '../core/storage'
 import type { Inventory } from '../core/world'
 import { bagItems, COLLECTION_SHELF, type BagItem } from '../core/bag'
 import { activateGardens } from '../core/roomConstruction'
@@ -27,7 +28,7 @@ import { wideLampUpgrade } from '../core/partnerAbilities'
 import { canRetrofitLamp, hasWideLampAbility, retrofitLamp, WIDE_LAMP_ID } from '../core/lighting'
 import { partnerConversation, type PartnerConversation } from '../core/partnerInteractions'
 import { canSendPowerDown, sendPowerDown } from '../core/power'
-import { relicAt, relicSummary, RELICS } from '../core/relics'
+import { isRelicFound, relicAt, relicSummary, RELICS } from '../core/relics'
 import {
   canPlacePlanter,
   canSupplyWater,
@@ -124,20 +125,22 @@ export interface Milestone {
   detail: string
 }
 
-/** 建造工具：同一次只会选一个（挖掘 / 睡眠舱 / 种植槽） */
-export type BuildMode = 'none' | 'pod' | 'planter'
+/** 建造工具：同一次只会选一个（挖掘 / 睡眠舱 / 种植槽 / 储物架） */
+export type BuildMode = 'none' | 'pod' | 'planter' | 'shelf'
 
 export interface BuildState {
   digging: boolean
   /** 现在能用哪些工具（界面按这个显示按钮） */
   podAvailable: boolean
   planterAvailable: boolean
+  shelfAvailable: boolean
   mode: BuildMode
   selected: boolean
   valid: boolean
   message: string
   podCount: number
   planterCount: number
+  shelfCount: number
 }
 
 const BUILD_MESSAGES: Record<BuildFailure | FarmFailure, string> = {
@@ -157,6 +160,21 @@ const BUILD_SHORT_HINTS: Record<BuildFailure | FarmFailure, string> = {
   power: '先修好能源核心', bounds: '太靠边了', reserved: '这里要留空',
   overlap: '这里放过了', soil: '先挖空这块', support: '要放在地面上', access: '门要通到家里',
   'locked-layer': '这一层还没开放', 'no-water': '先接水', layer: '只能放第二层菜园',
+}
+
+/** 储物架的短提示与完整说明（与菜槽共用失败原因键，但文案面向第一层）。 */
+const SHELF_MESSAGES: Record<ShelfFailure, string> = {
+  power: '先修好能源核心，再摆储物架。',
+  bounds: '这里太靠边啦，换个地方试试。',
+  layer: '储物架要放在第一层暖窝层的地面上。',
+  soil: '先挖空这一格，再放储物架。',
+  support: '储物架要放在地面上，不能悬空。',
+  reserved: '入口、梯子、能源核心和蓝图旁边要留出位置。',
+  overlap: '这里已经放好东西啦。',
+}
+const SHELF_SHORT_HINTS: Record<ShelfFailure, string> = {
+  power: '先修好能源核心', bounds: '太靠边了', layer: '只能放第一层', soil: '先挖空这块',
+  support: '要放在地面上', reserved: '这里要留空', overlap: '这里放过了',
 }
 
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
@@ -379,11 +397,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   const pushBuild = (): void => {
     // 睡眠舱：由已加入伙伴的稳定床位优先位决定容量。
-    // 种植槽：水接到菜园之后才能种。
+    // 种植槽：水接到菜园之后才能种。储物架：点亮家园后就能摆。
     const podAvailable = world.progress.coreRepaired && canBuildMorePods(world)
     const planterAvailable = isFarmUnlocked(world)
+    const shelfAvailable = world.progress.coreRepaired
     // 工具不可用时自动收起，别让孩子停在一个点了没反应的模式里
-    if ((buildMode === 'pod' && !podAvailable) || (buildMode === 'planter' && !planterAvailable)) {
+    if ((buildMode === 'pod' && !podAvailable) || (buildMode === 'planter' && !planterAvailable) || (buildMode === 'shelf' && !shelfAvailable)) {
       buildMode = 'none'
       candidate = null
       hoverBuild = null
@@ -392,9 +411,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     const point = buildMode === 'none' ? null : candidate ?? anchor
     const podCheck = buildMode === 'pod' && point ? canPlacePod(world, point.x, point.y) : null
     const planterCheck = buildMode === 'planter' && point ? canPlacePlanter(world, point.x, point.y) : null
-    const check = podCheck ?? planterCheck
+    const shelfCheck = buildMode === 'shelf' && point ? canPlaceShelf(world, point.x, point.y) : null
+    const check = podCheck ?? planterCheck ?? shelfCheck
     const valid = check?.ok === true
-    const previewHint = check ? (valid ? '可以建 ✓' : BUILD_SHORT_HINTS[check.reason]) : ''
+    const previewHint = check ? (valid ? '可以放 ✓' : buildMode === 'shelf' ? SHELF_SHORT_HINTS[(check as { reason: ShelfFailure }).reason] : BUILD_SHORT_HINTS[check.reason]) : ''
     renderer.setBuildPreview(
       podCheck?.ok ? point : null,
       valid,
@@ -402,6 +422,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       buildMode === 'none' ? '' : previewHint,
       buildMode,
       buildMode === 'planter' ? point : null,
+      buildMode === 'shelf' ? point : null,
     )
 
     let message = '选一个工具开始建造。'
@@ -411,23 +432,25 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         : '先挖出一块空地，再选“睡眠舱”。'
     } else if (candidate && check) {
       message = check.ok
-        ? '这里可以建！点“确认建造”。想换位置，再点别处。'
-        : `${BUILD_MESSAGES[check.reason]} 再点别处换位置。`
+        ? buildMode === 'shelf' ? '这里可以放！点“确认建造”。想换位置，再点别处。' : '这里可以建！点“确认建造”。想换位置，再点别处。'
+        : `${buildMode === 'shelf' ? SHELF_MESSAGES[(check as { reason: ShelfFailure }).reason] : BUILD_MESSAGES[check.reason]} 再点别处换位置。`
     } else if (point && check) {
       message = check.ok
-        ? '这里可以建！点一下这里把位置定下来。'
-        : `${BUILD_MESSAGES[check.reason]} 换个地方，或先清理这里。`
+        ? buildMode === 'shelf' ? '这里可以放！点一下这里把位置定下来。' : '这里可以建！点一下这里把位置定下来。'
+        : `${buildMode === 'shelf' ? SHELF_MESSAGES[(check as { reason: ShelfFailure }).reason] : BUILD_MESSAGES[check.reason]} 换个地方，或先清理这里。`
     } else if (buildMode === 'planter') {
       message = '在第二层点一块有地面的空地，放下种植槽。'
+    } else if (buildMode === 'shelf') {
+      message = '在第一层点一块有地面的空地，放下储物架。'
     } else if (buildMode === 'pod') {
       message = '点一块有地面的空地，放下睡眠舱。'
     }
 
     hooks.onBuild?.({
       digging: diggingSites,
-      podAvailable, planterAvailable, mode: buildMode, selected: candidate !== null,
+      podAvailable, planterAvailable, shelfAvailable, mode: buildMode, selected: candidate !== null,
       valid: candidate !== null && valid, message,
-      podCount: world.pods.length, planterCount: world.farm.planters.length,
+      podCount: world.pods.length, planterCount: world.farm.planters.length, shelfCount: world.shelves.length,
     })
   }
 
@@ -884,6 +907,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return
     }
     if (buildMode === 'planter') {
+      candidate = cell
+      pushBuild()
+      return
+    }
+    if (buildMode === 'shelf') {
       candidate = cell
       pushBuild()
       return
@@ -1365,6 +1393,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     playUndo()
     if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
     else if (restored.kind === 'planter') renderer.refreshFarm()
+    else if (restored.kind === 'shelf') renderer.refreshShelves()
     else if (restored.kind === 'lamp' || restored.kind === 'lamp-retrofit') renderer.refreshExploration()
     else if (restored.kind === 'room' || restored.kind === 'site') { resting = world.pods.length > 0; renderer.refreshRooms(); renderer.refreshPods(); renderer.refreshFarm(); renderer.refreshFriends() }
     else { renderer.refreshTerrain([restored]); renderer.playDigEffect(restored); renderer.refreshRelics() }
@@ -1581,6 +1610,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     })
   }
 
+  /** 引导或面板里“找旧物”：把镜头带到第一件还没挖到的旧物旁。 */
+  const focusRelicById = (id: string): void => {
+    const relic = RELICS.find(r => r.id === id)
+    if (!relic) return
+    facilityPanel?.close()
+    if (!traveling) {
+      siteEditor?.close(); roomEditor?.close(); buildMode = 'none'; lampMode = false; diggingSites = true
+      candidate = null; hoverBuild = null; pushProgress()
+    }
+    renderer.focusOn((relic.x + .5) * TILE_SIZE, (relic.y + .5) * TILE_SIZE)
+    notify('这一带的泥土里有件旧物。沿着通路慢慢挖过去吧！')
+  }
+
   /** 设施面板 →「自己摆菜槽」：进入种植槽摆放模式并把镜头带到泉边。 */
   const facilityPlantNow = (): void => {
     facilityPanel?.close()
@@ -1602,16 +1644,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.focusOn((COLLECTION_SHELF.x + COLLECTION_SHELF.w / 2) * TILE_SIZE, (COLLECTION_SHELF.y + .5) * TILE_SIZE)
       notify('收藏架在这里。挖到的旧物会自动摆上去，点它能翻看小故事。')
     },
-    focusRelic: id => {
-      const relic = RELICS.find(r => r.id === id)
-      if (!relic) return
-      if (!traveling) {
-        siteEditor?.close(); roomEditor?.close(); buildMode = 'none'; lampMode = false; diggingSites = true
-        candidate = null; hoverBuild = null; pushProgress()
-      }
-      renderer.focusOn((relic.x + .5) * TILE_SIZE, (relic.y + .5) * TILE_SIZE)
-      notify('这一带的泥土里有件旧物。沿着通路慢慢挖过去吧！')
-    },
+    focusRelic: focusRelicById,
     startOpening,
     titleSave: (): SaveStatus => loadedFromSave
       ? { status: 'ready', summary: summarizeSave(world), savedAt }
@@ -1689,6 +1722,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.setLampPreview(null)
       if (mode === 'pod' && (!world.progress.coreRepaired || !canBuildMorePods(world))) return
       if (mode === 'planter' && !isFarmUnlocked(world)) return
+      if (mode === 'shelf' && !world.progress.coreRepaired) return
       buildMode = buildMode === mode ? 'none' : mode
       candidate = null
       hoverBuild = null
@@ -1697,6 +1731,25 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     },
     confirmBuild: () => {
       if (mealBusy() || traveling) return
+      if (buildMode === 'shelf') {
+        if (!candidate) return
+        const check = canPlaceShelf(world, candidate.x, candidate.y)
+        if (!check.ok) { playUnavailable(); hooks.onMessage(SHELF_MESSAGES[check.reason], 'warning'); return }
+        if (!canAfford(world, SHELF_COST)) { playUnavailable(); notify(`需要${materialText(SHELF_COST)}，挖泥土找找吧。`); return }
+        const shelf = placeShelf(world, candidate.x, candidate.y)
+        if (!shelf) return
+        changeMaterials(world, SHELF_COST, -1)
+        history.record({ kind: 'shelf', id: shelf.id, cost: { ...SHELF_COST } })
+        candidate = null
+        pushBuild()
+        renderer.refreshShelves()
+        playBuildComplete()
+        renderer.playBurst((shelf.x + 0.5) * TILE_SIZE, (shelf.y + 0.5) * TILE_SIZE, { color: 0xd9b47f, count: 10 })
+        scheduleSave()
+        pushProgress()
+        notify('📦 储物架摆好啦！点它就能看材料和旧物。')
+        return
+      }
       if (buildMode === 'planter') {
         if (!candidate) return
         if (candidate.y !== 21) { notify('新菜槽放在第二层泉水边的地面上吧。'); return }
@@ -1842,6 +1895,16 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         return
       }
       if (primary.kind === 'meal') { facilityPanel?.close(); startMeal(); return }
+      if (primary.kind === 'find-relic') {
+        const target = RELICS.find(relic => !isRelicFound(world, relic))
+        if (target) focusRelicById(target.id)
+        return
+      }
+      if (primary.kind === 'browse-relics') {
+        facilityPanel?.close()
+        hooks.onBagRequested?.()
+        return
+      }
       if (primary.kind === 'plant') facilityPlantNow()
     },
     facilityPlant: facilityPlantNow,

@@ -23,7 +23,7 @@ const harness = vi.hoisted(() => {
     canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
-    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(),
+    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(), refreshShelves: vi.fn(),
     playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
     playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
     finishMealGather: vi.fn(), cancelMealGather: vi.fn(), playChapterGlance: vi.fn(),
@@ -576,7 +576,7 @@ describe('探索会话与存档集成', () => {
     const onBagRequested = vi.fn(), onBag = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onBagRequested, onBag })
     const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
-    expect(onBag.mock.calls.at(-1)![0]).toHaveLength(5)
+    expect(onBag.mock.calls.at(-1)![0]).toHaveLength(7)
     session.setInputBlocked(true)
     harness.handlers.onTap({ x: 18, y: 8 }); harness.handlers.onTap({ x: 26, y: 10 })
     const panCount = harness.renderer.panBy.mock.calls.length
@@ -1253,6 +1253,37 @@ describe('探索会话与存档集成', () => {
     expect(dining).toMatchObject({ id: 'spring-table' })
     expect(dining.summary).toContain('吃过 1 顿饭')
     session.closeFacility()
+    session.destroy()
+  })
+
+  it('储物架：第一层摆放、扣料可撤销，点架子打开面板找旧物', async () => {
+    const onFacility = vi.fn(), onBuild = vi.fn(), onMessage = vi.fn()
+    harness.store.load.mockResolvedValue(readySave())
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onFacility, onBuild })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+
+    const before = { ...w.inventory }
+    session.setBuildMode('shelf')
+    harness.handlers.onTap({ x: 24, y: 11 })
+    session.confirmBuild()
+    expect(w.shelves).toEqual([{ id: 1, x: 24, y: 11 }])
+    expect(w.inventory).toEqual({ stone: before.stone - 1, wood: before.wood - 2 })
+    expect(harness.renderer.refreshShelves).toHaveBeenCalledTimes(1)
+    // 收起摆放模式后撤销：架子拆掉、材料退回。
+    session.setBuildMode('none')
+    session.undo()
+    expect(w.shelves).toHaveLength(0)
+    expect(w.inventory).toEqual(before)
+    // 再摆一次并点它：面板主操作是「找找没挖到的旧物」。
+    session.setBuildMode('shelf')
+    harness.handlers.onTap({ x: 24, y: 11 })
+    session.confirmBuild()
+    session.setBuildMode('none')
+    harness.handlers.onTap({ x: 24, y: 11 })
+    expect(onFacility.mock.calls.at(-1)![0]).toMatchObject({ active: true, id: 'storage-shelf', primary: { kind: 'find-relic' } })
+    session.facilityPrimary()
+    expect(harness.renderer.focusOn).toHaveBeenCalled()
+    expect(onMessage.mock.calls.some(([text]) => String(text).includes('旧物'))).toBe(true)
     session.destroy()
   })
 

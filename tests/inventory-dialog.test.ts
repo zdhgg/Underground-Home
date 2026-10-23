@@ -40,8 +40,8 @@ describe('背包模态框的实际组件行为', () => {
   })
   it('材料卡片实时更新；旧物可定位，找到后显示故事和收藏架入口', async () => {
     const { host, state, find, collection } = await mount()
-    expect(host.querySelectorAll('.item-card')).toHaveLength(5)
-    expect(host.querySelectorAll('.item-card img')).toHaveLength(5)
+    expect(host.querySelectorAll('.item-card')).toHaveLength(7)
+    expect(host.querySelectorAll('.item-card img')).toHaveLength(7)
     state.items[0]!.count = 17; await nextTick()
     expect(host.querySelector('[aria-label="石料，17个"]')).not.toBeNull()
     host.querySelector<HTMLButtonElement>('.relic')!.click(); await nextTick()

@@ -21,6 +21,8 @@ export const RELICS: readonly Relic[] = [
   { id: 'seed-pouch', x: 4, y: 10, emoji: '🌱', name: '干种子', hint: '别丢！以后有了水，就能种出吃的。' },
   { id: 'wrench', x: 7, y: 11, emoji: '🔧', name: '旧扳手', hint: '阿土的工具箱里多了一件宝贝。' },
   { id: 'lamp-shade', x: 36, y: 10, emoji: '🏮', name: '旧灯罩', hint: '擦一擦，还能亮。' },
+  { id: 'old-photo', x: 26, y: 9, emoji: '🖼️', name: '旧照片', hint: '照片里，一群小伙伴围着同一张桌子吃饭。原来很早以前，这里就是一个家。' },
+  { id: 'old-key', x: 2, y: 9, emoji: '🗝️', name: '旧钥匙', hint: '一把沉甸甸的旧钥匙。它要开的那扇门，好像藏在更深的地方……' },
 ]
 
 export const relicAt = (x: number, y: number): Relic | null => RELICS.find((relic) => relic.x === x && relic.y === y) ?? null

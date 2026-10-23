@@ -68,7 +68,7 @@ const progress = ref<SessionProgress>({
   finished: false,
   relics: { found: 0, total: 3 },
 })
-const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0 })
+const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, shelfAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0, shelfCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
 const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false, kitchen: false, dining: false, mealReady: false, mealActive: false })
 const exploration = ref<ExplorationUI>({ wideLighting: false, lightUpgradeReady: false, clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canChain: false, chaining: false, remaining: 0 })
@@ -93,6 +93,7 @@ const legendHint = computed(() => {
   if (farm.value.mealReady) return '🍲 灶台和餐桌都好了 · 收点菜就能开饭'
   if (!farm.value.kitchen) return '🔨 点「泉边建设」修一个灶台'
   if (!farm.value.dining) return '🍽 再摆一张餐桌，大家就能围坐'
+  if (view.value.layer === 'home' && build.value.shelfAvailable && build.value.shelfCount === 0) return '📦 想让材料和旧物看得见？第一层能摆储物架'
   return '🌱 点泉边小菜园就能建设 · 熟了叫小满来收'
 })
 
@@ -102,11 +103,13 @@ const expandableRooms = computed(() => rooms.value.items.filter(item => item.bui
 const homeGoals = computed(() => {
   const relics = progress.value.relics
   const lounge = rooms.value.items.some(item => item.kind === 'lounge' && item.built)
-  return [
+  const goals = [
     { key: 'bed', label: '住处', done: build.value.podCount > 0, detail: build.value.podCount ? `${build.value.podCount}间` : '还没建' },
     { key: 'relics', label: '旧避难所的东西', done: relics.total > 0 && relics.found >= relics.total, detail: `${relics.found}/${relics.total}` },
     { key: 'lounge', label: '客厅', done: lounge, detail: lounge ? '已建好' : '还没建' },
+    { key: 'shelf', label: '储物架', done: build.value.shelfCount > 0, detail: build.value.shelfCount ? `${build.value.shelfCount}个` : '还没摆' },
   ]
+  return goals
 })
 const showHomeGoals = computed(() => view.value.layer === 'home' && !view.value.overview
   && (rooms.value.available || build.value.podCount > 0))
@@ -333,6 +336,7 @@ onBeforeUnmount(() => {
           <button v-for="room in rooms.items.filter(item => !item.built)" :key="room.id" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">继续原来的{{ room.name }}</button>
           <button v-for="room in expandableRooms" :key="`expand-${room.id}`" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">🏠 扩建{{ room.name }}</button>
           <button v-if="build.planterAvailable && view.layer === 'water'" type="button" :aria-pressed="build.mode === 'planter'" :disabled="exploration.traveling" @click="session?.setBuildMode('planter')">🌱 自己摆菜槽</button>
+          <button v-if="build.shelfAvailable && view.layer === 'home'" type="button" :aria-pressed="build.mode === 'shelf'" :disabled="exploration.traveling" @click="session?.setBuildMode('shelf')">📦 摆储物架</button>
           <template v-if="build.mode !== 'none'">
             <button type="button" class="confirm" :disabled="!build.valid" @click="session?.confirmBuild()">✅ 确认建造</button>
             <button type="button" class="cancel" @click="session?.setBuildMode(build.mode)">✖ 取消</button>

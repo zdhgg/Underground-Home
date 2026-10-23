@@ -11,7 +11,7 @@ import { drawCollection } from '../src/render/collectionScene'
 describe('背包与收藏架共用世界数据', () => {
   it('材料显示实时数量；未找到的旧物不消耗材料、不修改世界', () => {
     const w = createInitialWorld(), before = structuredClone(w)
-    expect(bagItems(w).map(i => i.count)).toEqual([4, 3, 0, 0, 0])
+    expect(bagItems(w).map(i => i.count)).toEqual([4, 3, 0, 0, 0, 0, 0])
     expect(w).toEqual(before)
     w.inventory.stone = 0; w.inventory.wood = 9
     expect(bagItems(w).slice(0, 2).map(i => i.count)).toEqual([0, 9])

@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 14
+export const WORLD_VERSION = 15
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -67,6 +67,11 @@ export interface Cell {
 export type WorkerId = Exclude<PartnerId, 'atu'>
 export type WorkerPositions = Partial<Record<WorkerId, Cell>>
 export interface WallLamp extends Cell { wide?: true }
+
+/** 第一层的一格储物架：材料看得见，旧物摆得下。 */
+export interface Shelf extends Cell {
+  id: number
+}
 
 export type RoomKind = 'home' | 'garden' | 'lounge'
 /** 可建设施用途：第一层房间用途，以及第二层的灶台／餐桌。 */
@@ -157,6 +162,8 @@ export interface WorldState {
   pods: SleepPod[]
   rooms: Room[]
   nextRoomId: number
+  /** 第一层的储物架（v15 起） */
+  shelves: Shelf[]
   /** 专业伙伴最近到达的安全站位；不保存半段动画或待执行工作。 */
   workers: WorkerPositions
   /** 已学会的专业能力升级ID；设施配置单独保存在灯上。 */
@@ -235,6 +242,7 @@ export function createInitialWorld(): WorldState {
     pods: [],
     rooms: [],
     nextRoomId: 1,
+    shelves: [],
     workers: {},
     partnerUpgrades: [],
     exploration: freshExploration(),

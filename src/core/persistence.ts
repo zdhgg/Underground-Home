@@ -13,6 +13,7 @@ import {
   type ExplorationState,
   type Room,
   type WorkerPositions,
+  type Shelf,
   createInitialWorld,
   freshExploration,
   freshFarm,
@@ -28,6 +29,7 @@ import { canStand, explorationAccessIntact, HALL_START_Y, shaftConnected, SHAFT_
 import { atuCanStand, initialAtuPosition } from './atu'
 import { checkRoom, checkRoomPlan, roomContains, ROOM_KINDS } from './rooms'
 import { ROOM_SPECS } from './roomConstruction'
+import { validShelves } from './storage'
 import { WORKERS, workerHomeRoute } from './partnerWork'
 import { partnerById } from './partners'
 import { hasWideLampAbility, WIDE_LAMP_ID } from './lighting'
@@ -55,6 +57,8 @@ export interface SavePayload {
     pods: SleepPod[]
     rooms: Room[]
     nextRoomId: number
+    /** 第一层的储物架（v15 起） */
+    shelves: Shelf[]
     workers: WorkerPositions
     partnerUpgrades: string[]
     exploration: ExplorationState
@@ -78,8 +82,9 @@ export function serialize(world: WorldState): SavePayload {
       tiles: world.tiles.map((row) => [...row]),
       progress: { ...world.progress },
       pods: world.pods.map((pod) => ({ ...pod })),
-      rooms: world.rooms.map(room => ({ ...room })),
+      rooms: world.rooms.map((room) => ({ ...room })),
       nextRoomId: world.nextRoomId,
+      shelves: world.shelves.map((shelf) => ({ ...shelf })),
       workers: structuredClone(world.workers),
       partnerUpgrades: [...world.partnerUpgrades],
       exploration: structuredClone(world.exploration),
@@ -176,7 +181,7 @@ export function deserialize(raw: unknown): LoadResult {
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
         pods: [],
-        rooms: [], nextRoomId: 1, workers: {}, partnerUpgrades: [],
+        rooms: [], nextRoomId: 1, shelves: [], workers: {}, partnerUpgrades: [],
         exploration: freshExploration(),
         farm: freshFarm(),
         powerDown: false,
@@ -184,7 +189,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -192,7 +197,7 @@ export function deserialize(raw: unknown): LoadResult {
   if (!progress) return err('存档进度字段无效')
 
   const world: WorldState = {
-    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, workers: {}, partnerUpgrades: [],
+    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], workers: {}, partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
     exploration: freshExploration(), farm: freshFarm(), powerDown: false,
   }
@@ -277,6 +282,20 @@ export function deserialize(raw: unknown): LoadResult {
   }
   if (world.farm.planters.some(p => p.roomId !== undefined && !world.rooms.some(r => r.id === p.roomId && r.managed && r.kind === 'garden' && r.status !== 'blueprint' && roomContains(r, p)))) return err('存档种植区设施归属无效')
   if (!validBuiltSites(world)) return err('存档洞室用途或设施无效')
+  // v15 起：第一层储物架。旧档没有这个字段，按没有架子补齐。
+  if (version >= 15) {
+    const data = payload.world as { shelves?: unknown }
+    if (!Array.isArray(data.shelves) || data.shelves.length > MAP_WIDTH) return err('存档储物架数据无效')
+    const ids = new Set<number>()
+    for (const item of data.shelves) {
+      if (typeof item !== 'object' || item === null) return err('存档储物架数据无效')
+      const shelf = item as Shelf
+      if (!Number.isInteger(shelf.id) || shelf.id < 1 || ids.has(shelf.id)) return err('存档储物架数据无效')
+      ids.add(shelf.id)
+      world.shelves.push({ id: shelf.id, x: shelf.x, y: shelf.y })
+    }
+    if (!validShelves(world)) return err('存档储物架位置无效')
+  }
   // v8将主角位置与发现裂纹解耦。旧档狭窄通道中的站位回退到安全大厅，地形与进度不改。
   const actor = world.exploration.explorer
   const relocated = version < 8 && actor !== null && !atuCanStand(world, actor, true)

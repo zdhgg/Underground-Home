@@ -31,6 +31,8 @@ import { availablePartners, partnerBed, type PartnerId } from '../core/partners'
 import { hitPartner, type PartnerHitTarget } from './partnerHitTest'
 import { PartnerFeedback } from './partnerFeedback'
 import { AmbientLife } from './ambientLife'
+import { drawShelfProp } from './shelfProps'
+import { foundRelics } from '../core/relics'
 import type { ConversationAnchor } from './conversationAnchor'
 import type { SoilPlan } from '../core/atu'
 import { RoomScene } from './roomScene'
@@ -464,6 +466,8 @@ export class PixiWorldRenderer {
   private readonly landmarkLayer = new Container()
   /** 大厅后墙的收藏架：显示已经挖到的旧物，不改变通行。 */
   private readonly relicLayer = new Container()
+  /** 第一层自由摆放的储物架 */
+  private readonly shelfLayer = new Container()
   /** 第一层的生产道具：种植槽与"水到家"的水管 / 水缸 */
   private readonly farmLayer = new Container()
   /** 水流动感与成熟光圈：每帧重画，位于黑暗之上 */
@@ -596,6 +600,7 @@ export class PixiWorldRenderer {
       this.shelterFixtures,
       this.landmarkLayer,
       this.relicLayer,
+      this.shelfLayer,
       this.farmLayer,
       this.podLayer,
       this.friendsLayer,
@@ -707,6 +712,7 @@ export class PixiWorldRenderer {
     this.refreshTerrain()
     this.rebuildLandmarks()
     this.refreshRelics()
+    this.refreshShelves()
     this.refreshFarm()
     this.refreshPods()
     this.rebuildFriends()
@@ -790,6 +796,21 @@ export class PixiWorldRenderer {
     const world = this.world
     if (!world) return
     this.relicLayer.addChild(drawCollection(world, this.collectionTextures))
+    // 架子上摆的旧物跟着更新。
+    this.refreshShelves()
+  }
+
+  /** 只重建储物架：摆放、撤销、载入或旧物变化后调用。 */
+  refreshShelves(): void {
+    for (const child of this.shelfLayer.removeChildren()) child.destroy({ children: true })
+    const world = this.world
+    if (!world) return
+    const emojis = foundRelics(world).map(relic => relic.emoji)
+    for (const shelf of world.shelves) {
+      const prop = drawShelfProp({ relicEmojis: emojis })
+      prop.position.set(shelf.x * TILE_SIZE, shelf.y * TILE_SIZE)
+      this.shelfLayer.addChild(prop)
+    }
   }
 
   refreshExploration(): void {
@@ -977,10 +998,24 @@ export class PixiWorldRenderer {
     valid = false,
     door: 'left' | 'right' = 'left',
     hint = '',
-    kind: 'none' | 'pod' | 'planter' = 'pod',
+    kind: 'none' | 'pod' | 'planter' | 'shelf' = 'pod',
     planterCell: Cell | null = null,
+    shelfCell: Cell | null = null,
   ): void {
     for (const child of this.buildPreview.removeChildren()) child.destroy({ children: true })
+    if (kind === 'shelf' && shelfCell) {
+      const color = valid ? 0x8fe3a6 : 0xff947e
+      const slot = new Graphics()
+      slot.rect(shelfCell.x * TILE_SIZE + 2, shelfCell.y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4)
+        .fill({ color, alpha: 0.18 })
+        .stroke({ width: 3, color })
+      const ghost = drawShelfProp({ relicEmojis: [] })
+      ghost.alpha = 0.65
+      ghost.position.set(shelfCell.x * TILE_SIZE, shelfCell.y * TILE_SIZE)
+      this.buildPreview.addChild(ghost, slot)
+      if (hint) this.addBuildHint(hint, valid, shelfCell.x + 0.5, shelfCell.y, 1)
+      return
+    }
     if (kind === 'planter' && planterCell) {
       const color = valid ? 0x8fe3a6 : 0xff947e
       const slot = new Graphics()
