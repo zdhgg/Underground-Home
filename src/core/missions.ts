@@ -1,6 +1,8 @@
 import { LANDMARKS, type Rect, type WorldState } from './world'
 import { shaftConnected, springVisible, suggestedBreakthrough, waterSpan } from './exploration'
 import { canBuildMorePods, waitingPartnerList, waitingPartners } from './partners'
+import { DINING_SITE_ID, KITCHEN_SITE_ID } from './meal'
+import { siteById } from './sites'
 
 /**
  * 任务（missions）：给"问题和目标"，不规定唯一解。
@@ -114,13 +116,18 @@ export function guideHighlight(world: WorldState): GuideHighlight {
     if (world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.gardenSuggestion }
     // 第一夜过完了：家里有电，该顺着梯道送到下面去了
     if (!world.powerDown) return { kind: 'repair', rect: LANDMARKS.generatorZone }
+    // 章末三步都在泉边洞室：修灶台 → 摆餐桌 → 第一顿饭。
+    if (!world.builtSites.some((site) => site.id === KITCHEN_SITE_ID)) return { kind: 'build', rect: siteById(KITCHEN_SITE_ID)! }
+    if (!world.builtSites.some((site) => site.id === DINING_SITE_ID)) return { kind: 'build', rect: siteById(DINING_SITE_ID)! }
+    if (world.farm.sharedMeals === 0) return { kind: 'collect', rect: siteById(DINING_SITE_ID)! }
   }
   return { kind: 'none' }
 }
 
 /**
- * 探索 + 引水 + 种植的主线引导（一步一步只显示当前这一步）。
+ * 探索 + 引水 + 种植 + 共餐的主线引导（一步一步只显示当前这一步）。
  * 判定全部来自世界数据，顺序无关；进度位单调，收获过一次就不会回退。
+ * 最后三步是第二层的章末：修灶台 → 摆餐桌 → 第一顿围坐饭。
  */
 export function explorationGuide(world: WorldState): { title: string; speech: string; outcome: string; done: number; total: number; finished: boolean } {
   const e = world.exploration
@@ -132,7 +139,10 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   const friendsSettled = e.springFound && waiting === 0
   const harvested = farm.harvests > 0
   const powered = world.powerDown
-  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested, powered].filter(Boolean).length
+  const kitchenBuilt = world.builtSites.some((site) => site.id === KITCHEN_SITE_ID)
+  const diningBuilt = world.builtSites.some((site) => site.id === DINING_SITE_ID)
+  const dined = farm.sharedMeals > 0
+  const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested, powered, kitchenBuilt, diningBuilt, dined].filter(Boolean).length
   const guide = !e.clueFound
     ? ['楼下有谁在喊饿', '床安好啦。楼下好像有小兔子的声音："我饿了……下面有水吗？" 点一下岩壁上的裂纹——我去听听里面有没有水声。', '有了水，就能种出吃的。']
     : !e.pickaxeUpgraded
@@ -151,6 +161,12 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
                   ? ['在泉水边种出第一份食物', '点泉边的“小菜园”，再点“开工”。挖到的石料和旧木料能用来修菜槽！菜熟了点一下，小满来收。', '有菜吃，小满就不饿了。']
                   : !powered
                     ? ['把家里的电送到下面', '家里亮堂堂的，可是第二层还是黑的。点「⚡ 把电送到下面」，我把电线顺着梯子铺下去。', '下面的灯也能亮了。']
-                    : ['家越住越大！', '家里有水、有床、有新鲜菜，第二层也亮了。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
-  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 9, finished: friendsSettled && harvested && powered }
+                    : !kitchenBuilt
+                      ? ['在泉边修一个灶台', '菜收好了，可我们还吃不上热乎的！点「泉边建设」，选「泉边灶台」再点「开工」。', '灶台热起来，收成就能做熟啦。']
+                      : !diningBuilt
+                        ? ['再摆一张餐桌', '灶台冒热气啦！再点「泉边建设」修一张围坐餐桌，大家就能坐在一起吃。', '围着桌子吃饭，家才热闹。']
+                        : !dined
+                          ? ['请大家吃第一顿饭', '灶台和餐桌都好啦！点下面的「请大家吃第一顿饭」。没有菜的话，先去菜园收一份。', '第一顿饭吃完，第二层就完整啦。']
+                          : ['家越住越大！', '家里有水、有床、有新鲜菜，第一顿饭也吃上啦。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
+  return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 12, finished: friendsSettled && harvested && powered && kitchenBuilt && diningBuilt && dined }
 }

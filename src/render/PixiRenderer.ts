@@ -508,6 +508,8 @@ export class PixiWorldRenderer {
   private hoverCell: Cell | null = null
   private camera: Camera = { x: 0, y: 0, zoom: 1 }
   private cameraTween: CameraTween | null = null
+  /** 章末回望：拉到全景停两秒再回泉水层；玩家拖动/缩放随时打断。 */
+  private glance: { phase: 'out' | 'hold' | 'back'; elapsed: number; resume: Camera } | null = null
   private viewport: Viewport
   private elapsed = 0
   private frameCount = 0
@@ -1250,6 +1252,7 @@ export class PixiWorldRenderer {
   }
 
   focusWater(): void {
+    this.glance = null
     this.overview = false
     this.cameraTween = { from: { ...this.camera }, to: centerOn(STRATA.water.focus.x * TILE_SIZE, STRATA.water.focus.y * TILE_SIZE, this.viewport, 1), elapsed: 0, duration: 0.8 }
   }
@@ -1259,6 +1262,47 @@ export class PixiWorldRenderer {
     this.overview = true
     this.camera = overviewCamera(this.viewport)
     this.applyCamera()
+  }
+
+  /**
+   * 章末回望镜头（第二层第一次围坐共餐后）：拉到全剖面停约两秒，再回到泉水层。
+   * 只是镜头演出，不锁输入；玩家拖动、缩放或跳转镜头会立即让位。
+   */
+  playChapterGlance(): void {
+    this.cancelCameraTween()
+    this.overview = false
+    this.glance = { phase: 'out', elapsed: 0, resume: this.camera }
+  }
+
+  private updateChapterGlance(dt: number): void {
+    const glance = this.glance
+    if (!glance) return
+    glance.elapsed += dt
+    const overview = overviewCamera(this.viewport)
+    if (glance.phase === 'out') {
+      const k = Math.min(1, glance.elapsed / 1.1)
+      this.camera = this.mixCamera(glance.resume, overview, easeInOutCubic(k))
+      this.applyCamera()
+      if (k >= 1) { glance.phase = 'hold'; glance.elapsed = 0 }
+      return
+    }
+    if (glance.phase === 'hold') {
+      if (glance.elapsed >= 2.2) { glance.phase = 'back'; glance.elapsed = 0 }
+      return
+    }
+    const k = Math.min(1, glance.elapsed / 0.9)
+    const back = centerOn(STRATA.water.focus.x * TILE_SIZE, STRATA.water.focus.y * TILE_SIZE, this.viewport, 1)
+    this.camera = this.mixCamera(overview, back, easeInOutCubic(k))
+    this.applyCamera()
+    if (k >= 1) this.glance = null
+  }
+
+  private mixCamera(from: Camera, to: Camera, k: number): Camera {
+    return clampCamera({
+      x: from.x + (to.x - from.x) * k,
+      y: from.y + (to.y - from.y) * k,
+      zoom: from.zoom + (to.zoom - from.zoom) * k,
+    }, this.viewport)
   }
 
   destroy(): void {
@@ -1278,6 +1322,7 @@ export class PixiWorldRenderer {
     this.syncViewport()
     if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
     this.updateCameraTween(dt)
+    this.updateChapterGlance(dt)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
     if (this.powerSurge > 0) this.powerSurge = Math.max(0, this.powerSurge - dt)
     this.updateLighting(dt)
@@ -1332,6 +1377,7 @@ export class PixiWorldRenderer {
 
   private cancelCameraTween(): void {
     this.cameraTween = null
+    this.glance = null
   }
 
   private updateCameraTween(dt: number): void {

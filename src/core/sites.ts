@@ -8,6 +8,9 @@ import { TILE, type BuiltSite, type Cell, type Inventory, type Rect, type Room, 
 export interface BuildingSite extends Rect {
   id: string; name: string; icon: string; layer: 'home' | 'water'; kinds: readonly SiteKind[]; cost: Inventory; description: string
 }
+/** 第二层共餐设施（2A）：定义放这里，meal.ts 引用并再导出，避免相互导入。 */
+export const KITCHEN_SITE_ID = 'spring-kitchen'
+export const DINING_SITE_ID = 'spring-table'
 /** 第一层定用途；第二层有一个二选一洞室，右侧其余软土继续自由探索。 */
 export const BUILDING_SITES: readonly BuildingSite[] = [
   { id: 'first-nest', name: '两人小窝', icon: '🛏', layer: 'home', x: 12, y: 9, w: 3, h: 3, kinds: ['home'], cost: { stone: 3, wood: 2 }, description: '铺好两张床，今晚睡个好觉。' },
@@ -101,6 +104,9 @@ export function finishSite(w: WorldState, s: BuildingSite, kind: SiteKind): Site
 }
 export function undoSite(w: WorldState, change: SiteChange): boolean {
   if (!w.builtSites.some(b => b.id === change.site.id && b.kind === change.site.kind)) return false
+  // 围坐共餐已经发生过：灶台和餐桌成为家里的事实设施，不能再"撤销没建过"，
+  // 否则存档会出现"围坐过却没有设施"的矛盾状态（进度位单调，章末不回退）。
+  if (w.farm.sharedMeals > 0 && (change.site.id === KITCHEN_SITE_ID || change.site.id === DINING_SITE_ID)) return false
   if (change.room && !undoRoom(w, change.room)) return false
   w.farm.planters = w.farm.planters.filter(p => !change.addedPlanters.includes(p.id))
   w.builtSites = w.builtSites.filter(b => b.id !== change.site.id)

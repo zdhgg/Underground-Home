@@ -326,8 +326,6 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   /** 一次共餐演出：结算已完成，演出期间不再重复扣食物。 */
   let mealing = false
   let mealTimer: number | undefined
-  /** 只在本局第一次实体共餐时弹一次卡片；不写进存档。 */
-  let sharedMealCelebrated = false
 
   const pushConversation = (): void => {
     const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId) : null
@@ -685,7 +683,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     } else {
       diggingSites = true
       renderer.focusOn((site.x + site.w / 2) * TILE_SIZE, (site.y + site.h / 2) * TILE_SIZE)
-      notify('先沿着通路挖出小窝空间。挖空后，点出现的蓝图修建；也可以继续自由探索。')
+      notify(`先沿着通路挖出${site.name}的空间。挖空后，点出现的蓝图修建；也可以继续自由探索。`)
     }
     pushProgress()
   }
@@ -1463,7 +1461,6 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     window.clearTimeout(mealTimer)
     mealTimer = undefined
     mealing = false
-    sharedMealCelebrated = false
     lastMessage = ''
     lastMessageAt = 0
     resumeHint = ''
@@ -1754,14 +1751,17 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       pushProgress()
       // 保底收尾：即使画面被冻住，也不会把输入锁在演出里。
       mealTimer = window.setTimeout(() => finishMeal(), 9000)
+      // 第一次围坐共餐（存档里累计的第 1 次）= 第二层章末完成态。
+      const firstShared = world.farm.sharedMeals === 1
       renderer.playMealGather(planMealGathering(world), () => {
         if (!mealing) return
         renderer.playMealCelebration()
         renderer.playPartnerReaction('xiaoman', '一起吃，饭更香！')
         notify(`🍲 大家坐下来吃饭啦！还剩 ${world.farm.food} 份。`)
-        if (!sharedMealCelebrated) {
-          sharedMealCelebrated = true
-          hooks.onMilestone?.({ emoji: '🍲', title: '大家围坐吃饭啦！', detail: '灶台和餐桌都用上了 · 朋友都坐在一起' })
+        if (firstShared) {
+          hooks.onMilestone?.({ emoji: '🏡', title: '第 2 层 · 完成啦！', detail: '第一顿饭大家一起吃 · 有水、有菜、有饭，两层都亮了' })
+          // 回望：拉出整个家的剖面看一眼，再回到餐桌这边；拖动/缩放随时打断。
+          renderer.playChapterGlance()
         }
         window.clearTimeout(mealTimer)
         mealTimer = window.setTimeout(() => finishMeal(), 2600)

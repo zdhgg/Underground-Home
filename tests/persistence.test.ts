@@ -193,7 +193,7 @@ describe('引水与种植（v6）', () => {
     const result = deserialize(JSON.parse(JSON.stringify(payload)))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(result.world.farm).toEqual({ waterSupplied: false, planters: [], food: 0, harvests: 0 })
+      expect(result.world.farm).toEqual({ waterSupplied: false, planters: [], food: 0, harvests: 0, sharedMeals: 0 })
       expect(result.world.progress).toEqual(world.progress)
       expect(result.world.exploration).toEqual(world.exploration)
       expect(result.world.pods).toEqual(world.pods)
@@ -223,6 +223,30 @@ describe('引水与种植（v6）', () => {
     const buried = JSON.parse(JSON.stringify(payload))
     buried.world.tiles[11][5] = TILE.SOIL
     expect(deserialize(buried).ok).toBe(false)
+  })
+})
+
+describe('围坐共餐计数（v14）', () => {
+  it('v13 旧档没有 sharedMeals 字段：按 0 次补齐，其余进度原样保留', () => {
+    const world = farmWorld()
+    const payload = serialize(world)
+    payload.version = 13
+    delete (payload.world.farm as { sharedMeals?: number }).sharedMeals
+
+    const result = deserialize(JSON.parse(JSON.stringify(payload)))
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.world.farm.sharedMeals).toBe(0)
+      expect(result.world.farm.planters).toEqual(world.farm.planters)
+      expect(result.world.version).toBe(WORLD_VERSION)
+    }
+  })
+
+  it('声称围坐过却没有灶台和餐桌的存档按损坏处理', () => {
+    const payload = serialize(farmWorld())
+    ;(payload.world.farm as { sharedMeals?: number }).sharedMeals = 1
+    const result = deserialize(JSON.parse(JSON.stringify(payload)))
+    expect(result.ok).toBe(false)
   })
 })
 

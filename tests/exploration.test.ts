@@ -6,6 +6,7 @@ import { createWorldHistory } from '../src/core/history'
 import { canPlaceWallLamp, canStand, inspectCrack, moleRoute, shaftChainReady, shaftConnected, shaftDugSegments, shaftFrontier, shaftRemainingSegments, springVisible, upgradePickaxe, walkingRoute, waterSpan } from '../src/core/exploration'
 import { deserialize, serialize } from '../src/core/persistence'
 import { explorationGuide, guideHighlight } from '../src/core/missions'
+import { DINING_SITE_ID, KITCHEN_SITE_ID } from '../src/core/meal'
 import { waitingPartners } from '../src/core/partners'
 import { advancePlanters, canPlacePlanter, harvestPlanter, placePlanter } from '../src/core/farm'
 
@@ -172,15 +173,15 @@ describe('首次突破岩层闭环', () => {
     expect(loaded.ok && loaded.world).toEqual(w)
     // 找到水之后还有三步：接到菜园 → 给伙伴留床 → 种出第一份收成
     expect(waitingPartners(w)).toBe(2)
-    expect(explorationGuide(w)).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '把水接到菜园', done: 5, total: 12, finished: false })
     w.farm.waterSupplied = true
-    expect(explorationGuide(w)).toMatchObject({ title: '给伙伴留床', done: 6, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '给伙伴留床', done: 6, total: 12, finished: false })
     carve(w, 5, 14, 9, 11)
     const second = placePod(w, 7, 10)
     expect(second).not.toBeNull()
     expect(second?.door).toBe('left')
     expect(waitingPartners(w)).toBe(0)
-    expect(explorationGuide(w)).toMatchObject({ title: '在泉水边种出第一份食物', done: 7, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '在泉水边种出第一份食物', done: 7, total: 12, finished: false })
 
     // 种下一槽菜：干三件事长熟一档一档往上走，收一次就完成主线
     expect(placePlanter(w, 5, 11)).not.toBeNull()
@@ -189,11 +190,18 @@ describe('首次突破岩层闭环', () => {
     expect(w.farm.planters[0].growth).toBe(3)
     expect(harvestPlanter(w, 5, 11)).toBe(true)
     expect(w.farm.food).toBe(1)
-    // 收过第一份之后还剩最后一步：把电送到第二层。
-    expect(explorationGuide(w)).toMatchObject({ title: '把家里的电送到下面', done: 8, total: 9, finished: false })
+    // 收过第一份之后：把电送到第二层。
+    expect(explorationGuide(w)).toMatchObject({ title: '把家里的电送到下面', done: 8, total: 12, finished: false })
     w.powerDown = true
-    expect(explorationGuide(w)).toMatchObject({ done: 9, total: 9, finished: true })
     expect(deserialize(serialize(w)).ok).toBe(true)
+    // 送电之后是第二层章末三步：灶台 → 餐桌 → 第一顿围坐饭。
+    expect(explorationGuide(w)).toMatchObject({ title: '在泉边修一个灶台', done: 9, total: 12, finished: false })
+    w.builtSites.push({ id: KITCHEN_SITE_ID, kind: 'kitchen' })
+    expect(explorationGuide(w)).toMatchObject({ title: '再摆一张餐桌', done: 10, total: 12, finished: false })
+    w.builtSites.push({ id: DINING_SITE_ID, kind: 'dining' })
+    expect(explorationGuide(w)).toMatchObject({ title: '请大家吃第一顿饭', done: 11, total: 12, finished: false })
+    w.farm.sharedMeals = 1
+    expect(explorationGuide(w)).toMatchObject({ done: 12, total: 12, finished: true })
   })
   it('梯道用起来之后，新睡眠舱不能截断大厅到梯口的地面通道', () => {
     const w = readyWorld()

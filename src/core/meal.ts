@@ -1,8 +1,11 @@
 import { atuRoute } from './atu'
 import { feedPartners } from './farm'
 import { availablePartners } from './partners'
-import { siteById, type BuildingSite } from './sites'
+import { DINING_SITE_ID, KITCHEN_SITE_ID, siteById, type BuildingSite } from './sites'
 import type { Cell, WorkerId, WorldState } from './world'
+
+// 设施 ID 的定义在 sites.ts；这里再导出，保持"从 meal 拿共餐相关常量"的既有导入不变。
+export { KITCHEN_SITE_ID, DINING_SITE_ID }
 
 /**
  * 第二层共餐（2A）：灶台 + 餐桌。
@@ -11,8 +14,6 @@ import type { Cell, WorkerId, WorldState } from './world'
  * 两件都建好之后，同一个结算函数额外返回 shared，由会话层播放实体演出。
  * 这里只做规则与路线规划，不碰画面。
  */
-export const KITCHEN_SITE_ID = 'spring-kitchen'
-export const DINING_SITE_ID = 'spring-table'
 
 export interface MealFacilities {
   kitchen: BuildingSite
@@ -38,12 +39,14 @@ export type MealResult =
 /**
  * 唯一结算入口：两个吃饭按钮最后都只走到这里。
  * 成功时恰好调用一次 feedPartners（消耗 1 份食物）；演出中的重复触发由会话层拦住。
+ * 围坐共餐额外累计 sharedMeals——第一次围坐就是第二层的章末完成态。
  */
 export function serveMeal(world: WorldState): MealResult {
   if (world.farm.food <= 0) return { ok: false, reason: 'no-food' }
   if (world.pods.length === 0) return { ok: false, reason: 'no-partners' }
   const shared = sharedMealReady(world)
   if (!feedPartners(world)) return { ok: false, reason: world.farm.food <= 0 ? 'no-food' : 'no-partners' }
+  if (shared) world.farm.sharedMeals += 1
   return { ok: true, shared, food: world.farm.food }
 }
 

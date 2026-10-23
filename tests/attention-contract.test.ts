@@ -3,13 +3,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp, nextTick, type App } from 'vue'
 import Game from '../src/App.vue'
 import { gameAudio, SOUND_SETTINGS_KEY } from '../src/render/gameAudio'
-import type { GameSession, SessionHooks } from '../src/app/session'
+import type { GameSession, SessionHooks, SessionProgress } from '../src/app/session'
 import type { RoomUI } from '../src/app/roomEditor'
 import { emptySiteUI } from '../src/app/siteEditor'
 import type { PartnerConversation } from '../src/core/partnerInteractions'
 
 // 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
-const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null }))
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn() }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
     harness.hooks = hooks
@@ -17,6 +17,7 @@ vi.mock('../src/app/session', () => ({
       titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
       startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
+      feed: harness.feed,
     }
   },
 }))
@@ -72,6 +73,28 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     const { host, stage } = await mountGame()
     expect(host.querySelector('.sound-toggle')?.getAttribute('aria-pressed')).toBe('false')
     assertAttention(stage, 'guide')
+  })
+
+  it('第二层章末：第一顿饭是引导主操作；章末后主操作轮换为做一顿饭，不新增面板', async () => {
+    const { host, stage, hooks } = await mountGame()
+    const progress = (over: Partial<SessionProgress>): SessionProgress => ({
+      title: '请大家吃第一顿饭', speech: '灶台和餐桌都好啦！', outcome: '第一顿饭吃完，第二层就完整啦。',
+      done: 11, total: 12, finished: false, relics: { found: 3, total: 3 }, ...over,
+    })
+    hooks.onProgress?.(progress({ action: { id: 'meal', label: '请大家吃第一顿饭' } }))
+    await nextTick(); assertAttention(stage, 'guide')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('请大家吃第一顿饭')
+    host.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); await nextTick()
+    expect(harness.feed).toHaveBeenCalledTimes(1)
+    // 章末完成后：只要灶台餐桌还在，主操作轮换为「做一顿饭」，仍是唯一的引导面板。
+    hooks.onProgress?.(progress({
+      title: '家越住越大！', speech: '家里有水、有床、有新鲜菜，第一顿饭也吃上啦。', outcome: '',
+      done: 12, total: 12, finished: true, action: { id: 'meal', label: '做一顿饭' },
+    }))
+    await nextTick(); assertAttention(stage, 'guide')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('做一顿饭')
+    host.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); await nextTick()
+    expect(harness.feed).toHaveBeenCalledTimes(2)
   })
 
   it('背景音乐随游戏状态启停，切层和伙伴对话不增加面板或推进操作', async () => {

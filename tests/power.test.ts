@@ -71,13 +71,23 @@ describe('电向下：第一层是总电源', () => {
     const guide = guideHighlight(world)
     expect(guide.kind).toBe('repair')
     if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.generatorZone)
-    expect(explorationGuide(world)).toMatchObject({ title: '把家里的电送到下面', done: 8, total: 9, finished: false })
+    expect(explorationGuide(world)).toMatchObject({ title: '把家里的电送到下面', done: 8, total: 12, finished: false })
   })
 
-  it('送完电，第一夜才算真的过完', () => {
+  it('送完电，引导进入第二层章末：先修灶台，再摆餐桌，最后第一顿饭', () => {
     const world = readyForPower()
     sendPowerDown(world)
-    expect(explorationGuide(world)).toMatchObject({ done: 9, total: 9, finished: true })
+    expect(explorationGuide(world)).toMatchObject({ title: '在泉边修一个灶台', done: 9, total: 12, finished: false })
+    const highlight = guideHighlight(world)
+    expect(highlight.kind).toBe('build')
+    if (highlight.kind === 'build') expect(highlight.rect).toMatchObject({ x: 10, y: 19, w: 3, h: 3 })
+    world.builtSites.push({ id: 'spring-kitchen', kind: 'kitchen' })
+    expect(explorationGuide(world)).toMatchObject({ title: '再摆一张餐桌', done: 10, total: 12, finished: false })
+    world.builtSites.push({ id: 'spring-table', kind: 'dining' })
+    expect(explorationGuide(world)).toMatchObject({ title: '请大家吃第一顿饭', done: 11, total: 12, finished: false })
+    expect(guideHighlight(world).kind).toBe('collect')
+    world.farm.sharedMeals = 1
+    expect(explorationGuide(world)).toMatchObject({ done: 12, total: 12, finished: true })
     expect(guideHighlight(world).kind).toBe('none')
   })
 })

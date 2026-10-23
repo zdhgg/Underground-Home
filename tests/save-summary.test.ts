@@ -37,7 +37,7 @@ describe('进入页存档摘要', () => {
     const summary = summarizeSave(world)
     expect(summary.phase).toBe('泉水与家园')
     expect(summary.missionTitle).toBe('楼下有谁在喊饿')
-    expect(summary.total).toBe(9)
+    expect(summary.total).toBe(12)
     expect(summary.finished).toBe(false)
   })
 })

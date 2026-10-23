@@ -26,7 +26,7 @@ const harness = vi.hoisted(() => {
     refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(),
     playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
     playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
-    finishMealGather: vi.fn(), cancelMealGather: vi.fn(),
+    finishMealGather: vi.fn(), cancelMealGather: vi.fn(), playChapterGlance: vi.fn(),
     playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
     playBurst: vi.fn(), playRepairCelebration: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
@@ -1069,7 +1069,7 @@ describe('探索会话与存档集成', () => {
     expect(xiaoquan.partnerId).toBe('xiaoquan')
     expect(xiaoquan.lines.join(' ')).toContain('留个住处')
     // 找到水之后还没走完：要先把水接到菜园，再安顿新朋友、种出第一份收成
-    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
+    expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水接到菜园', done: 5, total: 12, finished: false })
     session.toggleLamp(); tap(25, 19)
     expect(w.exploration.lamps).toEqual([{ x: 25, y: 19 }])
     session.undo()
@@ -1142,18 +1142,22 @@ describe('探索会话与存档集成', () => {
   })
 
   it('建成灶台和餐桌后，实体共餐与旧入口共用结算，演出期间重复点击不再扣食物', async () => {
-    const onFarm = vi.fn(), onMessage = vi.fn()
+    const onFarm = vi.fn(), onMessage = vi.fn(), onMilestone = vi.fn()
     harness.store.load.mockResolvedValue(sharedMealSave())
-    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onFarm })
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onFarm, onMilestone })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ kitchen: true, dining: true, mealReady: true, mealActive: false })
     const pods = w.pods.length, built = w.builtSites.length
 
     session.feed()
     expect(w.farm.food).toBe(2)
+    expect(w.farm.sharedMeals).toBe(1)
     expect(harness.renderer.playKitchenCooking).toHaveBeenCalledTimes(1)
     expect(harness.renderer.playMealGather).toHaveBeenCalledTimes(1)
     expect(harness.renderer.playMealCelebration).toHaveBeenCalledTimes(1)
+    // 第一次围坐 = 第二层章末：完成卡片 + 回望镜头各一次。
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '第 2 层 · 完成啦！' }))
+    expect(harness.renderer.playChapterGlance).toHaveBeenCalledTimes(1)
     expect(onFarm.mock.calls.at(-1)![0]).toMatchObject({ mealActive: true })
     session.feed(); session.feed()
     expect(w.farm.food).toBe(2)
@@ -1164,7 +1168,11 @@ describe('探索会话与存档集成', () => {
 
     session.feed()
     expect(w.farm.food).toBe(1)
+    expect(w.farm.sharedMeals).toBe(2)
     expect(harness.renderer.playMealGather).toHaveBeenCalledTimes(2)
+    // 之后的共餐不再重复章末卡片与回望。
+    expect(harness.renderer.playChapterGlance).toHaveBeenCalledTimes(1)
+    expect(onMilestone.mock.calls.filter(call => (call[0] as { title?: string }).title === '第 2 层 · 完成啦！')).toHaveLength(1)
     expect(w.builtSites).toHaveLength(built)
     expect(w.pods).toHaveLength(pods)
     expect(deserialize(serialize(w)).ok).toBe(true)
@@ -1330,7 +1338,7 @@ describe('探索会话与存档集成', () => {
     if (save.status !== 'ready') throw new Error('应读到存档')
     expect(save.summary.phase).toBe('泉水与家园')
     expect(save.summary.missionTitle).toBe('楼下有谁在喊饿')
-    expect(save.summary.total).toBe(9)
+    expect(save.summary.total).toBe(12)
     expect(save.savedAt).not.toBe('')
     expect(harness.renderer.playOpening).not.toHaveBeenCalled()
 

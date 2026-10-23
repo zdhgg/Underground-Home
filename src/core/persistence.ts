@@ -23,6 +23,7 @@ import {
 } from './world'
 import { canPlacePod } from './build'
 import { canPlacePlanter, RIPE_STAGE } from './farm'
+import { DINING_SITE_ID, KITCHEN_SITE_ID } from './meal'
 import { canStand, explorationAccessIntact, HALL_START_Y, shaftConnected, SHAFT_LAST_Y, springVisible, walkingRoute } from './exploration'
 import { atuCanStand, initialAtuPosition } from './atu'
 import { checkRoom, checkRoomPlan, roomContains, ROOM_KINDS } from './rooms'
@@ -183,7 +184,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -306,13 +307,18 @@ export function deserialize(raw: unknown): LoadResult {
   }
 }
 
-/** v6 起：引水状态、种植槽与食物。水必须先于种植，槽位也要仍在合法地面上。 */
+/** v6 起：引水状态、种植槽与食物。水必须先于种植，槽位也要仍在合法地面上。v14 起累计围坐共餐。 */
 function validateFarm(raw: unknown, world: WorldState, version: number): FarmState | null {
   if (typeof raw !== 'object' || raw === null) return null
   const farm = raw as FarmState
   if (typeof farm.waterSupplied !== 'boolean') return null
   if (!Number.isInteger(farm.food) || farm.food < 0) return null
   if (!Number.isInteger(farm.harvests) || farm.harvests < 0) return null
+  // v13 旧档没有这个字段：按 0 围坐补齐，不强迫重做，也不凭空认定完成。
+  const sharedMeals = version >= 14 ? farm.sharedMeals : 0
+  if (!Number.isInteger(sharedMeals) || sharedMeals < 0) return null
+  // 围坐共餐只在灶台和餐桌都建成后才会发生；声称围坐过却没有这两件设施就是数据损坏。
+  if (sharedMeals > 0 && !(world.builtSites.some((site) => site.id === KITCHEN_SITE_ID) && world.builtSites.some((site) => site.id === DINING_SITE_ID))) return null
   if (!Array.isArray(farm.planters) || farm.planters.length > MAP_WIDTH * MAP_HEIGHT) return null
   // 没有泉水就没有水可引；水没引上来就不该有作物。
   if (farm.waterSupplied && !world.exploration.springFound) return null
@@ -330,13 +336,13 @@ function validateFarm(raw: unknown, world: WorldState, version: number): FarmSta
     planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth, ...(version >= 12 && planter.roomId !== undefined ? { roomId: planter.roomId } : {}) })
   }
   const restored = world.farm
-  world.farm = { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests }
+  world.farm = { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests, sharedMeals }
   try {
     for (const planter of planters) {
       world.farm.planters = planters.filter((other) => other.id !== planter.id)
       if (!canPlacePlanter(world, planter.x, planter.y).ok) return null
     }
-    return { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests }
+    return { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests, sharedMeals }
   } finally {
     world.farm = restored
   }

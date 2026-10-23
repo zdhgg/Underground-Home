@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialWorld, TILE, WORLD_VERSION, type WorldState } from '../src/core/world'
+import { createInitialWorld, TILE, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { placePod } from '../src/core/build'
 import { inspectCrack, upgradePickaxe } from '../src/core/exploration'
@@ -99,10 +99,12 @@ describe('第二层灶台与餐桌', () => {
     expect(sharedMealReady(w)).toBe(false)
   })
 
-  it('v13 旧存档没有新设施也能加载，原吃饭方式仍然只扣一份食物', () => {
+  it('v13 旧存档没有新设施也没有共餐计数，仍能加载并走原吃饭方式', () => {
     const w = mealWorld()
     const raw = serialize(w)
-    expect(raw.version).toBe(WORLD_VERSION)
+    // 模拟真正的 v13 旧档：没有 sharedMeals 字段。
+    raw.version = 13
+    delete (raw.world.farm as { sharedMeals?: number }).sharedMeals
     expect(raw.world.builtSites).toEqual([])
 
     const loaded = deserialize(JSON.parse(JSON.stringify(raw)))
@@ -121,10 +123,12 @@ describe('共餐结算', () => {
     buildFacilities(w)
 
     expect(serveMeal(w)).toMatchObject({ ok: true, shared: true, food: 1 })
-    expect(w.farm.food).toBe(1)
+    expect(w.farm.sharedMeals).toBe(1)
     expect(serveMeal(w)).toMatchObject({ ok: true, shared: true, food: 0 })
-    expect(w.farm.food).toBe(0)
+    expect(w.farm.sharedMeals).toBe(2)
     expect(serveMeal(w)).toEqual({ ok: false, reason: 'no-food' })
+    // 失败的开饭不计入围坐次数。
+    expect(w.farm.sharedMeals).toBe(2)
 
     const noPartners = mealWorld()
     buildFacilities(noPartners)
@@ -132,6 +136,26 @@ describe('共餐结算', () => {
     noPartners.farm.food = 2
     expect(serveMeal(noPartners)).toEqual({ ok: false, reason: 'no-partners' })
     expect(noPartners.farm.food).toBe(2)
+    expect(noPartners.farm.sharedMeals).toBe(0)
+  })
+
+  it('第一次围坐共餐就是第二层章末：次数入档，设施不能再撤销没建过', () => {
+    const w = mealWorld()
+    const kitchenChange = finishSite(w, siteById(KITCHEN_SITE_ID)!, 'kitchen')!
+    const diningChange = finishSite(w, siteById(DINING_SITE_ID)!, 'dining')!
+    expect(serveMeal(w)).toMatchObject({ ok: true, shared: true })
+    expect(w.farm.sharedMeals).toBe(1)
+
+    // 围坐次数随存档往返一致。
+    const loaded = deserialize(serialize(w))
+    expect(loaded.ok).toBe(true)
+    if (loaded.ok) expect(loaded.world.farm.sharedMeals).toBe(1)
+
+    // 共餐发生后撤销灶台/餐桌会被拒绝，避免存档出现"围坐过却没设施"的矛盾。
+    expect(undoSite(w, diningChange)).toBe(false)
+    expect(undoSite(w, kitchenChange)).toBe(false)
+    expect(sharedMealReady(w)).toBe(true)
+    expect(deserialize(serialize(w)).ok).toBe(true)
   })
 
   it('围坐路线只安排已加入的伙伴，终点是餐桌前的座位，不会重复占座', () => {

@@ -1,9 +1,10 @@
 import { currentMission, explorationGuide } from '../core/missions'
 import { siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
+import { DINING_SITE_ID, KITCHEN_SITE_ID, sharedMealReady } from '../core/meal'
 import type { WorldState } from '../core/world'
 
 export interface GuideAction {
-  id: 'focus' | 'site' | 'water' | 'plant' | 'power' | 'pickaxe' | 'chain' | 'travel'
+  id: 'focus' | 'site' | 'water' | 'plant' | 'power' | 'pickaxe' | 'chain' | 'travel' | 'meal'
   label: string
   siteId?: string
 }
@@ -28,5 +29,13 @@ export function primaryGuideAction(world: WorldState): GuideAction {
   if (title === '把水接到菜园') return { id: 'water', label: '请小泉接好水管' }
   if (title === '在泉水边种出第一份食物') return { id: 'plant', label: '去泉水边种菜' }
   if (title === '把家里的电送到下面') return { id: 'power', label: '把电送到下面' }
+  if (title === '在泉边修一个灶台' || title === '再摆一张餐桌') {
+    const siteId = title === '在泉边修一个灶台' ? KITCHEN_SITE_ID : DINING_SITE_ID
+    const site = siteById(siteId)!
+    return { id: 'site', siteId, label: siteBlueprintVisible(world, site) ? `修建${site.name}` : `看看${site.name}那边` }
+  }
+  if (title === '请大家吃第一顿饭') return { id: 'meal', label: '请大家吃第一顿饭' }
+  // 章末之后：只要灶台餐桌还在、手里有饭，"做一顿饭"就是当前最值得做的一件事。
+  if (explorationGuide(world).finished && sharedMealReady(world)) return { id: 'meal', label: '做一顿饭' }
   return { id: 'focus', label: title === '亲手挖出向下的梯道' ? '看看能挖的裂纹' : title === '楼下有谁在喊饿' ? '找找声音从哪来' : title === '找到滴答响的泉水' ? '找找泉水在哪里' : '回到家园看看' }
 }

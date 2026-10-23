@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 13
+export const WORLD_VERSION = 14
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -136,9 +136,11 @@ export interface FarmState {
   food: number
   /** 累计收成次数：只增不减，用来判断"已经收过第一份" */
   harvests: number
+  /** 累计围坐共餐次数：只增不减。第一次围坐（=1）就是第二层的章末完成态。 */
+  sharedMeals: number
 }
 
-export const freshFarm = (): FarmState => ({ waterSupplied: false, planters: [], food: 0, harvests: 0 })
+export const freshFarm = (): FarmState => ({ waterSupplied: false, planters: [], food: 0, harvests: 0, sharedMeals: 0 })
 
 /** 世界状态：一张固定小地图 + 第一夜进度 */
 export interface WorldState {

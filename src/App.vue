@@ -117,6 +117,7 @@ function performGuide(): void {
     case 'pickaxe': game.talkToPartner('atu'); break
     case 'travel': game.travel(); break
     case 'chain': game.digToBottom(); break
+    case 'meal': game.feed(); break
     default: game.focusTarget()
   }
 }
