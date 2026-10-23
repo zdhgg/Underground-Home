@@ -170,11 +170,11 @@ describe('首次突破岩层闭环', () => {
     w.exploration.lamps.push({ x: 30, y: 19 })
     loaded = deserialize(serialize(w))
     expect(loaded.ok && loaded.world).toEqual(w)
-    // 找到水之后还有三步：接到菜园 → 安顿新朋友 → 种出第一份收成
+    // 找到水之后还有三步：接到菜园 → 给伙伴留床 → 种出第一份收成
     expect(waitingPartners(w)).toBe(2)
     expect(explorationGuide(w)).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
     w.farm.waterSupplied = true
-    expect(explorationGuide(w)).toMatchObject({ title: '安顿新朋友', done: 6, total: 9, finished: false })
+    expect(explorationGuide(w)).toMatchObject({ title: '给伙伴留床', done: 6, total: 9, finished: false })
     carve(w, 5, 14, 9, 11)
     const second = placePod(w, 7, 10)
     expect(second).not.toBeNull()

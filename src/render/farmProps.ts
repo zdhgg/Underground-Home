@@ -19,26 +19,28 @@ export const WATER_BARREL_Y = 21
 const HOME_BARREL_X = 19.4
 const HOME_BARREL_Y = 11
 
-export function drawPlanter(planter: Planter, textures: EnvironmentTextures | null = null): Container {
+export function drawPlanter(planter: Planter, textures: EnvironmentTextures | null = null, compactOffset?: number): Container {
   const view = new Container()
   const g = new Graphics()
-  view.position.set((planter.x + 0.5) * TILE_SIZE, (planter.y + 0.9) * TILE_SIZE)
+  view.position.set((planter.x + 0.5 + (compactOffset ?? 0)) * TILE_SIZE, (planter.y + 0.9) * TILE_SIZE)
+  view.label = `planter-stage-${planter.growth}`
+  const image = planter.growth >= RIPE_STAGE ? textures?.planter : textures?.emptyPlanter
 
-  if (textures && planter.growth > 0) {
-    const sprite = new Sprite(textures.planter)
+  if (image) {
+    const sprite = new Sprite(image)
     sprite.anchor.set(.5, .88)
-    sprite.width = 38
-    sprite.height = 34
+    sprite.width = compactOffset === undefined ? 38 : 32
+    sprite.height = compactOffset === undefined ? 34 : 28
     view.addChild(sprite)
   }
 
   // 木槽 + 槽里的土
-  if (!textures || planter.growth === 0) {
+  if (!image) {
     g.roundRect(-13, -9, 26, 9, 3).fill(0x8a6247).stroke({ width: 2, color: 0x5b4030 })
     g.rect(-11, -8, 22, 4).fill(SOIL)
   }
 
-  if (!textures || planter.growth === 0) switch (planter.growth) {
+  if (!image || planter.growth < RIPE_STAGE) switch (planter.growth) {
     case 0: {
       // 刚种下：土里两颗种子
       g.circle(-3, -6, 1.6).fill(0xd9c295)

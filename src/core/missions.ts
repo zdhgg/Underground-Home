@@ -49,10 +49,10 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   },
   {
     id: 'build-sleep-pod',
-    title: '给伙伴安一个睡眠舱',
-    speech: '亮了！可是……我们睡哪儿？点左边的“两人小窝”，再点“开工”。材料在物品栏里，我来挖土、铺床！',
-    todo: '点“两人小窝”，再点“开工”。',
-    outcome: '住处会安排床位，今晚大家能睡个好觉。',
+    title: '给伙伴留床',
+    speech: '亮了！阿灯一直守着这座旧避难所，可她和我还没有床。挖出一间暖窝，给我们留两张床吧！',
+    todo: '挖出左边的暖窝空间，蓝图出现后点“开工”。',
+    outcome: '阿土和阿灯住下来，地下才真正像一个家。',
     isDone: (world) => world.pods.length > 0,
   },
 ]
@@ -146,7 +146,7 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
             : !farm.waterSupplied
               ? ['把水接到菜园', '找到水啦！点「把水接到菜园」，小泉会沿通道把水接到泉边的菜地。', '水到了菜园，小满就能种菜了。']
               : waiting > 0
-                ? ['安顿新朋友', `家里有水了！${waitingNames}还在等床。回暖窝层建一间住处，或扩建已有住处，给${waiting > 1 ? '他们' : '他'}增加床位吧。`, '朋友住下来，家才热闹。']
+                ? ['给伙伴留床', `家里有水了！${waitingNames}刚来到这里，还在等床。回暖窝层挖出一间住处，或扩建已有住处，给${waiting > 1 ? '他们' : '他'}增加床位吧。`, '朋友住下来，家才热闹。']
                 : !harvested
                   ? ['在泉水边种出第一份食物', '点泉边的“小菜园”，再点“开工”。挖到的石料和旧木料能用来修菜槽！菜熟了点一下，小满来收。', '有菜吃，小满就不饿了。']
                   : !powered

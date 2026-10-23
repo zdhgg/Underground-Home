@@ -371,7 +371,13 @@ function validateExploration(raw: unknown, world: WorldState, version: number): 
     if (!Number.isInteger(lamp?.x) || lamp.y !== 19 || lamp.x < 3 || lamp.x > 40 || seen.has(lamp.x) || BREAKTHROUGHS.some((x) => x === lamp.x) || Math.abs(lamp.x - LANDMARKS.spring.x) <= 2 || !e.springFound || ![19, 20, 21].every((y) => world.tiles[y][lamp.x] === TILE.EMPTY)) return null
     seen.add(lamp.x)
   }
-  return { ...structuredClone(e), lamps: e.lamps.map(l => ({ x: l.x, y: l.y, ...(version >= 11 && l.wide ? { wide: true as const } : {}) })) }
+  // v13 及更早的存档没有相遇标记：视为还没自动打过照面，下次下楼补播一次。
+  // 没有到过泉水层却带着标记的存档按未相遇处理，不制造矛盾状态。
+  return {
+    ...structuredClone(e),
+    metXiaoman: e.entered && e.metXiaoman === true,
+    lamps: e.lamps.map(l => ({ x: l.x, y: l.y, ...(version >= 11 && l.wide ? { wide: true as const } : {}) })),
+  }
 }
 
 /** 只读取已存在的旧库；不存在时不创建空旧数据库。 */

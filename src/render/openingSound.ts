@@ -1,3 +1,4 @@
+import { gameAudio } from './gameAudio'
 import type { OpeningFrame } from './openingTimeline'
 import { OPENING_BEATS } from './openingTimeline'
 
@@ -6,13 +7,18 @@ export class OpeningSound {
   private audio: AudioContext | null = null
   private wind: AudioBufferSourceNode | null = null
   private volume: GainNode | null = null
+  private filter: BiquadFilterNode | null = null
+  private enabled = false
   private beat = -1
   private chimed = false
   private warmed = false
   enable(): void {
+    this.enabled = true
     if (this.audio) { void this.audio.resume().catch(() => {}); return }
     try {
-      const ctx = new AudioContext()
+      gameAudio.unlock()
+      const ctx = gameAudio.ready
+      if (!ctx) return
       this.audio = ctx
       const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate)
       const data = buffer.getChannelData(0)
@@ -21,14 +27,19 @@ export class OpeningSound {
       wind.buffer = buffer; wind.loop = true
       filter.type = 'lowpass'; filter.frequency.value = 650
       volume.gain.value = 0
-      wind.connect(filter).connect(volume).connect(ctx.destination); wind.start()
-      this.wind = wind; this.volume = volume
+      wind.connect(filter).connect(volume).connect(gameAudio.output); wind.start()
+      this.wind = wind; this.volume = volume; this.filter = filter
       void ctx.resume().catch(() => {})
     } catch { /* 静默时演出照常完成。 */ }
   }
   update(frame: OpeningFrame): void {
+    if (this.enabled && !this.audio && gameAudio.ready) this.enable()
     const ctx = this.audio
-    if (!ctx || ctx.state !== 'running') return
+    if (!ctx || gameAudio.ready !== ctx) {
+      this.warmed ||= frame.warmBurst > .55
+      this.chimed ||= frame.clue > .2
+      return
+    }
     this.volume!.gain.setTargetAtTime(frame.t < OPENING_BEATS.climb ? .06 * (1 - frame.warmth * .85) : .008, ctx.currentTime, .18)
     const beat = Math.floor(frame.t * (frame.phase === 'approach' ? 7 : 4))
     if (frame.pose !== 'idle' && beat !== this.beat) {
@@ -46,12 +57,15 @@ export class OpeningSound {
     note.type = 'sine'; note.frequency.value = frequency
     volume.gain.setValueAtTime(gain, ctx.currentTime)
     volume.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + duration)
-    note.connect(volume).connect(ctx.destination); note.start(); note.stop(ctx.currentTime + duration)
-    note.onended = () => { note.disconnect(); volume.disconnect() }
+    note.connect(volume).connect(gameAudio.output); note.start(); note.stop(ctx.currentTime + duration)
+    gameAudio.track(note, () => { note.disconnect(); volume.disconnect() })
   }
   stop(): void {
-    this.wind?.stop(); this.wind = null
-    if (this.audio) void this.audio.close().catch(() => {})
+    this.enabled = false
+    this.wind?.stop(); this.wind?.disconnect(); this.wind = null
+    this.filter?.disconnect(); this.filter = null
+    this.volume?.disconnect()
+    gameAudio.stopEffects()
     this.audio = null; this.volume = null; this.beat = -1; this.chimed = false; this.warmed = false
   }
 }

@@ -10,7 +10,7 @@ const kinds: { kind: RoomKind; name: string; icon: string }[] = [
 </script>
 
 <template>
-  <section class="room-tools" role="region" aria-label="房间规划">
+  <section class="room-tools" data-attention-panel="room" role="region" aria-label="房间规划">
     <header><div><strong>{{ state.construction ? '阿土的施工蓝图' : state.completed ? '房间已建成' : '先选功能，再建房' }}</strong><small>{{ state.construction ? '点土施工 → 确认建成' : state.completed ? '设施在后侧 · 前侧可通行' : '选功能 → 放蓝图 → 挖掘 → 建成' }}</small></div><button type="button" class="close" aria-label="结束房间规划" @click="$emit('close')">×</button></header>
     <div v-if="!state.construction && !state.completed" class="kinds" role="group" aria-label="房间用途">
       <button v-for="item in kinds" :key="item.kind" type="button" :disabled="state.selectedId !== null" :aria-pressed="state.kind === item.kind" @click="$emit('kind', item.kind)"><span aria-hidden="true">{{ item.icon }}</span>{{ item.name }}</button>
@@ -19,8 +19,8 @@ const kinds: { kind: RoomKind; name: string; icon: string }[] = [
     <p v-if="!state.construction && !state.completed" class="garden-hint">种植区现在在第二层：关掉面板，点左下角的「🌱 种植槽」。</p>
     <p class="instruction" :class="{ invalid: state.placed && !state.valid && !state.completed && !state.construction }" role="status">{{ state.message }}</p>
     <p class="detail">{{ state.detail }}</p>
-    <button v-if="!state.completed" class="primary" type="button" :disabled="!state.valid || !state.dirty" @click="$emit('save')">{{ state.busy ? '阿土正在施工…' : state.action }}</button>
-    <button v-else class="primary" type="button" :disabled="state.width >= ROOM_MAX_WIDTH" @click="$emit('resize', 1)">{{ state.width >= ROOM_MAX_WIDTH ? '已达本层最大宽度' : '扩建房间，增加容量' }}</button>
+    <button v-if="!state.completed" class="primary" data-primary-action type="button" :disabled="!state.valid || !state.dirty" @click="$emit('save')">{{ state.busy ? '阿土正在施工…' : state.action }}</button>
+    <button v-else class="primary" data-primary-action type="button" :disabled="state.width >= ROOM_MAX_WIDTH" @click="$emit('resize', 1)">{{ state.width >= ROOM_MAX_WIDTH ? '已达本层最大宽度' : '扩建房间，增加容量' }}</button>
     <div v-if="state.construction" class="secondary"><button type="button" :disabled="state.busy" @click="$emit('resize', 0)">调整蓝图</button><button type="button" :disabled="state.busy" @click="$emit('remove')">取消施工蓝图</button></div>
     <button v-if="state.selectedId" class="finish" type="button" :disabled="state.busy" @click="$emit('create')">规划另一个房间</button>
     <div v-if="state.items.length" class="saved"><span>房间与施工蓝图</span><div><button v-for="room in state.items" :key="room.id" type="button" :disabled="state.busy" :aria-pressed="state.selectedId === room.id" @click="$emit('select', room.id)">{{ room.name }} · {{ room.width }}格</button></div></div>

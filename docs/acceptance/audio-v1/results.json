@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "actual soil impact and undo events, one soil cue",
+    "1440: gesture unlock, opening mute/unmute/skip, saved mute on continue, no replay",
+    "1440: core before partner >=600ms, sound control reachable without covering dialogue",
+    "actual building construction: no early celebration, one completed cue",
+    "390: gesture unlock, opening mute/unmute/skip, saved mute on continue, no replay",
+    "390: core before partner >=600ms, sound control reachable without covering dialogue"
+  ],
+  "errors": []
+}

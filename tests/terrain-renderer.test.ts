@@ -79,6 +79,10 @@ vi.mock('../src/render/collectionScene', async (importOriginal) => ({
   ...await importOriginal<typeof import('../src/render/collectionScene')>(),
   loadCollectionTextures: vi.fn(),
 }))
+vi.mock('../src/render/facilityArt', async (importOriginal) => ({
+  ...await importOriginal<typeof import('../src/render/facilityArt')>(),
+  loadFacilityTextures: vi.fn().mockResolvedValue({}),
+}))
 
 function texture(size = 64): Texture {
   return new Texture({ source: new TextureSource({ width: size, height: size }) })
@@ -199,6 +203,23 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     renderer.destroy()
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
+  })
+
+  it('苔斑位于家具后面；设施建成与撤销时立即更新，不必等下一次挖掘', () => {
+    world.exploration.entered = true; world.exploration.shaftX = 27
+    for (let y = 11; y <= 21; y++) world.tiles[y][27] = TILE.EMPTY
+    for (let x = 9; x <= 38; x++) for (const y of [20, 21]) world.tiles[y][x] = TILE.EMPTY
+    renderer.setWorld(world)
+    const mossColumns = () => view.explorationScene.background.children[0].children.map(child => Math.floor(child.x / TILE_SIZE))
+    expect(mossColumns()).toContain(12)
+    expect(view.worldLayer.children.indexOf(view.explorationScene.background)).toBeLessThan(view.worldLayer.children.indexOf(view.farmLayer))
+    expect(view.worldLayer.children.indexOf(view.explorationScene.background)).toBeLessThan(view.worldLayer.children.indexOf(view.friendsLayer))
+    world.builtSites.push({ id: 'spring-kitchen', kind: 'kitchen' })
+    renderer.refreshRooms(); expect(mossColumns()).not.toContain(12)
+    world.builtSites = []
+    renderer.refreshRooms(); expect(mossColumns()).toContain(12)
+    world.farm.planters.push({ id: 1, x: 30, y: 21, growth: 0 })
+    renderer.refreshFarm(); expect(mossColumns()).not.toContain(30)
   })
 
   it('开场自然结束与任意阶段跳过得到同一镜头和角色，世界始终不变', () => {
@@ -639,16 +660,24 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       const cornerX = adeng.view.x
 
       world.progress.coreRepaired = true
+      const reveal = vi.fn()
+      renderer.onPartnerReveal = reveal
       renderer.playRepairCelebration()
+      // 会话会分配真实伙伴站位并刷新地图；这不能跳过阿灯的出场。
+      initializeWorkers(world)
+      renderer.refresh()
+      expect(view.friends[1].hidden).toBe(true)
       // 安装 0.7s + 延迟 0.7s + 飞行 1.25s，留足帧数
       for (let i = 0; i < 220; i++) view.tick({ deltaMS: 16 } as Ticker)
 
-      expect(adeng.hidden).toBe(false)
-      expect(adeng.view.x).not.toBeCloseTo(cornerX, 0)
-      expect(adeng.view.alpha).toBeCloseTo(1, 2)
-      expect(adeng.nameLabel?.text).toBe('阿灯')
-      expect(adeng.tailGlow).toBeNull()
-      const light = adeng.view.getChildByLabel('adeng-tail-light', true) as Graphics
+      const arrived = view.friends[1]
+      expect(reveal.mock.calls.map(call => call[0])).toEqual(['appearing', 'ready'])
+      expect(arrived.hidden).toBe(false)
+      expect(arrived.view.x).not.toBeCloseTo(cornerX, 0)
+      expect(arrived.view.alpha).toBeCloseTo(1, 2)
+      expect(arrived.nameLabel?.text).toBe('阿灯')
+      expect(arrived.tailGlow).toBeNull()
+      const light = arrived.view.getChildByLabel('adeng-tail-light', true) as Graphics
       expect(light.context.instructions.length).toBeGreaterThan(0)
     })
 

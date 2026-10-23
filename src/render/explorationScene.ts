@@ -5,6 +5,7 @@ import { MoleVisual, type MoleTextures } from './moleVisual'
 import { AtuConstruction } from './atuConstruction'
 import type { SoilPlan } from '../core/atu'
 import type { EnvironmentTextures } from './environmentArt'
+import { drawCaveMoss } from './caveMoss'
 
 /** 破岩演出：抬手到落镐的时间；落镐那一刻世界才改变，孩子看到的是"挖开"。 */
 const SWING_TIME = 0.42
@@ -27,6 +28,8 @@ interface Reaction {
 /** 只画线索、真实梯子、探索迷雾和阿土；移动点由规则层提供。 */
 export class ExplorationScene {
   readonly view = new Container()
+  /** 单独放到家具、角色和光照后面；不再把环境装饰压在可交互物上。 */
+  readonly background = new Container()
   private readonly scenery = new Container()
   /** 逐帧的施工提示：裂纹呼吸、下一块目标环、水汽水珠 */
   private readonly cues = new Graphics()
@@ -100,6 +103,7 @@ export class ExplorationScene {
 
   refresh(world: WorldState): void {
     this.world = world
+    this.refreshBackground(world)
     for (const child of this.scenery.removeChildren()) child.destroy({ children: true })
     const g = new Graphics()
     this.scenery.addChild(g)
@@ -153,22 +157,6 @@ export class ExplorationScene {
     const span = waterSpan(world)
     if (span) {
       label(e.springFound ? '泉水层 · 新家园从这里开始' : '沿地面开路，找找水声', (span.left + span.right) / 2 + 0.5, 23.6)
-      // 潮湿洞壁、苔藓与小蘑菇只出现在已探索区域。
-      for (let x = span.left; x <= span.right; x++) {
-        if (x % 3 === 0) {
-          if (this.environmentTextures) {
-            const moss = new Sprite(this.environmentTextures.moss)
-            moss.anchor.set(.5, 1)
-            moss.width = 39; moss.height = 34
-            moss.position.set((x + 0.5) * T, 22 * T - 1)
-            this.scenery.addChild(moss)
-          } else {
-            g.ellipse((x + 0.5) * T, 22 * T - 2, 13, 3).fill(0x537c68)
-            g.moveTo((x + 0.6) * T, 22 * T - 3).lineTo((x + 0.6) * T, 22 * T - 10).stroke({ width: 2, color: 0xc7c4a1 })
-            g.ellipse((x + 0.6) * T, 22 * T - 11, 6, 3).fill(0x8ebfc2)
-          }
-        }
-      }
     }
     if (springVisible(world)) {
       const sx = (LANDMARKS.spring.x + 0.5) * T, sy = 22 * T - 7
@@ -214,6 +202,11 @@ export class ExplorationScene {
     this.explorer.visible = true
     if (points.length) this.positionExplorer(points[0])
     this.motion = { points, elapsed: 0, done, step, reported: 0 }
+  }
+
+  refreshBackground(world: WorldState): void {
+    for (const child of this.background.removeChildren()) child.destroy({ children: true })
+    this.background.addChild(drawCaveMoss(world))
   }
 
   soil(plan: SoilPlan, strike: () => void, done: () => void): void {

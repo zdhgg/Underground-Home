@@ -1,0 +1,50 @@
+[
+  {
+    "path": "src/assets/art/rooms/utility-shell-v1.png",
+    "size": [
+      1254,
+      1254
+    ],
+    "mode": "RGBA",
+    "alphaRange": [
+      0,
+      255
+    ]
+  },
+  {
+    "path": "src/assets/art/rooms/stove-furniture-v1.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alphaRange": [
+      0,
+      254
+    ]
+  },
+  {
+    "path": "src/assets/art/rooms/dining-furniture-v1.png",
+    "size": [
+      2172,
+      724
+    ],
+    "mode": "RGBA",
+    "alphaRange": [
+      0,
+      255
+    ]
+  },
+  {
+    "path": "src/assets/art/environment/planter-empty-v1.png",
+    "size": [
+      1337,
+      1177
+    ],
+    "mode": "RGBA",
+    "alphaRange": [
+      0,
+      255
+    ]
+  }
+]

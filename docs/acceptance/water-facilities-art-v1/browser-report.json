@@ -1,0 +1,14 @@
+{
+  "url": "http://127.0.0.1:5212/",
+  "checks": [
+    "fixture built via current rules; serialization validated",
+    "kitchen: shared layered preview, actual built art and one primary action",
+    "dining: shared layered preview, actual built art and one primary action",
+    "garden: shared layered preview, actual built art and one primary action",
+    "lounge: shared layered preview, actual built art and one primary action",
+    "four crop stages; click mature crop -> actual partner harvest -> food +1",
+    "390x844: current building visible above compact controls",
+    "block stove PNG: map fallback and preview feedback keep game usable"
+  ],
+  "runtimeErrors": []
+}

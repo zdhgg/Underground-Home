@@ -4,7 +4,7 @@ import { pickaxeUpgrade, wideLampUpgrade, type PartnerUpgrade } from './partnerA
 import { partnerById, type PartnerId } from './partners'
 import type { WorldState } from './world'
 
-export type PartnerAction = 'look-at-clue' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp'
+export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp'
 export interface PartnerConversation {
   partnerId: PartnerId
   name: string
@@ -58,17 +58,19 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
     }
     result.lines = !world.progress.coreRepaired
       ? ['……这里好黑。', '我在角落等你。']
-      : world.exploration.springFound ? ['暗的地方可以安灯。', '选个壁灯位置，我来装！'] : ['你把家点亮了！', '我喜欢亮亮的通道。']
+      : !world.pods.length ? ['我是阿灯，谢谢你把家点亮！', '我也想有张暖暖的床。一起准备小窝吧？']
+        : world.exploration.springFound ? ['暗的地方可以安灯。', '选个壁灯位置，我来装！'] : ['你把家点亮了！', '我喜欢亮亮的通道。']
+    if (world.progress.coreRepaired && !world.pods.length) result.action = { id: 'prepare-nest', label: '去准备小窝' }
   } else if (partner.id === 'xiaoman') {
     result.lines = !world.farm.waterSupplied
-      ? ['我想种点好吃的。', '先找水，再把水接到菜园。']
+      ? ['你好，我是小满！我一路追着水汽跑到这里。', '肚子咕咕叫……先找到水，再给我们留一间暖暖的住处，好吗？']
       : world.farm.food > 0 ? ['有新鲜菜啦！', '咱们一起吃一口？']
         : ripePlanters(world).length > 0 ? ['菜长熟啦！', '点菜槽，我走过去收。']
           : world.farm.planters.length > 0 ? ['小芽正在长大。', '你忙建设，我看着菜。'] : ['水到菜园啦！', '去第二层种一槽菜，我来照顾。']
   } else {
     result.lines = world.farm.waterSupplied
       ? ['水已经流到菜园啦。', '泉水边能种菜了。']
-      : ['这口泉水真甜。', '点接水，我来接水管。']
+      : ['哗啦！我是小泉，这口泉水一直在等人听见。', '我能把水送回家……如果你们也给我和小满留个住处。']
   }
   return result
 }

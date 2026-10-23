@@ -12,7 +12,9 @@ import type { WorkPlan } from '../src/core/partnerWork'
 import type { WorkerId } from '../src/core/world'
 import { lightField, WIDE_LAMP_ID } from '../src/core/lighting'
 import { finishRoom, planRoom } from '../src/core/roomConstruction'
+import { siteById, siteWorkCells } from '../src/core/sites'
 import { roomFromPoint } from '../src/core/rooms'
+import { playSoilDig, playBuildComplete, playPartnerFound, playUndo, playSpringFound } from '../src/render/waterSound'
 
 const harness = vi.hoisted(() => {
   const store = { load: vi.fn(), save: vi.fn(), clear: vi.fn() }
@@ -26,9 +28,11 @@ const harness = vi.hoisted(() => {
     playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
     finishMealGather: vi.fn(), cancelMealGather: vi.fn(),
     playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
-    playBurst: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
+    playBurst: vi.fn(), playRepairCelebration: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
     partnerAtScreen: vi.fn().mockReturnValue(null), playPartnerReaction: vi.fn(),
+    setConversationPartner: vi.fn(), focusPartner: vi.fn(),
+    onPartnerReveal: undefined as undefined | ((phase: 'appearing' | 'ready') => void),
     setAtuTarget: vi.fn(), hoverPartner: vi.fn(), findAtu: vi.fn(),
     setRoomPreview: vi.fn(), refreshRooms: vi.fn(),
     setLampPreview: vi.fn(), playDigLoot: vi.fn(),
@@ -53,6 +57,8 @@ vi.mock('../src/input/pointerControls', () => ({
   attachPointerControls: (_: unknown, handlers: typeof harness.handlers) => { harness.handlers = handlers; return harness.pointer },
 }))
 vi.mock('../src/render/waterSound', () => ({
+  playSoilDig: vi.fn(), playBuildComplete: vi.fn(), playPartnerFound: vi.fn(), playCrystalCollected: vi.fn(),
+  playPowerConnected: vi.fn(), playUndo: vi.fn(), playUnavailable: vi.fn(),
   playWaterClue: vi.fn(), playRockHit: vi.fn(), playBreakthrough: vi.fn(), playLayerArrival: vi.fn(), playSpringFound: vi.fn(),
   playWaterSupplied: vi.fn(), playHarvest: vi.fn(), playMealTime: vi.fn(),
 }))
@@ -181,6 +187,9 @@ describe('探索会话与存档集成', () => {
     harness.store.load.mockResolvedValue(serialize(createInitialWorld()))
     const opening = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onOpening: opening })
+    expect(playBuildComplete).not.toHaveBeenCalled()
+    expect(playPartnerFound).not.toHaveBeenCalled()
+    expect(playSoilDig).not.toHaveBeenCalled()
     expect(harness.renderer.playOpening).not.toHaveBeenCalled()
     expect(opening).toHaveBeenLastCalledWith({ active: false, caption: '' })
     session.destroy()
@@ -346,25 +355,193 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
-  it('点预设洞室只预览；拖图和关闭面板不会挖土、扣材料或抢成聊天', async () => {
+  it('修好核心先播放亮灯和出场，落地后阿灯才开口，随后可准备小窝', async () => {
+    const raw = readySave()
+    raw.world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: false }
+    raw.world.pods = []; raw.world.workers = {}
+    harness.store.load.mockResolvedValue(raw)
+    const onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner })
+    harness.renderer.partnerAtScreen.mockReturnValue(null)
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.handlers.onTap({ x: LANDMARKS.generator.x, y: LANDMARKS.generator.y })
+    expect(w.progress.coreRepaired).toBe(true)
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    expect(harness.renderer.focusPartner).not.toHaveBeenCalled()
+    harness.renderer.onPartnerReveal!('appearing')
+    expect(harness.renderer.focusPartner).toHaveBeenLastCalledWith('adeng')
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    harness.renderer.onPartnerReveal!('ready')
+    const conversation = onPartner.mock.calls.at(-1)![0] as PartnerConversation
+    expect(conversation.partnerId).toBe('adeng')
+    expect(conversation.lines.join(' ')).toContain('暖暖的床')
+    expect(conversation.action?.id).toBe('prepare-nest')
+    expect(harness.renderer.setHighlight).toHaveBeenLastCalledWith(null)
+    session.partnerAction()
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    expect(harness.renderer.focusOn).toHaveBeenCalled()
+    session.destroy()
+  })
+
+  it('出场期间拖图后不再自动拉镜头或弹对话；对话外第一次点击只关闭，不挖土', async () => {
+    const raw = readySave()
+    raw.world.progress.coreRepaired = false; raw.world.pods = []; raw.world.workers = {}
+    harness.store.load.mockResolvedValue(raw)
+    const onPartner = vi.fn(), discovery = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: onPartner, onDiscovery: discovery })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.handlers.onTap({ x: LANDMARKS.generator.x, y: LANDMARKS.generator.y })
+    expect(discovery).toHaveBeenLastCalledWith(true)
+    harness.handlers.onPanBy({ x: 40, y: 20 })
+    harness.renderer.onPartnerReveal!('appearing'); harness.renderer.onPartnerReveal!('ready')
+    expect(harness.renderer.focusPartner).not.toHaveBeenCalled()
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    expect(discovery).toHaveBeenLastCalledWith(false)
+    session.talkToPartner('adeng')
+    const before = structuredClone(w)
+    harness.handlers.onTap({ x: 26, y: 9 })
+    expect(w).toEqual(before)
+    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
+    expect(onPartner).toHaveBeenLastCalledWith(null)
+    session.destroy()
+  })
+
+  it('小窝引导在挖空前只定位且不改地图，蓝图出现后直接打开这间小窝', async () => {
+    const raw = readySave(); raw.world.pods = []
+    harness.store.load.mockResolvedValue(raw)
+    const progress = vi.fn(), sites = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onSites: sites })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const before = structuredClone(w)
+    expect(progress.mock.calls.at(-1)![0].action.label).toBe('看看要挖的小窝空间')
+    session.prepareNest()
+    expect(w).toEqual(before)
+    expect(sites.mock.calls.at(-1)![0].active).toBe(false)
+    const site = siteById('first-nest')!
+    for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) w.tiles[y][x] = TILE.EMPTY
+    session.prepareNest()
+    expect(progress.mock.calls.at(-1)![0].action.label).toBe('修建两人小窝')
+    expect(sites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'first-nest', canBuild: true })
+    session.openRooms()
+    expect(sites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: null })
+    session.destroy()
+  })
+
+  it('第一次下到第二层会自动和小满说话，之后下楼不再自动重播', async () => {
+    const onPartner = vi.fn()
+    const { session, w, tap, advance } = await startExploring(vi.fn(), vi.fn(), { onPartnerConversation: onPartner })
+    tap(27, 12); advance(); tap(27, 13); advance(); tap(27, 14)
+    for (let i = 0; i < 8 && !shaftConnected(w); i++) advance()
+    expect(shaftConnected(w)).toBe(true)
+    const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
+    session.travel(); arrive()
+    expect(w.exploration.entered).toBe(true)
+    expect(w.exploration.metXiaoman).toBe(true)
+    expect((onPartner.mock.calls.at(-1)![0] as PartnerConversation).partnerId).toBe('xiaoman')
+    // 关掉对话、回楼上再下来：已经打过照面，不再自动弹出
+    session.closePartnerConversation()
+    onPartner.mockClear()
+    session.travel(); arrive()
+    session.travel(); arrive()
+    expect(onPartner.mock.calls.every(([conversation]) => conversation === null)).toBe(true)
+    session.destroy()
+  })
+
+  it('第二间预设住宿建成后播放“新伙伴住下啦”里程碑', async () => {
+    harness.store.load.mockResolvedValue(farmedSave())
+    const onMilestone = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onMilestone })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    // 阿土回到暖窝层，施工走真实可达通道；第一间住处是嵌在房间后侧的成品，前侧仍可通行。
+    w.exploration.explorer = { x: 18, y: 11 }
+    w.pods[0].backWall = true
+    /** 施工仍是真实逐格委托：测试里替玩家把每一段走位播完。 */
+    const finishSiteWork = () => {
+      for (let handled = 0, guard = 0; guard < 40; guard++) {
+        const calls = harness.renderer.playExplorationTravel.mock.calls
+        if (calls.length === handled) break
+        ;(calls[handled++] as unknown as [Cell[], () => void])[1]()
+      }
+    }
+    expect(w.pods).toHaveLength(1)
+    session.selectSite('friends-nest')
+    session.buildSite()
+    finishSiteWork()
+    expect(w.pods).toHaveLength(2)
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '新伙伴住下啦！' }))
+    session.destroy()
+  })
+
+  it('泉水已经发现后点击水边不再重播发现庆祝', async () => {
+    harness.store.load.mockResolvedValue(farmedSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    harness.handlers.onTap({ x: LANDMARKS.spring.x, y: 21 })
+    expect(playSpringFound).not.toHaveBeenCalled()
+    expect(harness.renderer.playSpringDiscovery).not.toHaveBeenCalled()
+    session.destroy()
+  })
+
+  it('第二间住处提前建好时，小泉在发现泉水那一刻单独报“住下啦”', async () => {
+    const raw = farmedSave()
+    raw.world.exploration.springFound = false
+    raw.world.farm.waterSupplied = false
+    // 左翼已经和第一间连成一条真实通道，第二间住处提前留好了空床。
+    for (const x of [15, 16]) for (const y of [10, 11]) raw.world.tiles[y][x] = TILE.EMPTY
+    raw.world.pods[0].backWall = true
+    raw.world.pods.push({ id: 2, x: 9, y: 10, door: 'left', backWall: true })
+    harness.store.load.mockResolvedValue(raw)
+    const onMilestone = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onMilestone })
+    harness.renderer.partnerAtScreen.mockReturnValue(null)
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(w.pods).toHaveLength(2)
+    expect(w.workers.xiaoquan).toBeUndefined()
+    harness.handlers.onTap({ x: LANDMARKS.spring.x, y: 21 })
+    const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
+    arrive()
+    expect(w.exploration.springFound).toBe(true)
+    expect(harness.renderer.playSpringDiscovery).toHaveBeenCalled()
+    expect(harness.renderer.playPodCelebration).toHaveBeenCalled()
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '小泉住下啦！' }))
+    expect(onMilestone).not.toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
+    session.destroy()
+  })
+
+  it('已建成的房间能直接进入扩建面板', async () => {
+    const loaded = deserialize(readySave())
+    expect(loaded.ok).toBe(true)
+    if (!loaded.ok) return
+    const w = loaded.world
+    // 围住原来的床，并把房间接到大厅，得到一间真正建成的住处。
+    for (const x of [12, 13, 14]) for (const y of [9, 10, 11]) w.tiles[y][x] = TILE.EMPTY
+    for (const x of [15, 16]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
+    const plan = planRoom(w, roomFromPoint({ x: 13, y: 11 }, 3, 'home'))!
+    expect(finishRoom(w, plan.after!.id)).not.toBeNull()
+    const room = w.rooms[0]
+    harness.store.load.mockResolvedValue(serialize(w))
+    const onRooms = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onRooms })
+    session.selectRoom(room.id)
+    expect(onRooms.mock.calls.at(-1)![0]).toMatchObject({ active: true, selectedId: room.id, completed: true })
+    session.destroy()
+  })
+
+  it('预设区域还没挖空时按普通地形处理，不提前打开建筑面板', async () => {
     const raw = readySave(); raw.world.pods = []
     harness.store.load.mockResolvedValue(raw)
     const onSites = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
     const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
-    harness.renderer.partnerAtScreen.mockReturnValue('atu')
     harness.handlers.onTap({ x: 13, y: 11 }); harness.handlers.onPanBy({ x: 40, y: 10 })
-    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'first-nest', canBuild: true })
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: false, selected: null, canBuild: false })
     expect(world).toEqual(before)
-    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
-    expect(harness.renderer.partnerAtScreen).not.toHaveBeenCalled()
     session.cancelAction()
     expect((onSites.mock.calls.at(-1)![0] as SiteUI).active).toBe(false)
     expect(world).toEqual(before)
     session.destroy()
   })
 
-  it('挖材料模式下蓝图仍优先命中，悬停不框土，点击只打开洞室且拖动仍平移', async () => {
+  it('未挖空的预设区域悬停仍是挖掘，点击后可以继续拖图', async () => {
     const raw = readySave(); raw.world.pods = []
     harness.store.load.mockResolvedValue(raw)
     const onSites = vi.fn()
@@ -373,12 +550,12 @@ describe('探索会话与存档集成', () => {
     const before = structuredClone(world)
     session.setBuildMode('none')
     harness.handlers.onHover({ x: 28, y: 10 })
-    expect(harness.renderer.setHoverCell).toHaveBeenLastCalledWith(null)
-    expect(harness.renderer.setCursor).toHaveBeenLastCalledWith('pointer')
+    expect(harness.renderer.setHoverCell).toHaveBeenLastCalledWith({ x: 28, y: 10 })
+    expect(harness.renderer.setCursor).toHaveBeenLastCalledWith('crosshair')
     harness.handlers.onTap({ x: 28, y: 10 })
-    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'home-lounge' })
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: false, selected: null })
     expect(world).toEqual(before)
-    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
+    expect(harness.renderer.playExplorationTravel).toHaveBeenCalled()
     harness.handlers.onPanBy({ x: 40, y: 10 })
     expect(harness.renderer.panBy).toHaveBeenLastCalledWith(40, 10)
     session.destroy()
@@ -407,28 +584,35 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
-  it('旧床原样保留，预设洞室识别已有设施，不重建或扣材料', async () => {
+  it('未挖空时不会把预设区域误判成已建成设施', async () => {
     harness.store.load.mockResolvedValue(readySave())
     const onSites = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
     const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(world)
     session.selectSite('first-nest'); session.buildSite(); session.closeRooms()
     expect(world).toEqual(before)
-    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ built: true, canBuild: false })
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: false, built: false, canBuild: false })
     expect(deserialize(serialize(world)).ok).toBe(true)
     session.destroy()
   })
 
-  it('点一次开工，阿土真实施工后自动建成，撤销退回材料并保留洞室空间', async () => {
+  it('空间挖空后蓝图才可开工，建成后撤销退回材料并保留洞室空间', async () => {
     const raw = readySave(); raw.world.pods = []
     harness.store.load.mockResolvedValue(raw)
     const onSites = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
-    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState, beforeTiles = structuredClone(world.tiles)
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const site = siteById('first-nest')!
+    for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) world.tiles[y][x] = TILE.EMPTY
+    const beforeTiles = structuredClone(world.tiles)
     session.openRooms()
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: null })
+    session.selectSite('first-nest')
+    expect(onSites.mock.calls.at(-1)![0]).toMatchObject({ active: true, selected: 'first-nest', canBuild: true })
     expect(world.tiles).toEqual(beforeTiles); expect(world.pods).toHaveLength(0)
     session.buildSite()
     expect(world.tiles).toEqual(beforeTiles); expect(world.pods).toHaveLength(0)
+    expect(playBuildComplete).not.toHaveBeenCalled()
     const cancellations = harness.renderer.cancelExplorationAnimation.mock.calls.length
     harness.handlers.onTap({ x: 26, y: 11 })
     expect(onSites.mock.calls.at(-1)![0].working).toBe(true)
@@ -439,12 +623,13 @@ describe('探索会话与存档集成', () => {
       call[1](); seen++
     }
     expect(seen).toBeGreaterThan(0); expect(seen).toBeLessThan(20)
-    expect(harness.renderer.playSoilWork).toHaveBeenCalled()
+    expect(harness.renderer.playSoilWork).not.toHaveBeenCalled()
     expect(world.pods).toHaveLength(1); expect(world.pods[0].backWall).toBe(true)
     expect(world.rooms[0].status).toBeUndefined(); expect(world.builtSites).toEqual([{ id: 'first-nest', kind: 'home' }])
     expect(deserialize(serialize(world)).ok).toBe(true)
+    expect(playBuildComplete).toHaveBeenCalledTimes(1)
     const materials = { ...world.inventory }
-    session.undo(); expect(world.pods).toHaveLength(0); expect(world.rooms).toEqual([])
+    session.undo(); expect(playUndo).toHaveBeenCalledTimes(1); expect(world.pods).toHaveLength(0); expect(world.rooms).toEqual([])
     expect(world.builtSites).toEqual([])
     expect(world.inventory).toEqual({ stone: materials.stone + 3, wood: materials.wood + 2 })
     expect(world.tiles[9][12]).toBe(TILE.EMPTY)
@@ -510,6 +695,22 @@ describe('探索会话与存档集成', () => {
     expect(world.tiles[9][14]).toBe(TILE.SOIL)
     session.destroy(); arrive(); strike()
     expect(world.dugCount).toBe(0)
+    expect(playSoilDig).not.toHaveBeenCalled()
+  })
+
+  it('普通泥土只在真实落爪时发声一次；走路、重复回调、拖图不发挖掘音', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    let strike = () => {}, finish = () => {}
+    harness.renderer.playSoilWork.mockImplementationOnce((_plan, hit, done) => { strike = hit; finish = done })
+    harness.handlers.onPanBy({ x: 30, y: 10 })
+    harness.handlers.onTap({ x: 14, y: 9 })
+    expect(playSoilDig).not.toHaveBeenCalled()
+    const [, arrive] = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    arrive(); expect(playSoilDig).not.toHaveBeenCalled()
+    strike(); strike(); finish()
+    expect(playSoilDig).toHaveBeenCalledTimes(1)
+    session.destroy()
   })
 
   it('能源石已经收集后，附近空地仍可让阿土走过去', async () => {
@@ -644,9 +845,9 @@ describe('探索会话与存档集成', () => {
   })
 
   /** 建好家园、听水声、换上小铁镐，停在"可以开始破岩"的那一步 */
-  async function startExploring(message = vi.fn(), onMilestone = vi.fn()) {
+  async function startExploring(message = vi.fn(), onMilestone = vi.fn(), extra: Omit<SessionHooks, 'onMessage' | 'onProgress'> = {}) {
     harness.store.load.mockResolvedValue(readySave())
-    const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onMilestone })
+    const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onMilestone, ...extra })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
@@ -819,6 +1020,7 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.entered).toBe(true)
     // 每列先清底部再清身体净空，走近施工才挖开。
     const travelsBeforeDig = harness.renderer.playExplorationTravel.mock.calls.length
+    session.closePartnerConversation() // 先结束首次相遇，再开始挖掘。
     for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     expect(w.tiles[21][23]).toBe(TILE.EMPTY)
     expect(harness.renderer.playExplorationTravel.mock.calls.length).toBeGreaterThan(travelsBeforeDig)
@@ -841,8 +1043,8 @@ describe('探索会话与存档集成', () => {
   it('揭开泉水后还要亲自走到那里；完成后才能安壁灯，撤销能移除壁灯', async () => {
     const onMilestone = vi.fn()
     harness.store.load.mockResolvedValue(readySave())
-    const progress = vi.fn()
-    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onMilestone })
+    const progress = vi.fn(), onPartner = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onMilestone, onPartnerConversation: onPartner })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     const tap = tapAndFinishSoil
     const arrive = () => (harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void])[1]()
@@ -853,6 +1055,7 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.entered).toBe(true)
     // 抵达第二层：里程碑卡片 + 阿土的反应各来一次
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '抵达第 2 层 · 泉水层' }))
+    session.closePartnerConversation() // 先结束首次相遇，再开始挖掘。
     for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     expect(w.exploration.springFound).toBe(false)
     tap(18, 21)
@@ -861,6 +1064,10 @@ describe('探索会话与存档集成', () => {
     expect(w.exploration.springFound).toBe(true)
     expect(harness.renderer.playSpringDiscovery).toHaveBeenCalledTimes(1)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现地下泉水！' }))
+    // 小泉从水里出来时自动开口，说明自己能引水、也想住下来
+    const xiaoquan = onPartner.mock.calls.at(-1)![0] as PartnerConversation
+    expect(xiaoquan.partnerId).toBe('xiaoquan')
+    expect(xiaoquan.lines.join(' ')).toContain('留个住处')
     // 找到水之后还没走完：要先把水接到菜园，再安顿新朋友、种出第一份收成
     expect(progress.mock.calls.at(-1)![0]).toMatchObject({ title: '把水接到菜园', done: 5, total: 9, finished: false })
     session.toggleLamp(); tap(25, 19)
@@ -885,6 +1092,7 @@ describe('探索会话与存档集成', () => {
     tap(27, 12); arrive(); tap(27, 13); arrive(); tap(27, 14)
     for (let i = 0; i < 8 && !shaftConnected(w); i++) arrive()
     session.travel(); arrive()
+    session.closePartnerConversation() // 先结束首次相遇，再开始挖掘。
     for (let x = 23; x >= 18; x--) { tap(x, 21); tap(x, 20) }
     tap(18, 21); arrive()
     expect(w.exploration.springFound).toBe(true)
@@ -1010,21 +1218,28 @@ describe('探索会话与存档集成', () => {
         travel[1]()
       }
     }
+    const clearPreset = (id: string) => {
+      const site = siteById(id)!
+      for (const cell of siteWorkCells(w, site)) w.tiles[cell.y][cell.x] = TILE.EMPTY
+    }
+    clearPreset('spring-kitchen')
+    const kitchenInventory = { ...w.inventory }
     session.selectSite('spring-kitchen')
     expect(w.inventory).toEqual({ stone: 8, wood: 8 })
     session.buildSite()
     finishSiteWork()
     expect(w.builtSites).toContainEqual({ id: 'spring-kitchen', kind: 'kitchen' })
-    // 挖开 x17 的两格泥土地也带来两块石料；完工只扣灶台成本。
-    expect(w.inventory).toEqual({ stone: 8, wood: 6 })
+    expect(w.inventory).toEqual({ stone: kitchenInventory.stone - 2, wood: kitchenInventory.wood - 2 })
     session.buildSite()
     expect(w.builtSites.filter((site) => site.id === 'spring-kitchen')).toHaveLength(1)
 
+    clearPreset('spring-table')
+    const tableInventory = { ...w.inventory }
     session.selectSite('spring-table')
     session.buildSite()
     finishSiteWork()
     expect(w.builtSites).toContainEqual({ id: 'spring-table', kind: 'dining' })
-    expect(w.inventory).toEqual({ stone: 6, wood: 3 })
+    expect(w.inventory).toEqual({ stone: tableInventory.stone - 2, wood: tableInventory.wood - 3 })
     expect(deserialize(serialize(w)).ok).toBe(true)
     session.destroy()
   })

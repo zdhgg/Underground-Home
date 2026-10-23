@@ -3,11 +3,12 @@ import { SITE_NAMES } from '../core/rooms'
 import { TILE, TILE_SIZE as T, type Room, type SiteKind, type WorldState } from '../core/world'
 import { excavationLeft } from '../core/roomConstruction'
 import type { RoomPreview } from '../app/roomEditor'
-import { BUILDING_SITES, siteBuilt, siteVisible } from '../core/sites'
+import { BUILDING_SITES, siteBlueprintVisible, siteBuilt, siteVisible } from '../core/sites'
 import { nestShell, type NestTextures } from './nestArt'
 import { drawLounge, type LoungeTextures } from './loungeArt'
 import { siteBlueprint } from './siteBlueprint'
 import { drawDiningTable, drawStove } from './mealProps'
+import { drawFacilityArt, type FacilityTextures } from './facilityArt'
 
 const COLORS: Record<SiteKind, { floor: number; wall: number; ink: number }> = {
   home: { floor: 0xbfa075, wall: 0xdac6a4, ink: 0x594d39 },
@@ -23,6 +24,8 @@ type DrawnRoom = Omit<Room, 'kind'> & { kind: SiteKind }
 export class RoomScene {
   readonly view = new Container()
   readonly overlay = new Container()
+  private facilityTextures: FacilityTextures = {}
+  setFacilityTextures(textures: FacilityTextures): void { this.facilityTextures = textures }
   private zoom = 1
   private textures?: NestTextures
   setTextures(textures: NestTextures): void { this.textures = textures }
@@ -43,7 +46,7 @@ export class RoomScene {
         this.view.addChild(this.drawRoom({ ...site, id: -1, kind: built.kind, managed: true }, world))
         continue
       }
-      if (siteBuilt(world, site)) continue
+      if (siteBuilt(world, site) || !siteBlueprintVisible(world, site)) continue
       this.overlay.addChild(siteBlueprint(site))
     }
     if (preview) {
@@ -77,8 +80,11 @@ export class RoomScene {
       label.anchor.set(.5, 1); label.position.set(x + width / 2, y - 4); label.label = 'room-name'
       view.addChild(g, label); return view
     }
+    const facility = r.managed && r.kind !== 'home' ? drawFacilityArt(this.facilityTextures, r.kind, x, y, width, height) : null
     const detailedHome = this.textures && r.kind === 'home' && r.managed && r.h === 3 && r.w % 3 === 0
-    if (detailedHome) {
+    if (facility) {
+      view.addChild(facility)
+    } else if (detailedHome) {
       for (let slot = 0; slot < r.w / 3; slot++) {
         view.addChild(nestShell(this.textures!.shell, x + slot * 3 * T, y, 3 * T))
         const light = new Graphics()
@@ -102,10 +108,7 @@ export class RoomScene {
           g.moveTo(sx + 4, sy + 12).lineTo(sx + 4, sy + 17).moveTo(sx + 35, sy + 12).lineTo(sx + 35, sy + 17).stroke({ width: 3, color: 0x746553 })
         }
       }
-      if (r.kind === 'garden' && r.managed && !world.farm.waterSupplied) {
-        const waiting = new Text({ text: '等水来，再种菜', style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 10, fill: 0xa9bfa8 } })
-        waiting.anchor.set(.5); waiting.position.set(x + width / 2, y + height / 2); view.addChild(waiting)
-      }
+
       for (let px = x + 12; px < x + width - 4; px += 20) g.moveTo(px, y + height - 4).lineTo(px, y + height).stroke({ width: 1, color: 0x4c4d3f, alpha: .3 })
       // 短角条贴岩壁，不形成新的墙或门槛。
       for (const edge of [x + 3, x + width - 3]) {
@@ -114,8 +117,12 @@ export class RoomScene {
           .moveTo(edge, y + height - 16).lineTo(edge, y + height - 6).stroke({ width: 2, color: c.floor, alpha: .75 })
       }
     }
-    if (r.managed && r.kind === 'kitchen') view.addChild(drawStove(x, y, width, height))
-    if (r.managed && r.kind === 'dining') view.addChild(drawDiningTable(x, y, width, height))
+    if (r.kind === 'garden' && r.managed && !world.farm.waterSupplied) {
+      const waiting = new Text({ text: '等水来，再种菜', style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 10, fill: 0xa9bfa8 } })
+      waiting.label = 'garden-waiting'; waiting.anchor.set(.5); waiting.position.set(x + width / 2, y + height / 2); view.addChild(waiting)
+    }
+    if (!facility && r.managed && r.kind === 'kitchen') view.addChild(drawStove(x, y, width, height))
+    if (!facility && r.managed && r.kind === 'dining') view.addChild(drawDiningTable(x, y, width, height))
     const name = SITE_NAMES[r.kind], labelWidth = name.length * 11 + 18, mid = x + width / 2
     const badge = new Container(), plate = new Graphics()
     plate.roundRect(mid - labelWidth / 2, y - 20, labelWidth, 19, 5).fill(0xf4f2df).stroke({ width: 1, color: c.floor })

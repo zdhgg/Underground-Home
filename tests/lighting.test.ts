@@ -17,7 +17,7 @@ function ready(): WorldState {
   for (const x of [26, 27]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
   for (let y = 12; y <= 21; y++) w.tiles[y][27] = TILE.EMPTY
   for (let x = 18; x <= 38; x++) for (const y of [19, 20, 21]) w.tiles[y][x] = TILE.EMPTY
-  w.exploration = { clueFound: true, pickaxeUpgraded: true, entered: true, springFound: true, shaftX: 27, explorer: { x: 27, y: 21 }, lamps: [{ x: 31, y: 19 }] }
+  w.exploration = { clueFound: true, pickaxeUpgraded: true, entered: true, springFound: true, metXiaoman: false, shaftX: 27, explorer: { x: 27, y: 21 }, lamps: [{ x: 31, y: 19 }] }
   w.powerDown = true; initializeWorkers(w)
   return w
 }

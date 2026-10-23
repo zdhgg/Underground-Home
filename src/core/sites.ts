@@ -32,8 +32,20 @@ export function siteBuilt(w: WorldState, s: BuildingSite): boolean {
 export function siteVisible(w: WorldState, s: BuildingSite): boolean {
   return w.progress.coreRepaired && (s.layer === 'home' || w.exploration.entered) && (s.id !== 'friends-nest' || w.exploration.entered)
 }
+/**
+ * 预设蓝图只在对应洞室本体已经挖空后出现。
+ * 连接大厅的走道仍由阿土在开工时逐格施工；挖掘阶段保留普通泥土命中，蓝图不会提前覆盖土层。
+ */
+export function siteBlueprintVisible(w: WorldState, s: BuildingSite): boolean {
+  if (!siteVisible(w, s)) return false
+  for (let y = s.y; y < s.y + s.h; y++) for (let x = s.x; x < s.x + s.w; x++) {
+    if (w.tiles[y]?.[x] !== TILE.EMPTY) return false
+  }
+  return true
+}
 export function siteBlocker(w: WorldState, s: BuildingSite, kind: SiteKind): string {
   if (!siteVisible(w, s)) return '先点亮家园，再来看看。'
+  if (!siteBlueprintVisible(w, s)) return '先把这块空间挖空，建筑蓝图就会出现。'
   if (!s.kinds.includes(kind)) return '这里不适合这个用途。'
   if (siteBuilt(w, s)) return '这里已经建好啦！'
   if (kind === 'garden' && !w.farm.waterSupplied) return '先请小泉把水接到菜园。'

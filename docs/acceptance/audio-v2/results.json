@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "1440: no title/opening music; worker setup 1.6ms; quiet theme after skip; unified mute stops all four loops",
+    "1440: installation -> warm theme; dialogue ducks music; exit restores without replay or new panels",
+    "known spring only: water ambience on current floor, off in overview; hidden stops, visible resumes four cached loops",
+    "three real offline audio renders: 50 seconds including loop seam, non-silent and unclipped",
+    "1440: saved mute on continue; enable starts exactly four loops",
+    "390: no title/opening music; worker setup 0.6ms; quiet theme after skip; unified mute stops all four loops",
+    "390: installation -> warm theme; dialogue ducks music; exit restores without replay or new panels",
+    "390: saved mute on continue; enable starts exactly four loops"
+  ],
+  "errors": []
+}

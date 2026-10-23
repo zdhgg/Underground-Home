@@ -63,6 +63,19 @@ describe('伙伴能力与对话：不增加任务门槛', () => {
       expect(partnerConversation(world, id)?.action).toBeNull()
     }
   })
+
+  it('第一次相遇会说明伙伴为什么留下，以及为什么需要住处', () => {
+    const world = createInitialWorld()
+    world.progress.coreRepaired = true
+    expect(partnerConversation(world, 'adeng')?.lines.join(' ')).toContain('暖暖的床')
+
+    world.pods.push({ id: 1, x: 12, y: 10, door: 'right' })
+    world.exploration.entered = true
+    expect(partnerConversation(world, 'xiaoman')?.lines.join(' ')).toContain('留一间暖暖的住处')
+
+    world.exploration.springFound = true
+    expect(partnerConversation(world, 'xiaoquan')?.lines.join(' ')).toContain('留个住处')
+  })
 })
 
 describe('小角色点击容错', () => {

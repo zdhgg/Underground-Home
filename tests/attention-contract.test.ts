@@ -1,0 +1,145 @@
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createApp, nextTick, type App } from 'vue'
+import Game from '../src/App.vue'
+import { gameAudio, SOUND_SETTINGS_KEY } from '../src/render/gameAudio'
+import type { GameSession, SessionHooks } from '../src/app/session'
+import type { RoomUI } from '../src/app/roomEditor'
+import { emptySiteUI } from '../src/app/siteEditor'
+import type { PartnerConversation } from '../src/core/partnerInteractions'
+
+// 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null }))
+vi.mock('../src/app/session', () => ({
+  createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
+    harness.hooks = hooks
+    return {
+      titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
+      startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
+      enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
+    }
+  },
+}))
+
+let app: App | undefined
+afterEach(() => { app?.unmount(); app = undefined; harness.hooks = null; document.body.innerHTML = ''; localStorage.clear() })
+async function mountGame() {
+  const host = document.createElement('div'); document.body.append(host)
+  app = createApp(Game); app.mount(host)
+  await Promise.resolve(); await nextTick()
+  host.querySelector<HTMLButtonElement>('.start-button')!.click()
+  await Promise.resolve(); await nextTick()
+  expect(host.querySelector('.start-screen')).toBeNull()
+  return { host, stage: host.querySelector<HTMLElement>('.stage')!, hooks: harness.hooks! }
+}
+function assertAttention(stage: HTMLElement, expected: string | null) {
+  const panels = stage.querySelectorAll('[data-attention-panel]')
+  expect(panels.length, '舞台只能有一个主要情境面板').toBeLessThanOrEqual(1)
+  expect(panels[0]?.getAttribute('data-attention-panel') ?? null).toBe(expected)
+  // 包括禁用的按钮：不能让第二个主操作以灰态继续占据主要关注区。
+  const primary = stage.querySelectorAll('[data-primary-action]')
+  expect(primary.length, '舞台只能有一个主要推进按钮').toBeLessThanOrEqual(1)
+  if (expected === 'guide' || expected === 'conversation' || expected === 'site') expect(primary).toHaveLength(1)
+}
+const room = (active: boolean): RoomUI => ({ active, available: true, kind: 'home', width: 3, minWidth: 3, selectedId: null,
+  placed: false, valid: true, dirty: true, message: '当前房间', detail: '', construction: false, completed: false,
+  action: '放下蓝图', left: 0, busy: false, items: [],
+})
+const conversation: PartnerConversation = { partnerId: 'adeng', name: '阿灯', species: '萤火虫', verb: '照',
+  lines: ['我是阿灯！', '一起准备小窝吧？'], upgrade: null, action: { id: 'prepare-nest', label: '去准备小窝' },
+}
+const nest = () => ({ ...emptySiteUI(), active: true, selected: 'first-nest', name: '两人小窝', canBuild: true })
+
+describe('后续内容必须遵守的单一主要关注对象契约', () => {
+  it('声音开关是安静的常驻辅助操作；切换不会打断发现、对话或施工，也不会增加主面板', async () => {
+    const { host, stage, hooks } = await mountGame()
+    const button = host.querySelector<HTMLButtonElement>('.sound-toggle')!
+    expect(button.hasAttribute('data-primary-action')).toBe(false)
+    hooks.onDiscovery?.(true); await nextTick()
+    button.click(); await nextTick()
+    expect(button.getAttribute('aria-pressed')).toBe('false')
+    expect(button.getAttribute('aria-label')).toBe('开启声音')
+    assertAttention(stage, 'discovery')
+    hooks.onDiscovery?.(false); hooks.onPartnerConversation?.(conversation); await nextTick()
+    button.click(); await nextTick(); assertAttention(stage, 'conversation')
+    hooks.onPartnerConversation?.(null); hooks.onSites?.({ ...nest(), working: true }); await nextTick()
+    button.click(); await nextTick(); assertAttention(stage, 'construction')
+    expect(JSON.parse(localStorage.getItem(SOUND_SETTINGS_KEY)!)).toEqual({ version: 1, muted: true })
+  })
+
+  it('已保存静音时进入游戏仍静音，且当前引导与主操作完整保留', async () => {
+    gameAudio.setMuted(true)
+    const { host, stage } = await mountGame()
+    expect(host.querySelector('.sound-toggle')?.getAttribute('aria-pressed')).toBe('false')
+    assertAttention(stage, 'guide')
+  })
+
+  it('背景音乐随游戏状态启停，切层和伙伴对话不增加面板或推进操作', async () => {
+    const { host, stage, hooks } = await mountGame()
+    hooks.onView?.({ layer: 'water', overview: false }); await nextTick()
+    assertAttention(stage, 'guide')
+    hooks.onPartnerConversation?.(conversation); await nextTick()
+    assertAttention(stage, 'conversation')
+    hooks.onPartnerConversation?.(null); hooks.onView?.({ layer: 'home', overview: true }); await nextTick()
+    assertAttention(stage, null)
+    host.querySelector<HTMLButtonElement>('.sound-toggle')!.click(); await nextTick()
+    assertAttention(stage, null)
+    hooks.onView?.({ layer: 'home', overview: false }); await nextTick()
+    assertAttention(stage, 'guide')
+  })
+
+  it.each(['kitchen', 'dining', 'garden', 'lounge'] as const)('%s 美术详情仅显示当前设施和一个主要操作', async kind => {
+    const { stage, hooks } = await mountGame()
+    hooks.onRooms?.(room(false))
+    hooks.onSites?.({ ...nest(), kind })
+    await nextTick(); assertAttention(stage, 'site')
+    expect(stage.querySelectorAll('.facility-preview')).toHaveLength(1)
+    expect(stage.querySelector('.facility-preview')?.getAttribute('data-facility')).toBe(kind)
+    expect(stage.querySelector('.guide')).toBeNull()
+    expect(stage.querySelector('.site-tools nav')).toBeNull()
+  })
+  it('多个状态同时到达也只渲染一个主要面板；状态退出后逐个交接，不叠加', async () => {
+    const { stage, hooks } = await mountGame()
+    hooks.onRooms?.(room(true)); hooks.onSites?.(nest())
+    hooks.onWork?.({ worker: 'adeng', name: '阿灯', title: '安灯', phase: 'walking' })
+    hooks.onPartnerConversation?.(conversation); hooks.onDiscovery?.(true)
+    await nextTick(); assertAttention(stage, 'site')
+    expect(stage.querySelector('.build-tools')).toBeNull()
+    hooks.onSites?.({ ...emptySiteUI(), active: false }); await nextTick(); assertAttention(stage, 'room')
+    hooks.onRooms?.(room(false)); await nextTick(); assertAttention(stage, 'work')
+    hooks.onWork?.(null); await nextTick(); assertAttention(stage, 'discovery')
+    hooks.onDiscovery?.(false); await nextTick(); assertAttention(stage, 'conversation')
+    expect(stage.querySelector('.build-tools')).toBeNull()
+    hooks.onPartnerConversation?.(null); await nextTick(); assertAttention(stage, 'guide')
+    expect(stage.querySelector('.build-tools')).not.toBeNull() // 辅助入口可以存在，不算第二个主操作。
+  })
+
+  it('发现、逐句对话、单间详情、施工、完工的主要操作不会同时出现', async () => {
+    const { stage, hooks } = await mountGame()
+    assertAttention(stage, 'guide')
+    hooks.onDiscovery?.(true); await nextTick(); assertAttention(stage, 'discovery')
+    hooks.onDiscovery?.(false); hooks.onPartnerConversation?.(conversation)
+    await nextTick(); assertAttention(stage, 'conversation')
+    stage.querySelector<HTMLButtonElement>('[data-primary-action]')!.click()
+    await nextTick(); assertAttention(stage, 'conversation')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('去准备小窝')
+    hooks.onPartnerConversation?.(null); hooks.onSites?.(nest())
+    await nextTick(); assertAttention(stage, 'site')
+    expect(stage.querySelector('.site-tools nav')).toBeNull()
+    hooks.onSites?.({ ...nest(), working: true }); await nextTick(); assertAttention(stage, 'construction')
+    hooks.onSites?.({ ...nest(), active: false, working: true }); await nextTick(); assertAttention(stage, null)
+    hooks.onSites?.({ ...nest(), built: true, canBuild: false }); await nextTick(); assertAttention(stage, 'site')
+    hooks.onSites?.({ ...emptySiteUI(), active: false }); await nextTick(); assertAttention(stage, 'guide')
+  })
+
+  it('物品栏打开后背景舞台不可交互，辅助导航不会形成第二个可交互主层', async () => {
+    const { host, stage, hooks } = await mountGame()
+    hooks.onRooms?.(room(false)); await nextTick()
+    host.querySelector<HTMLButtonElement>('.inventory')!.click(); await nextTick()
+    expect(host.querySelector('[role="dialog"][aria-modal="true"]')).not.toBeNull()
+    expect(stage.closest('[inert]')).not.toBeNull()
+    host.querySelector<HTMLButtonElement>('[aria-label="关闭物品栏"]')!.click(); await nextTick()
+    expect(stage.closest('[inert]')).toBeNull()
+    assertAttention(stage, 'guide')
+  })
+})

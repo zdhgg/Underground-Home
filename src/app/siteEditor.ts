@@ -1,4 +1,4 @@
-import { BUILDING_SITES, finishSite, nextSiteDig, siteBlocker, siteBuilt, siteById, siteRoom, siteVisible, siteWorkCells, type BuildingSite, type SiteChange } from '../core/sites'
+import { BUILDING_SITES, finishSite, nextSiteDig, siteBlueprintVisible, siteBlocker, siteBuilt, siteById, siteRoom, siteWorkCells, type BuildingSite, type SiteChange } from '../core/sites'
 import { materialText } from '../core/materials'
 import { TILE, type Cell, type SiteKind, type WorldState } from '../core/world'
 import type { RoomPreview } from './roomEditor'
@@ -16,6 +16,9 @@ export class SiteEditor {
   working = false
   private selected: BuildingSite | null = null
   private kind: SiteKind = 'home'
+  private layer: 'home' | 'water' = 'home'
+  /** 紧凑建造布局可能将房间放在画面上方；楼层仍以当前房间为准。 */
+  get focusedLayer(): 'home' | 'water' | null { return this.active && this.selected ? this.layer : null }
   private serial = 0
   constructor(private readonly ports: {
     world(): WorldState; busy(): boolean; emit(ui: SiteUI): void; preview(value: RoomPreview | null): void
@@ -24,25 +27,28 @@ export class SiteEditor {
   }) {}
   refresh(): void {
     const w = this.ports.world(), s = this.selected, built = !!s && siteBuilt(w, s)
-    const message = this.working ? '阿土正在清土、布置房间。可以随时停下来。' : s ? siteBlocker(w, s, this.kind) || s.description : '点一个洞室，看看它会变成什么。'
+    const readySites = BUILDING_SITES.filter(site => site.layer === this.layer && siteBlueprintVisible(w, site))
+    const message = this.working ? '阿土正在清土、布置房间。可以随时停下来。' : s ? siteBlocker(w, s, this.kind) || s.description : readySites.length ? '点一个洞室，看看它会变成什么。' : '先把想建造的空间挖空，建筑蓝图就会出现。'
     this.ports.emit({ active: this.active, working: this.working, selected: s?.id ?? null, kind: this.kind,
       name: s?.name ?? '一起把家建起来', icon: s?.icon ?? '🏡', description: s?.description ?? '', message,
       cost: s ? materialText(s.cost) : '', canBuild: !!s && !built && !this.working && !this.ports.busy() && !siteBlocker(w, s, this.kind), built,
-      choices: s?.kinds ?? [], sites: BUILDING_SITES.filter(site => siteVisible(w, site)).map(site => ({ id: site.id, name: site.name, icon: site.icon, layer: site.layer, built: siteBuilt(w, site) })),
+      choices: s?.kinds ?? [], sites: readySites.map(site => ({ id: site.id, name: site.name, icon: site.icon, layer: site.layer, built: siteBuilt(w, site) })),
     })
     this.ports.preview(this.active && s ? { room: siteRoom(s, this.kind), valid: !siteBlocker(w, s, this.kind) || built || this.working, hint: message } : null)
   }
-  open(layer: 'home' | 'water' = 'home'): void {
+  open(layer: 'home' | 'water' = 'home', browse = false): void {
     this.active = true
-    const w = this.ports.world(), s = BUILDING_SITES.find(s => s.layer === layer && siteVisible(w, s) && !siteBuilt(w, s))
+    this.layer = layer
+    if (browse) { this.selected = null; this.refresh(); return }
+    const w = this.ports.world(), s = BUILDING_SITES.find(s => s.layer === layer && siteBlueprintVisible(w, s) && !siteBuilt(w, s))
     if (s) this.select(s.id)
     else { this.selected = null; this.refresh() }
   }
   select(id: string): void {
     if (this.working || this.ports.busy()) return
     const s = siteById(id)
-    if (!s || !siteVisible(this.ports.world(), s)) return
-    this.active = true; this.selected = s; this.kind = this.ports.world().builtSites.find(b => b.id === id)?.kind ?? s.kinds[0]
+    if (!s || !siteBlueprintVisible(this.ports.world(), s)) return
+    this.active = true; this.layer = s.layer; this.selected = s; this.kind = this.ports.world().builtSites.find(b => b.id === id)?.kind ?? s.kinds[0]
     this.ports.focus(s); this.refresh()
   }
   choose(kind: SiteKind): void { if (!this.working && this.selected?.kinds.includes(kind)) { this.kind = kind; this.refresh() } }

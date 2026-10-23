@@ -15,7 +15,7 @@ function ready() {
   for (let x = 12; x <= 15; x++) for (let y = 9; y <= 11; y++) w.tiles[y][x] = TILE.EMPTY
   for (let x = 26; x <= 39; x++) for (let y = 9; y <= 11; y++) w.tiles[y][x] = TILE.EMPTY
   w.pods.push({ id: 1, x: 12, y: 10, door: 'right' })
-  w.exploration = { clueFound: true, pickaxeUpgraded: true, entered: true, springFound: true, shaftX: 27, explorer: { x: 27, y: 21 }, lamps: [] }
+  w.exploration = { clueFound: true, pickaxeUpgraded: true, entered: true, springFound: true, metXiaoman: false, shaftX: 27, explorer: { x: 27, y: 21 }, lamps: [] }
   for (let y = 12; y <= 21; y++) w.tiles[y][27] = TILE.EMPTY
   for (let x = 18; x <= 33; x++) { w.tiles[21][x] = TILE.EMPTY; w.tiles[20][x] = TILE.EMPTY; w.tiles[19][x] = TILE.EMPTY }
   w.farm.waterSupplied = true

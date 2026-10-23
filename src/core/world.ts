@@ -173,6 +173,11 @@ export interface ExplorationState {
   pickaxeUpgraded: boolean
   entered: boolean
   springFound: boolean
+  /**
+   * 第一次下到泉水层时已经和小满打过照面。
+   * 只用来避免“相遇对话”每次下楼都自动重播；玩家仍可以随时点她聊天。
+   */
+  metXiaoman: boolean
   /** 选中的真实梯道；发现线索不会自动挖空岩层。 */
   shaftX: number | null
   explorer: Cell | null
@@ -180,7 +185,7 @@ export interface ExplorationState {
 }
 export const BREAKTHROUGHS = [27, 16] as const
 export const WATER_FLOOR_Y = 22
-export const freshExploration = (): ExplorationState => ({ clueFound: false, pickaxeUpgraded: false, entered: false, springFound: false, shaftX: null, explorer: null, lamps: [] })
+export const freshExploration = (): ExplorationState => ({ clueFound: false, pickaxeUpgraded: false, entered: false, springFound: false, metXiaoman: false, shaftX: null, explorer: null, lamps: [] })
 
 /**
  * 岩层蓝图（软土口袋）：第一夜只开放几处被坚硬岩层包围的可挖区域，

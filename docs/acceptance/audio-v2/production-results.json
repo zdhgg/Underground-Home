@@ -1,0 +1,15 @@
+{
+  "checks": [
+    "bundled worker loaded with HTTP 200",
+    "exactly four real 48s loops",
+    "mute stops loops",
+    "continue respects saved mute",
+    "enable starts music",
+    "no page errors"
+  ],
+  "workerResponses": [
+    200,
+    200
+  ],
+  "errors": []
+}

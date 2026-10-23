@@ -1,0 +1,10 @@
+{
+  "url": "http://127.0.0.1:5198/",
+  "checks": [
+    "1440: core -> reveal -> anchored dialogue -> nest digging guide; help; reload without replay",
+    "390: core -> reveal -> anchored dialogue -> nest digging guide; help; reload without replay",
+    "390: current building remains visible above compact controls",
+    "direct nest detail excludes lounge; browse/select; actual construction; completed room; close"
+  ],
+  "runtimeErrors": []
+}

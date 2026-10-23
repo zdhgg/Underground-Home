@@ -16,7 +16,7 @@ describe('进入页存档摘要', () => {
     })
   })
 
-  it('点灯之后显示下一步“给伙伴安一个睡眠舱”和 3/4', () => {
+  it('点灯之后显示下一步“给伙伴留床”和 3/4', () => {
     const world = createInitialWorld()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
@@ -24,7 +24,7 @@ describe('进入页存档摘要', () => {
 
     const summary = summarizeSave(world)
     expect(summary.phase).toBe('第一夜')
-    expect(summary.missionTitle).toBe('给伙伴安一个睡眠舱')
+    expect(summary.missionTitle).toBe('给伙伴留床')
     expect(summary.done).toBe(3)
     expect(summary.total).toBe(4)
   })

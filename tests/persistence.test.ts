@@ -155,6 +155,27 @@ describe('存档序列化与校验', () => {
   })
 })
 
+describe('相遇标记', () => {
+  it('小满相遇标记能保存；旧档没有这个字段时按未相遇补齐', () => {
+    const world = farmWorld()
+    world.exploration.metXiaoman = true
+    const saved = deserialize(serialize(world))
+    expect(saved.ok && saved.world.exploration.metXiaoman).toBe(true)
+
+    const legacy = serialize(farmWorld()) as unknown as { world: { exploration: Record<string, unknown> } }
+    delete legacy.world.exploration.metXiaoman
+    const loaded = deserialize(legacy)
+    expect(loaded.ok && loaded.world.exploration.metXiaoman).toBe(false)
+  })
+
+  it('没下过泉水层却带着相遇标记的存档按未相遇处理', () => {
+    const legacy = serialize(createInitialWorld()) as unknown as { world: { exploration: Record<string, unknown> } }
+    legacy.world.exploration.metXiaoman = true
+    const loaded = deserialize(legacy)
+    expect(loaded.ok && loaded.world.exploration.metXiaoman).toBe(false)
+  })
+})
+
 describe('引水与种植（v6）', () => {
   it('引水、种植槽、食物与收成次数往返一致', () => {
     const world = farmWorld()

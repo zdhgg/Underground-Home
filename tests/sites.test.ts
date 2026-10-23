@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createInitialWorld, TILE, WORLD_VERSION } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { initialAtuPosition, soilPlan } from '../src/core/atu'
-import { BUILDING_SITES, finishSite, nextSiteDig, siteBlocker, siteById, siteWorkCells, validBuiltSites } from '../src/core/sites'
+import { BUILDING_SITES, finishSite, nextSiteDig, siteBlueprintVisible, siteBlocker, siteById, siteWorkCells, validBuiltSites } from '../src/core/sites'
 import { canAfford, digLoot } from '../src/core/materials'
 import { createWorldHistory } from '../src/core/history'
 import { deserialize, serialize } from '../src/core/persistence'
@@ -42,6 +42,13 @@ function excavate(w: ReturnType<typeof powered>, id: string) {
 }
 
 describe('预设洞室与挖掘材料', () => {
+  it('房间土层清空前不显示建筑蓝图，挖空房间本体后才显示', () => {
+    const w = powered(), site = BUILDING_SITES[0]
+    expect(siteBlueprintVisible(w, site)).toBe(false)
+    for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) w.tiles[y][x] = TILE.EMPTY
+    expect(siteBlueprintVisible(w, site)).toBe(true)
+  })
+
   it('第一间房材料足够，施工按可达单格推进，完工才扣材料和生成床', () => {
     const w = powered(), site = BUILDING_SITES[0]
     expect(canAfford(w, site.cost)).toBe(true)
@@ -105,7 +112,7 @@ describe('预设洞室与挖掘材料', () => {
   })
 
   it('取消施工后过期回调不能继续挖或建造，之后可重新开工', () => {
-    const w = powered(); let done = () => {}; const states: SiteUI[] = [], cancel = vi.fn()
+    const w = powered(); excavate(w, 'first-nest'); let done = () => {}; const states: SiteUI[] = [], cancel = vi.fn()
     const editor = new SiteEditor({ world: () => w, busy: () => false, emit: state => states.push(state), preview: vi.fn(), focus: vi.fn(), notify: vi.fn(), commit: vi.fn(), cancel,
       request: (_cell, _kind, callback) => { done = callback; return true },
     })
