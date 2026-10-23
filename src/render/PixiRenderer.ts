@@ -30,6 +30,7 @@ import { POD_SIZE, BEDS_PER_POD } from '../core/build'
 import { availablePartners, partnerBed, type PartnerId } from '../core/partners'
 import { hitPartner, type PartnerHitTarget } from './partnerHitTest'
 import { PartnerFeedback } from './partnerFeedback'
+import { AmbientLife } from './ambientLife'
 import type { ConversationAnchor } from './conversationAnchor'
 import type { SoilPlan } from '../core/atu'
 import { RoomScene } from './roomScene'
@@ -481,6 +482,7 @@ export class PixiWorldRenderer {
   private readonly effects = new Graphics()
   private readonly hover = new Graphics()
   private readonly partnerFeedback = new PartnerFeedback()
+  private readonly ambient = new AmbientLife()
   private readonly roomScene = new RoomScene()
   private roomPreview: RoomPreview | null = null
   private readonly explorationScene: ExplorationScene
@@ -597,6 +599,7 @@ export class PixiWorldRenderer {
       this.farmLayer,
       this.podLayer,
       this.friendsLayer,
+      this.ambient.view,
       this.darkness,
       this.moleLayer,
       this.glowLayer,
@@ -708,6 +711,7 @@ export class PixiWorldRenderer {
     this.refreshPods()
     this.rebuildFriends()
     this.refreshExploration()
+    this.ambient.refresh(this.world)
   }
 
   /** 只重建种植槽与水管：种下、长大、收获、引水完成后调用 */
@@ -791,6 +795,7 @@ export class PixiWorldRenderer {
   refreshExploration(): void {
     if (this.world) this.lightingScene.refresh(this.world)
     if (this.world) this.explorationScene.refresh(this.world)
+    if (this.world) this.ambient.refresh(this.world)
     this.syncMoleVisibility()
   }
   setLampPreview(cell: Cell | null): void { if (this.world) this.lightingScene.showPreview(this.world, cell) }
@@ -1330,6 +1335,7 @@ export class PixiWorldRenderer {
     this.updateMachineGlow()
     this.advanceMealGather(dt)
     this.updateFriends(dt)
+    this.ambient.update(this.world, this.elapsed, dt)
     this.partnerMotion.update(dt)
     this.updateEffects(dt)
     this.explorationScene.update(dt)
@@ -1726,7 +1732,11 @@ export class PixiWorldRenderer {
         : repaired
           ? Math.sin(this.elapsed * 2 + friend.phase) * 0.8
           : Math.sin(this.elapsed * 1.6 + friend.phase) * 1.5
-      friend.view.y = friend.baseY - (friend.visual && !celebrating ? 0 : bounce)
+      // 待机时偶尔轻轻起伏一下（约每 7 秒一次小抬头）：站着的朋友也是活的。
+      const idleBob = friend.pose !== 'rest' && friend.visual && !celebrating
+        ? Math.max(0, Math.sin(this.elapsed * 0.9 + friend.phase * 7) - 0.982) * 200
+        : 0
+      friend.view.y = friend.baseY - (friend.visual && !celebrating ? idleBob : bounce)
     }
     this.syncMoleVisibility()
   }

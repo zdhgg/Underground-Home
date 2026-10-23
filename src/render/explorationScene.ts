@@ -401,6 +401,19 @@ export class ExplorationScene {
         const k = (this.elapsed * 0.55 + i / 3) % 1
         g.circle(sx - 13 + i * 13, sy - 6 - k * 17, 2.2 * (1 - k)).fill({ color: 0xd9fdf6, alpha: 0.55 * (1 - k) })
       }
+      // 洞顶的水珠断续滴进泉面：从泉水上方第一块实心岩落下，砸出一圈圈涟漪。
+      let ceiling = 18
+      while (ceiling < 21 && world.tiles[ceiling][LANDMARKS.spring.x] === TILE.EMPTY) ceiling++
+      const dropTop = ceiling * T + 4
+      const dropBottom = 21.7 * T
+      for (let i = 0; i < 2; i++) {
+        const k = (this.elapsed * 0.3 + i * 0.5) % 1
+        g.circle(sx - 8 + i * 14, dropTop + k * (dropBottom - dropTop), 1.8).fill({ color: 0xd9fdf6, alpha: 0.75 * (1 - k * 0.25) })
+      }
+      for (let i = 0; i < 2; i++) {
+        const k = (this.elapsed * 0.42 + i * 0.5) % 1
+        g.ellipse(sx, sy, 3 + 15 * k, 1 + 3.2 * k).stroke({ width: 1.5, color: 0xc9fbf2, alpha: 0.5 * (1 - k) })
+      }
     }
   }
 
