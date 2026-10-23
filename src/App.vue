@@ -68,7 +68,7 @@ const progress = ref<SessionProgress>({
   finished: false,
   relics: { found: 0, total: 3 },
 })
-const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, shelfAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0, shelfCount: 0 })
+const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, shelfAvailable: false, nurseryAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0, shelfCount: 0, nurseryCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
 const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false, kitchen: false, dining: false, mealReady: false, mealActive: false })
 const exploration = ref<ExplorationUI>({ wideLighting: false, lightUpgradeReady: false, clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canChain: false, chaining: false, remaining: 0 })
@@ -304,6 +304,7 @@ onBeforeUnmount(() => {
         @primary="session?.facilityPrimary()"
         @plant="session?.facilityPlant()"
         @look="session?.facilityLook()"
+        @upgrade="session?.facilityUpgrade()"
       />
       <GuidePanel v-else-if="!sites.working && !view.overview && build.mode === 'none' && !exploration.lampMode" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
         <template #quick-action>
@@ -336,6 +337,8 @@ onBeforeUnmount(() => {
           <button v-for="room in rooms.items.filter(item => !item.built)" :key="room.id" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">继续原来的{{ room.name }}</button>
           <button v-for="room in expandableRooms" :key="`expand-${room.id}`" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">🏠 扩建{{ room.name }}</button>
           <button v-if="build.planterAvailable && view.layer === 'water'" type="button" :aria-pressed="build.mode === 'planter'" :disabled="exploration.traveling" @click="session?.setBuildMode('planter')">🌱 自己摆菜槽</button>
+          <button v-if="build.nurseryAvailable && view.layer === 'water' && build.nurseryCount === 0" type="button" :aria-pressed="build.mode === 'nursery'" :disabled="exploration.traveling" @click="session?.setBuildMode('nursery')">🌿 摆育苗架</button>
+          <button v-if="build.nurseryCount > 0 && view.layer === 'water'" type="button" :disabled="exploration.traveling" @click="session?.startTomatoPlanting()">🍅 摆番茄槽</button>
           <button v-if="build.shelfAvailable && view.layer === 'home'" type="button" :aria-pressed="build.mode === 'shelf'" :disabled="exploration.traveling" @click="session?.setBuildMode('shelf')">📦 摆储物架</button>
           <template v-if="build.mode !== 'none'">
             <button type="button" class="confirm" :disabled="!build.valid" @click="session?.confirmBuild()">✅ 确认建造</button>

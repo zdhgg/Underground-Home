@@ -14,6 +14,7 @@ import {
   type Room,
   type WorkerPositions,
   type Shelf,
+  type Nursery,
   createInitialWorld,
   freshExploration,
   freshFarm,
@@ -30,6 +31,7 @@ import { atuCanStand, initialAtuPosition } from './atu'
 import { checkRoom, checkRoomPlan, roomContains, ROOM_KINDS } from './rooms'
 import { ROOM_SPECS } from './roomConstruction'
 import { validShelves } from './storage'
+import { validNurseries } from './nursery'
 import { WORKERS, workerHomeRoute } from './partnerWork'
 import { partnerById } from './partners'
 import { hasWideLampAbility, WIDE_LAMP_ID } from './lighting'
@@ -59,6 +61,8 @@ export interface SavePayload {
     nextRoomId: number
     /** 第一层的储物架（v15 起） */
     shelves: Shelf[]
+    /** 第二层的育苗架（v16 起） */
+    nurseries: Nursery[]
     workers: WorkerPositions
     partnerUpgrades: string[]
     exploration: ExplorationState
@@ -85,6 +89,7 @@ export function serialize(world: WorldState): SavePayload {
       rooms: world.rooms.map((room) => ({ ...room })),
       nextRoomId: world.nextRoomId,
       shelves: world.shelves.map((shelf) => ({ ...shelf })),
+      nurseries: world.nurseries.map((nursery) => ({ ...nursery })),
       workers: structuredClone(world.workers),
       partnerUpgrades: [...world.partnerUpgrades],
       exploration: structuredClone(world.exploration),
@@ -181,7 +186,7 @@ export function deserialize(raw: unknown): LoadResult {
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
         pods: [],
-        rooms: [], nextRoomId: 1, shelves: [], workers: {}, partnerUpgrades: [],
+        rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
         exploration: freshExploration(),
         farm: freshFarm(),
         powerDown: false,
@@ -189,7 +194,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -197,15 +202,16 @@ export function deserialize(raw: unknown): LoadResult {
   if (!progress) return err('存档进度字段无效')
 
   const world: WorldState = {
-    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], workers: {}, partnerUpgrades: [],
+    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
     exploration: freshExploration(), farm: freshFarm(), powerDown: false,
   }
   if (version >= 13) {
     const data = payload.world as { inventory?: Inventory; builtSites?: BuiltSite[] }
     if (!data.inventory || ![data.inventory.stone, data.inventory.wood].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 100000)) return err('存档物品栏材料无效')
+    if (data.inventory.clay !== undefined && (!Number.isSafeInteger(data.inventory.clay) || data.inventory.clay < 0 || data.inventory.clay > 100000)) return err('存档物品栏材料无效')
     if (!Array.isArray(data.builtSites) || data.builtSites.length > BUILDING_SITES.length) return err('存档洞室建设数据无效')
-    world.inventory = { stone: data.inventory.stone, wood: data.inventory.wood }
+    world.inventory = { stone: data.inventory.stone, wood: data.inventory.wood, ...(data.inventory.clay !== undefined ? { clay: data.inventory.clay } : {}) }
     // 洞室与设施的关联在全部原有数据加载后继续校验。
     world.builtSites = data.builtSites.map(s => s && ({ id: s.id, kind: s.kind }))
   }
@@ -296,6 +302,20 @@ export function deserialize(raw: unknown): LoadResult {
     }
     if (!validShelves(world)) return err('存档储物架位置无效')
   }
+  // v16 起：第二层育苗架与新菜种。旧档没有这些字段，按没有育苗架补齐。
+  if (version >= 16) {
+    const data = payload.world as { nurseries?: unknown }
+    if (!Array.isArray(data.nurseries) || data.nurseries.length > MAP_WIDTH) return err('存档育苗架数据无效')
+    const nurseryIds = new Set<number>()
+    for (const item of data.nurseries) {
+      if (typeof item !== 'object' || item === null) return err('存档育苗架数据无效')
+      const nursery = item as Nursery
+      if (!Number.isInteger(nursery.id) || nursery.id < 1 || nurseryIds.has(nursery.id)) return err('存档育苗架数据无效')
+      nurseryIds.add(nursery.id)
+      world.nurseries.push({ id: nursery.id, x: nursery.x, y: nursery.y })
+    }
+    if (!validNurseries(world)) return err('存档育苗架或新菜种无效')
+  }
   // v8将主角位置与发现裂纹解耦。旧档狭窄通道中的站位回退到安全大厅，地形与进度不改。
   const actor = world.exploration.explorer
   const relocated = version < 8 && actor !== null && !atuCanStand(world, actor, true)
@@ -350,9 +370,10 @@ function validateFarm(raw: unknown, world: WorldState, version: number): FarmSta
     if (!Number.isInteger(planter.id) || planter.id < 1 || ids.has(planter.id)) return null
     if (!Number.isInteger(planter.x) || !Number.isInteger(planter.y)) return null
     if (!Number.isInteger(planter.growth) || planter.growth < 0 || planter.growth > RIPE_STAGE) return null
+    if (planter.crop !== undefined && planter.crop !== 'tomato') return null
     if (version >= 12 && planter.roomId !== undefined && (!Number.isSafeInteger(planter.roomId) || planter.roomId < 1)) return null
     ids.add(planter.id)
-    planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth, ...(version >= 12 && planter.roomId !== undefined ? { roomId: planter.roomId } : {}) })
+    planters.push({ id: planter.id, x: planter.x, y: planter.y, growth: planter.growth, ...(version >= 12 && planter.roomId !== undefined ? { roomId: planter.roomId } : {}), ...(planter.crop ? { crop: planter.crop } : {}) })
   }
   const restored = world.farm
   world.farm = { waterSupplied: farm.waterSupplied, planters, food: farm.food, harvests: farm.harvests, sharedMeals }
@@ -398,9 +419,12 @@ function validateExploration(raw: unknown, world: WorldState, version: number): 
   }
   // v13 及更早的存档没有相遇标记：视为还没自动打过照面，下次下楼补播一次。
   // 没有到过泉水层却带着标记的存档按未相遇处理，不制造矛盾状态。
+  // v16 起的两个发现位同理：没到过泉水层不可能发现蘑菇/红黏土。
   return {
     ...structuredClone(e),
     metXiaoman: e.entered && e.metXiaoman === true,
+    foundMushroom: e.entered && e.foundMushroom === true,
+    foundClay: e.entered && e.foundClay === true,
     lamps: e.lamps.map(l => ({ x: l.x, y: l.y, ...(version >= 11 && l.wide ? { wide: true as const } : {}) })),
   }
 }

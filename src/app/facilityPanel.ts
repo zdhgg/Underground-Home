@@ -13,9 +13,9 @@ import type { WorldState } from '../core/world'
  * 本批次不出现"升级"入口；升级入口留给后续内容批次（2C 育苗等）。
  */
 
-/** 有交互面板的设施：预设洞室（菜园/灶台/餐桌）+ 自由摆放的储物架。 */
+/** 有交互面板的设施：预设洞室（菜园/灶台/餐桌）+ 自由摆放的储物架与育苗架。 */
 export const PANEL_FACILITY_IDS = ['spring-garden', KITCHEN_SITE_ID, DINING_SITE_ID] as const
-export type FacilityId = (typeof PANEL_FACILITY_IDS)[number] | 'storage-shelf'
+export type FacilityId = (typeof PANEL_FACILITY_IDS)[number] | 'storage-shelf' | 'nursery'
 
 /** 菜园面板的状态图示：每一槽菜的生长档位。 */
 export interface FacilitySlot { stage: number }
@@ -24,10 +24,17 @@ export type FacilityPrimary =
   | { kind: 'harvest'; label: string; x: number; y: number }
   | { kind: 'watering'; label: string; x: number; y: number }
   | { kind: 'plant'; label: string }
+  | { kind: 'plant-tomato'; label: string }
   | { kind: 'meal'; label: string }
   | { kind: 'find-relic'; label: string }
   | { kind: 'browse-relics'; label: string }
   | { kind: 'none'; label: string }
+
+/** 升级入口（一次只出现一项，且必须是孩子说得出的新做法；S5 首项：育苗架）。 */
+export interface FacilityUpgrade {
+  kind: 'build-nursery'
+  label: string
+}
 
 export interface FacilityUI {
   active: boolean
@@ -42,11 +49,13 @@ export interface FacilityUI {
   hint: string
   /** 「自己摆菜槽」入口（仅菜园）。 */
   canPlant: boolean
+  /** 升级入口：本期只有菜园的育苗架；一次一项，不与主操作并列争抢。 */
+  upgrade?: FacilityUpgrade | null
 }
 
 export const emptyFacilityUI = (): FacilityUI => ({
   active: false, id: null, title: '', icon: '', slots: [], summary: '',
-  primary: { kind: 'none', label: '' }, hint: '', canPlant: false,
+  primary: { kind: 'none', label: '' }, hint: '', canPlant: false, upgrade: null,
 })
 
 /** 调用方保证设施已建成（builtSites 里存在）。 */
@@ -61,12 +70,25 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
       : unripe
         ? { kind: 'watering', label: '请小满浇浇水', x: unripe.x, y: unripe.y }
         : { kind: 'plant', label: '去种一槽菜' }
+    const hasNursery = world.nurseries.length > 0
     return {
       active: true, id, title: site.name, icon: site.icon, slots,
       summary: world.farm.planters.length ? `熟了 ${ripe.length} 槽 · 共 ${world.farm.planters.length} 槽菜` : '还没有菜槽',
       primary,
-      hint: ripe.length > 0 ? '点一下，小满走过去收。' : unripe ? '浇一次水，菜就长一档；干活也会让菜长大。' : '泉边的空地上还能再摆菜槽。',
+      hint: hasNursery ? '育苗架搭好啦：能种番茄，也能继续种蔬菜。' : ripe.length > 0 ? '点一下，小满走过去收。' : unripe ? '浇一次水，菜就长一档；干活也会让菜长大。' : '泉边的空地上还能再摆菜槽。',
       canPlant: true,
+      upgrade: hasNursery ? null : { kind: 'build-nursery', label: '🌿 搭育苗架，种新菜' },
+    }
+  }
+  if (id === 'nursery') {
+    const ready = world.farm.waterSupplied
+    return {
+      active: true, id, title: '育苗架', icon: '🌿', slots: [],
+      summary: ready ? '番茄苗在架上冒芽啦' : '等水接到菜园',
+      primary: ready ? { kind: 'plant-tomato', label: '摆一槽番茄' } : { kind: 'none', label: '先接水' },
+      hint: ready ? '和蔬菜一样照料：浇水、干活都会让它长大。' : '水到菜园后，这里就能培育番茄苗。',
+      canPlant: false,
+      upgrade: null,
     }
   }
   if (id === 'storage-shelf') {
@@ -79,6 +101,7 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
         : { kind: 'browse-relics', label: '翻翻旧物的故事' },
       hint: found.length > 0 ? '架子上摆着旧住户留下的东西。' : '挖到的旧物会摆上来，先去找找吧。',
       canPlant: false,
+      upgrade: null,
     }
   }
   const kitchen = id === KITCHEN_SITE_ID
@@ -94,6 +117,7 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
       primary,
       hint: ready ? (world.farm.food > 0 ? '灶台热起来，大家到餐桌围坐。' : '收一份菜就能开饭。') : '餐桌好了就能围坐吃饭。',
       canPlant: false,
+      upgrade: null,
     }
   }
   const ready = sharedMealReady(world)
@@ -108,12 +132,14 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
     primary,
     hint: ready ? (world.farm.food > 0 ? '同一份结算：只扣 1 份食材。' : '收一份菜就能开饭。') : '灶台好了就能围坐吃饭。',
     canPlant: false,
+    upgrade: null,
   }
 }
 
 /** 点到的格子是不是这批有面板的已建设施（菜槽本身走直点，不开面板）。 */
 export function panelFacilityAt(world: WorldState, x: number, y: number): FacilityId | null {
   if (world.shelves.some(shelf => shelf.x === x && shelf.y === y)) return 'storage-shelf'
+  if (world.nurseries.some(nursery => nursery.x === x && nursery.y === y)) return 'nursery'
   const site = PANEL_FACILITY_IDS
     .map((id) => siteById(id)!)
     .find((s) => x >= s.x && x < s.x + s.w && y >= s.y && y < s.y + s.h)

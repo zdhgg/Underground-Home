@@ -10,7 +10,7 @@ import { emptyFacilityUI, type FacilityUI } from '../src/app/facilityPanel'
 import type { PartnerConversation } from '../src/core/partnerInteractions'
 
 // 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
-const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn(), facilityPrimary: vi.fn() }))
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn(), facilityPrimary: vi.fn(), facilityUpgrade: vi.fn() }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
     harness.hooks = hooks
@@ -18,7 +18,7 @@ vi.mock('../src/app/session', () => ({
       titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
       startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
-      feed: harness.feed, facilityPrimary: harness.facilityPrimary,
+      feed: harness.feed, facilityPrimary: harness.facilityPrimary, facilityUpgrade: harness.facilityUpgrade,
     }
   },
 }))
@@ -112,6 +112,29 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('找找没挖到的旧物')
     host.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); await nextTick()
     expect(harness.facilityPrimary).toHaveBeenCalledTimes(1)
+    hooks.onFacility?.(emptyFacilityUI()); await nextTick()
+    assertAttention(stage, 'guide')
+  })
+
+  it('菜园面板的升级入口与育苗架面板各只有一个主要操作，升级是虚线次入口', async () => {
+    const { host, stage, hooks } = await mountGame()
+    hooks.onFacility?.(facilityState({
+      primary: { kind: 'watering', label: '请小满浇浇水', x: 28, y: 21 },
+      upgrade: { kind: 'build-nursery', label: '🌿 搭育苗架，种新菜' },
+    })); await nextTick()
+    assertAttention(stage, 'facility')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('请小满浇浇水')
+    const upgrade = host.querySelector<HTMLButtonElement>('.upgrade')!
+    expect(upgrade.hasAttribute('data-primary-action')).toBe(false)
+    upgrade.click(); await nextTick()
+    expect(harness.facilityUpgrade).toHaveBeenCalledTimes(1)
+    hooks.onFacility?.(facilityState({
+      id: 'nursery', title: '育苗架', icon: '🌿', slots: [], summary: '番茄苗在架上冒芽啦',
+      primary: { kind: 'plant-tomato', label: '摆一槽番茄' }, hint: '和蔬菜一样照料。', canPlant: false,
+    })); await nextTick()
+    assertAttention(stage, 'facility')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('摆一槽番茄')
+    expect(host.querySelector('.upgrade')).toBeNull()
     hooks.onFacility?.(emptyFacilityUI()); await nextTick()
     assertAttention(stage, 'guide')
   })

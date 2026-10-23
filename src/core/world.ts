@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 15
+export const WORLD_VERSION = 16
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -73,10 +73,17 @@ export interface Shelf extends Cell {
   id: number
 }
 
+/** 第二层的一格育苗架：解锁新菜种（番茄）。 */
+export interface Nursery extends Cell {
+  id: number
+}
+
 export type RoomKind = 'home' | 'garden' | 'lounge'
 /** 可建设施用途：第一层房间用途，以及第二层的灶台／餐桌。 */
 export type SiteKind = RoomKind | 'kitchen' | 'dining'
-export interface Inventory { stone: number; wood: number }
+/** 菜种：蔬菜（默认）与育苗架解锁的番茄。 */
+export type CropKind = 'tomato'
+export interface Inventory { stone: number; wood: number; clay?: number }
 export interface BuiltSite { id: string; kind: SiteKind }
 /** 避难所留下的少量材料，保证第一间住处可以直接开工。 */
 export const freshInventory = (): Inventory => ({ stone: 4, wood: 3 })
@@ -126,6 +133,8 @@ export interface Planter extends Cell {
   growth: number
   /** 自动启用的菜槽归属，撤销房间时不误删原有作物。 */
   roomId?: number
+  /** 育苗架解锁的新菜种；缺省为原有蔬菜。 */
+  crop?: CropKind
 }
 
 /**
@@ -164,6 +173,8 @@ export interface WorldState {
   nextRoomId: number
   /** 第一层的储物架（v15 起） */
   shelves: Shelf[]
+  /** 第二层的育苗架（v16 起） */
+  nurseries: Nursery[]
   /** 专业伙伴最近到达的安全站位；不保存半段动画或待执行工作。 */
   workers: WorkerPositions
   /** 已学会的专业能力升级ID；设施配置单独保存在灯上。 */
@@ -187,6 +198,10 @@ export interface ExplorationState {
    * 只用来避免“相遇对话”每次下楼都自动重播；玩家仍可以随时点她聊天。
    */
   metXiaoman: boolean
+  /** 第一次点到泉水边潮湿洞壁上的发光蘑菇（发现物，单调）。 */
+  foundMushroom: boolean
+  /** 第一次挖到泉边的红黏土（发现物，单调）。 */
+  foundClay: boolean
   /** 选中的真实梯道；发现线索不会自动挖空岩层。 */
   shaftX: number | null
   explorer: Cell | null
@@ -194,7 +209,7 @@ export interface ExplorationState {
 }
 export const BREAKTHROUGHS = [27, 16] as const
 export const WATER_FLOOR_Y = 22
-export const freshExploration = (): ExplorationState => ({ clueFound: false, pickaxeUpgraded: false, entered: false, springFound: false, metXiaoman: false, shaftX: null, explorer: null, lamps: [] })
+export const freshExploration = (): ExplorationState => ({ clueFound: false, pickaxeUpgraded: false, entered: false, springFound: false, metXiaoman: false, foundMushroom: false, foundClay: false, shaftX: null, explorer: null, lamps: [] })
 
 /**
  * 岩层蓝图（软土口袋）：第一夜只开放几处被坚硬岩层包围的可挖区域，
@@ -243,6 +258,7 @@ export function createInitialWorld(): WorldState {
     rooms: [],
     nextRoomId: 1,
     shelves: [],
+    nurseries: [],
     workers: {},
     partnerUpgrades: [],
     exploration: freshExploration(),

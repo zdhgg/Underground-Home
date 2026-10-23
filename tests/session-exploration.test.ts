@@ -1287,6 +1287,44 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
+  it('育苗架：菜园面板升级入口搭起后能种番茄；点蘑菇是一次发现', async () => {
+    const onFacility = vi.fn(), onMilestone = vi.fn(), onMessage = vi.fn()
+    harness.store.load.mockResolvedValue(gardenSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn(), onFacility, onMilestone })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const before = { ...w.inventory }
+
+    // 菜园面板里出现升级入口「搭育苗架」，点击进入摆放。
+    harness.handlers.onTap({ x: 29, y: 20 })
+    const garden = onFacility.mock.calls.at(-1)![0]
+    expect(garden.upgrade).toMatchObject({ kind: 'build-nursery' })
+    session.facilityUpgrade()
+    harness.handlers.onTap({ x: 25, y: 21 })
+    session.confirmBuild()
+    expect(w.nurseries).toEqual([{ id: 1, x: 25, y: 21 }])
+    expect(w.inventory).toEqual({ ...before, stone: before.stone - 2, wood: before.wood - 2 })
+    // 升级后的新做法：摆一槽番茄，照料与结算和蔬菜同一条路。
+    session.startTomatoPlanting()
+    harness.handlers.onTap({ x: 29, y: 21 })
+    session.confirmBuild()
+    expect(w.farm.planters.some(p => p.crop === 'tomato')).toBe(true)
+    expect(onMessage.mock.calls.some(([text]) => String(text).includes('番茄'))).toBe(true)
+    session.setBuildMode('none')
+    // 番茄还在：育苗架不可撤销。
+    session.undo()
+    expect(w.nurseries).toHaveLength(1)
+    // 点育苗架本体：面板主操作是「摆一槽番茄」。
+    harness.handlers.onTap({ x: 25, y: 21 })
+    expect(onFacility.mock.calls.at(-1)![0]).toMatchObject({ id: 'nursery', primary: { kind: 'plant-tomato' } })
+    // 点泉水边的发光蘑菇：第一次是发现，再点不重复。
+    harness.handlers.onTap({ x: 20, y: 21 })
+    expect(w.exploration.foundMushroom).toBe(true)
+    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现发光蘑菇！' }))
+    harness.handlers.onTap({ x: 20, y: 21 })
+    expect(onMilestone.mock.calls.filter(call => (call[0] as { title?: string }).title === '发现发光蘑菇！')).toHaveLength(1)
+    session.destroy()
+  })
+
   it('没有灶台和餐桌的旧存档仍能用原来的吃饭入口，不播放围坐', async () => {
     const raw = farmedSave()
     raw.world.farm.food = 2

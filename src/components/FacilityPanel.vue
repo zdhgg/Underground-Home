@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { FacilityUI } from '../app/facilityPanel'
-const props = defineProps<{ state: FacilityUI }>()
-const emit = defineEmits<{ close: []; primary: []; plant: []; look: [] }>()
+defineProps<{ state: FacilityUI }>()
+const emit = defineEmits<{ close: []; primary: []; plant: []; look: []; upgrade: [] }>()
 const STAGE_ICONS = ['·', '🌱', '🌿', '🥕'] as const
 const stageIcon = (stage: number): string => STAGE_ICONS[Math.min(stage, STAGE_ICONS.length - 1)]
 </script>
@@ -22,6 +22,7 @@ const stageIcon = (stage: number): string => STAGE_ICONS[Math.min(stage, STAGE_I
       <button v-if="state.canPlant" type="button" @click="emit('plant')">🌱 自己摆菜槽</button>
       <button type="button" @click="emit('look')">看看它</button>
     </div>
+    <button v-if="state.upgrade" type="button" class="upgrade" @click="emit('upgrade')">{{ state.upgrade.label }}</button>
   </section>
 </template>
 
@@ -41,6 +42,7 @@ button:hover { background: #dceadd; } button:focus-visible { outline: 3px solid 
 .hint { margin: 10px 0 12px; font-size: 12px; line-height: 1.6; color: #6e8577; }
 .secondary { display: flex; gap: 8px; }
 .secondary button { flex: 1; font-size: 13px; }
+.upgrade { display: block; width: 100%; margin-top: 10px; padding: 10px 12px; border: 1.5px dashed #8fbf9d; background: #eef7ee; color: #3c6b52; font-size: 13px; font-weight: 600; }
 @media (max-width: 720px) {
   .facility-tools { top: auto; bottom: 80px; left: 12px; width: calc(100% - 24px); max-width: calc(100% - 24px); max-height: 46%; padding: 12px; }
   .slots { font-size: 17px; gap: 6px; }

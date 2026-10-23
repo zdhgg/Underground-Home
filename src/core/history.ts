@@ -26,6 +26,7 @@ type WorldAction =
   | { kind: 'pod'; id: number }
   | { kind: 'planter'; id: number; cost?: Inventory }
   | { kind: 'shelf'; id: number; cost: Inventory }
+  | { kind: 'nursery'; id: number; cost: Inventory }
   | { kind: 'lamp'; x: number; y: number }
   | { kind: 'lamp-retrofit'; x: number }
   | { kind: 'room'; change: RoomChange }
@@ -89,6 +90,15 @@ export function createWorldHistory(limit = 200) {
           const index = world.shelves.findIndex((shelf) => shelf.id === action.id)
           if (index < 0) continue
           world.shelves.splice(index, 1)
+          changeMaterials(world, action.cost)
+          return action
+        }
+        if (action.kind === 'nursery') {
+          // 还有番茄苗在培育：育苗架不能"撤销没建过"，否则番茄失去来处。
+          if (world.farm.planters.some(planter => planter.crop === 'tomato')) { stack.push(action); return null }
+          const index = world.nurseries.findIndex((nursery) => nursery.id === action.id)
+          if (index < 0) continue
+          world.nurseries.splice(index, 1)
           changeMaterials(world, action.cost)
           return action
         }

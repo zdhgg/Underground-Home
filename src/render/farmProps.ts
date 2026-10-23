@@ -19,11 +19,16 @@ export const WATER_BARREL_Y = 21
 const HOME_BARREL_X = 19.4
 const HOME_BARREL_Y = 11
 
+const TOMATO = 0xe35d4f
+const TOMATO_DARK = 0xb03a30
+
 export function drawPlanter(planter: Planter, textures: EnvironmentTextures | null = null, compactOffset?: number): Container {
   const view = new Container()
   const g = new Graphics()
   view.position.set((planter.x + 0.5 + (compactOffset ?? 0)) * TILE_SIZE, (planter.y + 0.9) * TILE_SIZE)
   view.label = `planter-stage-${planter.growth}`
+  const tomato = planter.crop === 'tomato'
+  if (tomato) view.label += '-tomato'
   const image = planter.growth >= RIPE_STAGE ? textures?.planter : textures?.emptyPlanter
 
   if (image) {
@@ -55,31 +60,70 @@ export function drawPlanter(planter: Planter, textures: EnvironmentTextures | nu
       break
     }
     case 2: {
-      // 长大：茎更长、四片叶子
+      // 长大：茎更长、四片叶子；番茄挂上两颗青红小果
       g.moveTo(0, -8).lineTo(0, -22).stroke({ width: 2.5, color: LEAF_DARK })
       g.ellipse(-5, -14, 5, 3).fill(LEAF)
       g.ellipse(5, -18, 5, 3).fill(LEAF)
       g.ellipse(-5, -22, 4.5, 2.8).fill(LEAF)
       g.ellipse(5, -25, 4.5, 2.8).fill(LEAF_DARK)
+      if (tomato) {
+        g.circle(-3, -17, 2.6).fill(TOMATO).stroke({ width: 1.5, color: TOMATO_DARK })
+        g.circle(3.5, -21, 2.2).fill(TOMATO).stroke({ width: 1.5, color: TOMATO_DARK })
+      }
       break
     }
     default: {
-      // 熟了：叶子更密 + 一颗果实 + 小星星，一眼看出能收
+      // 熟了：叶子更密 + 果实 + 小星星，一眼看出能收
       g.moveTo(0, -8).lineTo(0, -24).stroke({ width: 2.5, color: LEAF_DARK })
       g.ellipse(-6, -13, 5, 3).fill(LEAF)
       g.ellipse(6, -17, 5, 3).fill(LEAF)
       g.ellipse(-6, -21, 5, 3).fill(LEAF_DARK)
       g.ellipse(6, -25, 5, 3).fill(LEAF)
-      g.circle(0, -14, 5).fill(0xf08a5d).stroke({ width: 2, color: 0xb85c39 })
+      if (tomato) {
+        // 熟透的番茄：一串红果
+        g.circle(-3.5, -13, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+        g.circle(3.5, -15, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+        g.circle(0, -19, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+      } else {
+        g.circle(0, -14, 5).fill(0xf08a5d).stroke({ width: 2, color: 0xb85c39 })
+      }
       g.star(0, -31, 4, 4, 2).fill(0xffe6ad)
       break
     }
   } else if (planter.growth >= RIPE_STAGE) {
     // 素材负责叶片与木槽，代码只补上可收获的果实和提示星光。
-    g.circle(0, -14, 5).fill(0xf08a5d).stroke({ width: 2, color: 0xb85c39 })
+    if (tomato) {
+      g.circle(-3.5, -13, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+      g.circle(3.5, -15, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+      g.circle(0, -19, 4.4).fill(TOMATO).stroke({ width: 2, color: TOMATO_DARK })
+    } else {
+      g.circle(0, -14, 5).fill(0xf08a5d).stroke({ width: 2, color: 0xb85c39 })
+    }
     g.star(0, -31, 4, 4, 2).fill(0xffe6ad)
   }
 
+  view.addChild(g)
+  return view
+}
+
+/** 一格育苗架：木架两层苗盘，盘里是冒芽的番茄苗，带一点淡淡的绿光。 */
+export function drawNursery(nursery: { x: number; y: number }): Container {
+  const view = new Container({ label: 'nursery', eventMode: 'none' })
+  const g = new Graphics({ label: 'nursery-body' })
+  g.eventMode = 'none'
+  view.position.set((nursery.x + 0.5) * TILE_SIZE, (nursery.y + 1) * TILE_SIZE)
+  // 立柱与两层苗盘
+  g.rect(-11, -26, 3.5, 26).rect(7.5, -26, 3.5, 26).fill(0x8a6a42)
+  g.roundRect(-13, -18, 26, 4, 2).roundRect(-13, -7, 26, 4, 2).fill(0xa5804f)
+  // 苗盘里的小番茄苗：细茎 + 两片叶 + 一颗小青果
+  for (const [x, y] of [[-8, -18], [0, -18], [8, -18], -4, 4].map(v => Array.isArray(v) ? v : [v, -7]) as [number, number][]) {
+    g.moveTo(x, y).lineTo(x, y - 5).stroke({ width: 1.6, color: LEAF_DARK })
+    g.ellipse(x - 2.4, y - 4.4, 2.4, 1.4).fill(LEAF)
+    g.ellipse(x + 2.4, y - 5.4, 2.4, 1.4).fill(LEAF)
+  }
+  g.circle(-8, -25, 1.8).circle(8, -14, 1.8).fill(0xd97a55)
+  // 淡淡的绿光：育苗的地方有一点生机
+  g.ellipse(0, -14, 17, 12).fill({ color: 0xbff0d8, alpha: 0.10 })
   view.addChild(g)
   return view
 }

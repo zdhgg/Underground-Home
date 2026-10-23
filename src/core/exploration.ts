@@ -129,6 +129,21 @@ export function waterSpan(world: WorldState): { left: number; right: number } | 
   return { left, right }
 }
 
+/**
+ * 发光蘑菇（发现物）：泉水边潮湿洞壁上的固定几簇，兼作柔和光源。
+ * 定义放这里是因为菜槽规则也要保留这些格子（不放作物、不和蘑菇抢地）。
+ */
+export function mushroomSpots(world: WorldState): Cell[] {
+  const span = waterSpan(world)
+  if (!span) return []
+  return [20, 26]
+    .filter(x => x >= span.left && x <= span.right && world.tiles[21][x] === TILE.EMPTY)
+    .map(x => ({ x, y: 21 }))
+}
+
+export const isMushroomSpot = (world: WorldState, x: number, y: number): boolean =>
+  y === 21 && mushroomSpots(world).some(spot => spot.x === x)
+
 export function springVisible(world: WorldState): boolean {
   const span = waterSpan(world)
   return !!span && span.left <= LANDMARKS.spring.x && span.right >= LANDMARKS.spring.x

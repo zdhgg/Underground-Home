@@ -46,7 +46,7 @@ import type { MealMove } from '../core/meal'
 import { LightingScene } from './lightingScene'
 import { powerLinePath } from '../core/power'
 import { drawCollection, loadCollectionTextures, type CollectionTextures } from './collectionScene'
-import { WATER_BARREL_X, WATER_BARREL_Y, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
+import { WATER_BARREL_X, WATER_BARREL_Y, drawNursery, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import { SurfaceScene, SURFACE_ENTRANCE } from './surfaceScene'
 import { loadSurfaceTextures, type SurfaceTextures } from './surfaceTextures'
@@ -740,6 +740,7 @@ export class PixiWorldRenderer {
       const offset = managed ? planter.x === site.x ? .25 : -.25 : undefined
       this.farmLayer.addChild(drawPlanter(planter, this.environmentTextures, offset))
     }
+    for (const nursery of world.nurseries) this.farmLayer.addChild(drawNursery(nursery))
   }
 
   /** 水在管子里流动 + 熟了的槽呼吸：纯画面，每帧重画，不读也不写世界。 */
@@ -998,11 +999,23 @@ export class PixiWorldRenderer {
     valid = false,
     door: 'left' | 'right' = 'left',
     hint = '',
-    kind: 'none' | 'pod' | 'planter' | 'shelf' = 'pod',
+    kind: 'none' | 'pod' | 'planter' | 'shelf' | 'nursery' = 'pod',
     planterCell: Cell | null = null,
     shelfCell: Cell | null = null,
   ): void {
     for (const child of this.buildPreview.removeChildren()) child.destroy({ children: true })
+    if (kind === 'nursery' && shelfCell) {
+      const color = valid ? 0x8fe3a6 : 0xff947e
+      const slot = new Graphics()
+      slot.rect(shelfCell.x * TILE_SIZE + 2, shelfCell.y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4)
+        .fill({ color, alpha: 0.18 })
+        .stroke({ width: 3, color })
+      const ghost = drawNursery({ x: shelfCell.x, y: shelfCell.y })
+      ghost.alpha = 0.7
+      this.buildPreview.addChild(ghost, slot)
+      if (hint) this.addBuildHint(hint, valid, shelfCell.x + 0.5, shelfCell.y, 1)
+      return
+    }
     if (kind === 'shelf' && shelfCell) {
       const color = valid ? 0x8fe3a6 : 0xff947e
       const slot = new Graphics()

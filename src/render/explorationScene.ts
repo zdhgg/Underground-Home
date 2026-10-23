@@ -6,6 +6,7 @@ import { AtuConstruction } from './atuConstruction'
 import type { SoilPlan } from '../core/atu'
 import type { EnvironmentTextures } from './environmentArt'
 import { drawCaveMoss } from './caveMoss'
+import { mushroomSpots } from '../core/nursery'
 
 /** 破岩演出：抬手到落镐的时间；落镐那一刻世界才改变，孩子看到的是"挖开"。 */
 const SWING_TIME = 0.42
@@ -389,6 +390,20 @@ export class ExplorationScene {
         const cy = HOME_FLOOR_Y * T - 6 - pulse * 3
         g.circle(cx, cy, 3.4).fill({ color: 0xbfeef0, alpha: 0.85 })
         g.circle(cx, cy + 1, 5 + 9 * pulse).stroke({ width: 2, color: 0x9fdfe6, alpha: 0.55 * (1 - pulse) })
+      }
+    }
+    // 泉水边潮湿洞壁上的发光蘑菇：成簇呼吸的柔光（发现物之一，点击即发现）。
+    for (const spot of mushroomSpots(world)) {
+      const mx = (spot.x + 0.5) * T
+      const my = (spot.y + 0.42) * T
+      const breathe = 0.5 + 0.5 * Math.sin(this.elapsed * 1.7 + spot.x)
+      g.ellipse(mx, my - 4, 15, 11).fill({ color: 0x9fe8c8, alpha: 0.07 + 0.07 * breathe })
+      for (let i = 0; i < 3; i++) {
+        const cx = mx - 6 + i * 6
+        const cy = my - (i % 2 === 0 ? 1 : 4)
+        g.circle(cx, cy, 3.4).fill({ color: 0xcdf4de, alpha: 0.95 })
+        g.circle(cx - 1, cy - 1.2, 1.4).fill({ color: 0xffffff, alpha: 0.5 })
+        g.circle(cx, cy, 6 + 2 * breathe).fill({ color: 0x9fe8c8, alpha: 0.12 + 0.10 * breathe })
       }
     }
     // 找到泉水后水面一直轻轻闪动：新家园是活的。
