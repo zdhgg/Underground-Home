@@ -106,8 +106,7 @@ function farmedSave() {
 }
 
 /** 已经接好水、食物充足，并且灶台和餐桌都建好的存档。 */
-function sharedMealSave() {
-  const raw = farmedSave()
+function sharedMealSave() {  const raw = farmedSave()
   raw.world.tiles[10][26] = TILE.EMPTY
   raw.world.tiles[10][27] = TILE.EMPTY
   raw.world.tiles[21][17] = TILE.EMPTY
@@ -115,6 +114,17 @@ function sharedMealSave() {
   raw.world.builtSites.push({ id: 'spring-kitchen', kind: 'kitchen' }, { id: 'spring-table', kind: 'dining' })
   raw.world.farm.food = 3
   raw.world.inventory = { stone: 10, wood: 10 }
+  return raw
+}
+
+/** 泉边小菜园已建成：一槽未熟、一槽成熟的菜。 */
+function gardenSave() {
+  const raw = farmedSave()
+  // 梯口上方补出两格净空：两格高的存档通路校验才走得通（同 sharedMealSave）。
+  raw.world.tiles[10][26] = TILE.EMPTY
+  raw.world.tiles[10][27] = TILE.EMPTY
+  raw.world.builtSites.push({ id: 'spring-garden', kind: 'garden' })
+  raw.world.farm.planters.push({ id: 1, x: 28, y: 21, growth: 0 }, { id: 2, x: 30, y: 21, growth: 3 })
   return raw
 }
 
@@ -1176,6 +1186,73 @@ describe('探索会话与存档集成', () => {
     expect(w.builtSites).toHaveLength(built)
     expect(w.pods).toHaveLength(pods)
     expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('点已建好的菜园打开设施面板：状态与主操作和直点共用同一条路', async () => {
+    const onFacility = vi.fn()
+    harness.store.load.mockResolvedValue(gardenSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onFacility })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+
+    harness.handlers.onTap({ x: 29, y: 20 })
+    const opened = onFacility.mock.calls.at(-1)![0]
+    expect(opened).toMatchObject({ active: true, id: 'spring-garden', title: '泉边小菜园' })
+    expect(opened.slots).toHaveLength(2)
+    expect(opened.summary).toContain('熟了 1 槽')
+    expect(opened.primary).toMatchObject({ kind: 'harvest', x: 30, y: 21 })
+
+    // 面板主操作 = 小满收菜工作；开始时面板让位给工作状态，完成后食物 +1。
+    session.facilityPrimary()
+    expect(w.farm.food).toBe(1)
+    expect(harness.renderer.playPartnerWork).toHaveBeenCalledTimes(1)
+    expect(onFacility.mock.calls.at(-1)![0].active).toBe(false)
+    // 再点同一处洞室重新打开；点别处的空地则收起面板。
+    harness.handlers.onTap({ x: 29, y: 20 })
+    expect(onFacility.mock.calls.at(-1)![0].active).toBe(true)
+    harness.handlers.onTap({ x: 24, y: 21 })
+    expect(onFacility.mock.calls.at(-1)![0].active).toBe(false)
+    session.destroy()
+  })
+
+  it('点没熟的菜直接请小满浇水：未熟的各长一档，熟透的不再长', async () => {
+    const onMessage = vi.fn()
+    harness.store.load.mockResolvedValue(gardenSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage, onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+
+    harness.handlers.onTap({ x: 28, y: 21 })
+    expect(harness.renderer.playPartnerWork).toHaveBeenCalledTimes(1)
+    expect(w.farm.planters.find((p) => p.x === 28)!.growth).toBe(1)
+    expect(w.farm.planters.find((p) => p.x === 30)!.growth).toBe(3)
+    expect(w.farm.food).toBe(0)
+    expect(onMessage.mock.calls.some(([text]) => String(text).includes('浇了水'))).toBe(true)
+    // 第一趟浇完（测试里同步完成），再点一次会再派一趟：仍是同一条工作路径。
+    harness.handlers.onTap({ x: 28, y: 21 })
+    expect(harness.renderer.playPartnerWork).toHaveBeenCalledTimes(2)
+    expect(w.farm.planters.find((p) => p.x === 28)!.growth).toBe(2)
+    session.destroy()
+  })
+
+  it('灶台与餐桌面板的开饭和其他入口共用 serveMeal，同一次只扣一份', async () => {
+    const onFacility = vi.fn()
+    harness.store.load.mockResolvedValue(sharedMealSave())
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onFacility })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+
+    harness.handlers.onTap({ x: 11, y: 20 })
+    expect(onFacility.mock.calls.at(-1)![0]).toMatchObject({ active: true, id: 'spring-kitchen', primary: { kind: 'meal', label: '做饭，请大家吃' } })
+    session.facilityPrimary()
+    expect(w.farm.food).toBe(2)
+    expect(w.farm.sharedMeals).toBe(1)
+    expect(harness.renderer.playKitchenCooking).toHaveBeenCalledTimes(1)
+
+    vi.advanceTimersByTime(3000)
+    harness.handlers.onTap({ x: 14, y: 20 })
+    const dining = onFacility.mock.calls.at(-1)![0]
+    expect(dining).toMatchObject({ id: 'spring-table' })
+    expect(dining.summary).toContain('吃过 1 顿饭')
+    session.closeFacility()
     session.destroy()
   })
 

@@ -50,7 +50,7 @@ export class PartnerMotion {
       const lift = a.plan.target.kind === 'lamp' || a.plan.target.kind === 'lamp-retrofit' ? 32 * Math.min(1, a.time / .4, Math.max(0, (.95 - a.time) / .2)) : 0
       a.friend.view.y = a.friend.baseY - lift
       const x = a.friend.view.x, y = a.friend.view.y, swing = Math.sin(Math.min(1, a.time / .6) * Math.PI)
-      const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' ? 0xa2dce0 : 0xffdf9d
+      const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' || a.plan.target.kind === 'watering' ? 0xa2dce0 : 0xffdf9d
       const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
       // 手边的采收篮 / 接头 / 提灯短动作，效果在动手的时刻才结算。

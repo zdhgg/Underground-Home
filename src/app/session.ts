@@ -4,6 +4,7 @@ import { dig, type DigResult } from '../core/dig'
 import { AtuOrders } from './atuOrders'
 import { RoomEditor, type RoomUI } from './roomEditor'
 import { SiteEditor, type SiteUI } from './siteEditor'
+import { FacilityPanel, facilityView, panelFacilityAt, type FacilityUI } from './facilityPanel'
 import { primaryGuideAction, type GuideAction } from './guideAction'
 import type { ConversationAnchor } from '../render/conversationAnchor'
 import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
@@ -70,6 +71,8 @@ export interface SessionHooks {
   onDiscovery?(active: boolean): void
   onRooms?(state: RoomUI): void
   onSites?(state: SiteUI): void
+  /** 已建设施的面板（菜园/灶台/餐桌）：null 表示关闭 */
+  onFacility?(state: FacilityUI): void
   onInventory?(inventory: Inventory): void
   onBag?(items: BagItem[]): void
   onBagRequested?(): void
@@ -190,6 +193,11 @@ export interface GameSession {
   selectSite(id: string): void
   siteKind(kind: SiteKind): void
   buildSite(): void
+  /** 设施面板的主要推进操作（收菜/浇水/开饭/去种菜），由对应伙伴或既有结算执行 */
+  facilityPrimary(): void
+  facilityPlant(): void
+  facilityLook(): void
+  closeFacility(): void
   cancelAction(): void
   findAtu(): void
   talkToPartner(id: string): void
@@ -321,6 +329,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   let atuOrders: AtuOrders | null = null
   let roomEditor: RoomEditor | null = null
   let siteEditor: SiteEditor | null = null
+  let facilityPanel: FacilityPanel | null = null
   let partnerOrders: PartnerOrders | null = null
   let currentWork: WorkUI | null = null
   /** 一次共餐演出：结算已完成，演出期间不再重复扣食物。 */
@@ -338,7 +347,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     const action = primaryGuideAction(world)
     const site = action.siteId ? siteById(action.siteId) : undefined
     const rect = site ?? (guide.kind !== 'none' ? guide.rect : null)
-    renderer.setHighlight(talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
+    renderer.setHighlight(talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || facilityPanel?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
       x: rect.x * TILE_SIZE, y: rect.y * TILE_SIZE,
       width: rect.w * TILE_SIZE, height: rect.h * TILE_SIZE,
       tone: guide.kind === 'dig' || guide.kind === 'collect' ? 'cyan' : 'amber',
@@ -611,6 +620,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     pushBuild()
     roomEditor?.refresh()
     siteEditor?.refresh()
+    facilityPanel?.refresh()
     hooks.onInventory?.({ ...world.inventory })
     hooks.onBag?.(bagItems(world))
     if (!lampMode) renderer.setLampPreview(null)
@@ -655,6 +665,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (traveling || buildMode !== 'none' || lampMode || renderer.isOverview || roomEditor?.active) return
     const conversation = partnerConversation(world, id)
     if (!conversation) return
+    facilityPanel?.close()
     // 主动聊天也算打过照面，之后下楼不再自动重播相遇对话。
     if (conversation.partnerId === 'xiaoman') world.exploration.metXiaoman = true
     talkingPartnerId = conversation.partnerId
@@ -675,7 +686,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (traveling || mealBusy()) return
     const action = primaryGuideAction(world)
     const site = siteById(action.siteId ?? 'first-nest')!
-    closeConversation(); roomEditor?.close(); siteEditor?.close()
+    closeConversation(); roomEditor?.close(); siteEditor?.close(); facilityPanel?.close()
     buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null
     renderer.setHoverCell(null); renderer.setLampPreview(null)
     if (siteBlueprintVisible(world, site) && !siteBuilt(world, site)) {
@@ -717,6 +728,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     }
     const site = siteAt(cell)
     if (site && siteBlueprintVisible(world, site) && !siteBuilt(world, site)) return 'pointer'
+    if (buildMode === 'none' && !lampMode && panelFacilityAt(world, cell.x, cell.y)) return 'pointer'
     if (cell.y >= 15) {
       if (!world.exploration.entered) return 'not-allowed'
       return isSpringTarget(cell) ? 'pointer' : 'crosshair'
@@ -839,6 +851,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   const handleTap = (cell: Cell): void => {
     if (mealing) { cancelMeal('🍽 大家先停一下，再点一次就好。'); return }
+    // 点到别处：设施面板让位（拖动看地图不收起，点别的目标才收起）。
+    if (facilityPanel?.active) facilityPanel.close()
     if (siteEditor?.working) { notify('阿土正在修建洞室，可以拖图看看，或点“停下来”。'); return }
     if (partnerOrders?.active) { notify('伙伴正在工作，可以看地图，或点“停下来”再选新目标。'); return }
     if (atuOrders?.active) {
@@ -910,11 +924,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return
     }
 
-    // 3) 种植槽：熟了就能收，没熟只给一句提示
+    // 3) 种植槽：熟了就叫小满收，没熟就请她浇一次水（照料也是玩家行动）
     const planter = planterAt(world, cell.x, cell.y)
     if (planter) {
       if (planter.growth < RIPE_STAGE) {
-        notify(`🌱 还没长熟：你每干一件事，它就长高一档（现在 ${planter.growth}/${RIPE_STAGE}）。`)
+        requestPartnerWork({ kind: 'watering', x: cell.x, y: cell.y })
         return
       }
       requestPartnerWork({ kind: 'harvest', ...cell })
@@ -1099,6 +1113,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   })
   siteEditor.refresh()
 
+  facilityPanel = new FacilityPanel({ world: () => world, emit: state => hooks.onFacility?.(state) })
+  facilityPanel.refresh()
+
   const completePartnerWork = (plan: WorkPlan): boolean => {
     const target = plan.target
     if (target.kind === 'harvest') {
@@ -1107,6 +1124,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.playPartnerReaction('xiaoman', '收好啦！新苗也种下了。')
       notify(`🥕 小满收了一份菜！家里有 ${world.farm.food} 份吃的。`)
       if (world.farm.harvests === 1) hooks.onMilestone?.({ emoji: '🥕', title: '第一份收成！', detail: '小满收好菜啦 · 可以请大家吃饭' })
+    } else if (target.kind === 'watering') {
+      // 浇水是一次照料：所有未熟的菜各长一档；与"干活长大"共用同一推进函数，不叠加。
+      const grown = advancePlanters(world)
+      if (grown.length === 0) return false
+      renderer.refreshFarm()
+      playWaterClue()
+      renderer.playBurst((target.x + .5) * TILE_SIZE, (target.y + .2) * TILE_SIZE, { color: 0x9ed7f2, count: 8, speed: 40 })
+      renderer.playPartnerReaction('xiaoman', '浇好啦，小芽喝饱了水！')
+      notify('💧 小满浇了水，菜又长了一截！接着干活，菜也会自己长大。')
     } else if (target.kind === 'water') {
       if (!canSupplyWater(world)) return false
       world.farm.waterSupplied = true
@@ -1151,6 +1177,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const requestPartnerWork = (target: WorkTarget): void => {
     if (traveling || partnerOrders?.active) return
     siteEditor?.close()
+    facilityPanel?.close()
     closeConversation(); roomEditor?.close(); buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null
     renderer.setHoverCell(null); renderer.setAtuTarget(null)
     partnerOrders?.request(target)
@@ -1159,6 +1186,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const toggleLamp = (): void => {
     if (mealBusy() || !world.exploration.springFound || traveling) return
     siteEditor?.close()
+    facilityPanel?.close()
     roomEditor?.close(); closeConversation()
     lampMode = !lampMode; buildMode = 'none'; candidate = null; pushProgress()
     notify(lampMode ? hasWideLampAbility(world) ? '🏮 点旧灯加装，或点挖空的洞壁装聚光灯，左右各照4格。' : '🏮 点挖空的泉水层洞壁，安一盏小灯。再点工具可以收起。' : '⛏ 继续自由挖掘吧。')
@@ -1168,7 +1196,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const startPlanting = (): void => {
     if (mealBusy() || traveling || !isFarmUnlocked(world)) return
     diggingSites = false
-    roomEditor?.close(); closeConversation()
+    roomEditor?.close(); closeConversation(); facilityPanel?.close()
     lampMode = false; buildMode = 'none'; candidate = null; hoverBuild = null
     renderer.setHoverCell(null); renderer.setLampPreview(null); renderer.setAtuTarget(null)
     renderer.focusWater()
@@ -1241,6 +1269,16 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
           renderer.setHoverCell(null)
           closeConversation(); siteEditor?.select(site.id); pushBuild(); pushHighlight(); return
         }
+        // 已建好的设施（菜园/灶台/餐桌）：点本体打开它的面板；菜槽本身仍走直点。
+        const facility = panelFacilityAt(world, cell.x, cell.y)
+        if (facility) {
+          closeConversation(); siteEditor?.close(); roomEditor?.close()
+          diggingSites = false
+          renderer.setHoverCell(null)
+          facilityPanel?.toggle(facility)
+          pushBuild(); pushHighlight()
+          return
+        }
       }
       if (roomEditor?.active && (!cell || roomEditor.tap(cell))) return
       // 实心地形始终保留挖掘/施工命中，不让角色的触屏容错抢走旁边岩块。
@@ -1266,6 +1304,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (roomEditor?.active) { renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('copy'); return }
       const site = cell && siteAt(cell)
       if (!traveling && buildMode === 'none' && site && siteBlueprintVisible(world, site) && !siteBuilt(world, site) && !planterAt(world, cell!.x, cell!.y)) {
+        renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('pointer'); return
+      }
+      if (!traveling && buildMode === 'none' && !lampMode && cell && panelFacilityAt(world, cell.x, cell.y)) {
         renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('pointer'); return
       }
       renderer.hoverPartner(screen && !traveling ? renderer.partnerAtScreen(screen) : null)
@@ -1336,6 +1377,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (siteEditor?.active) { siteEditor.close(); return }
     if (partnerOrders?.active) { partnerOrders.cancel(); return }
     if (roomEditor?.active) { if (atuOrders?.active) abortOrder('阿土停下来啦。'); else roomEditor.close(); return }
+    if (facilityPanel?.active) { facilityPanel.close(); return }
     if (talkingPartnerId || discovering) { closeConversation(); return }
     if (buildMode !== 'none' || lampMode) {
       buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null; pushProgress()
@@ -1430,6 +1472,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (atuOrders?.active) atuOrders.cancel()
     roomEditor?.close()
     siteEditor?.cancel(); siteEditor?.close()
+    facilityPanel?.close()
     endOrder()
     pointer.reset()
     closeConversation()
@@ -1489,6 +1532,67 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     resetToNewGame()
   }
 
+  /** 开饭：引导按钮、抽屉按钮与设施面板共用这一条唯一结算路径（serveMeal）。 */
+  const startMeal = (): void => {
+    if (mealing || traveling) return
+    const result = serveMeal(world)
+    if (!result.ok) {
+      notify(result.reason === 'no-food' ? '🍽 先收点菜再开饭。' : '🛏 先给伙伴安好小床，再请大家吃饭。')
+      return
+    }
+    mealing = true
+    scheduleSave()
+    if (!result.shared) {
+      // 旧存档 / 还没建灶台餐桌：保留原来的吃饭方式，仍然只结算一次。
+      renderer.focusWater()
+      playMealTime()
+      renderer.playMealCelebration()
+      renderer.playMoleReaction('开饭啦！')
+      notify(world.farm.food > 0
+        ? `🍽 伙伴们吃得好开心！还剩 ${world.farm.food} 份。`
+        : '🍽 伙伴们吃得好开心！再去收点菜吧。')
+      pushProgress()
+      mealTimer = window.setTimeout(() => finishMeal(), 1200)
+      return
+    }
+    const facilities = mealFacilities(world)!
+    const dining = facilities.dining
+    renderer.focusOn((dining.x + dining.w / 2) * TILE_SIZE, (dining.y + dining.h / 2) * TILE_SIZE)
+    playMealTime()
+    renderer.playKitchenCooking(facilities.kitchen)
+    notify('🍲 灶台热起来啦！大家去餐桌坐好。')
+    pushProgress()
+    // 保底收尾：即使画面被冻住，也不会把输入锁在演出里。
+    mealTimer = window.setTimeout(() => finishMeal(), 9000)
+    // 第一次围坐共餐（存档里累计的第 1 次）= 第二层章末完成态。
+    const firstShared = world.farm.sharedMeals === 1
+    renderer.playMealGather(planMealGathering(world), () => {
+      if (!mealing) return
+      renderer.playMealCelebration()
+      renderer.playPartnerReaction('xiaoman', '一起吃，饭更香！')
+      notify(`🍲 大家坐下来吃饭啦！还剩 ${world.farm.food} 份。`)
+      if (firstShared) {
+        hooks.onMilestone?.({ emoji: '🏡', title: '第 2 层 · 完成啦！', detail: '第一顿饭大家一起吃 · 有水、有菜、有饭，两层都亮了' })
+        // 回望：拉出整个家的剖面看一眼，再回到餐桌这边；拖动/缩放随时打断。
+        renderer.playChapterGlance()
+      }
+      window.clearTimeout(mealTimer)
+      mealTimer = window.setTimeout(() => finishMeal(), 2600)
+    })
+  }
+
+  /** 设施面板 →「自己摆菜槽」：进入种植槽摆放模式并把镜头带到泉边。 */
+  const facilityPlantNow = (): void => {
+    facilityPanel?.close()
+    if (traveling || !isFarmUnlocked(world)) return
+    closeConversation(); siteEditor?.close(); roomEditor?.close()
+    diggingSites = false
+    lampMode = false; buildMode = 'planter'; candidate = null; hoverBuild = null
+    renderer.setLampPreview(null); renderer.setAtuTarget(null); renderer.setHoverCell(null)
+    renderer.focusWater()
+    pushBuild(); pushProgress()
+  }
+
   return {
     setInputBlocked: blocked => {
       inputBlocked = blocked; pointer.reset()
@@ -1525,7 +1629,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     },
     openRooms: () => {
       if (mealBusy() || !world.progress.coreRepaired || traveling) return
-      closeConversation(); buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null; pushBuild()
+      closeConversation(); facilityPanel?.close(); buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null; pushBuild()
       diggingSites = false
       renderer.setHoverCell(null); renderer.setLampPreview(null); renderer.setAtuTarget(null)
       siteEditor?.open(cameraView.layer === 'water' ? 'water' : 'home', true)
@@ -1575,6 +1679,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (mealBusy()) return
       if (siteEditor?.working) siteEditor.cancel()
       siteEditor?.close()
+      facilityPanel?.close()
       roomEditor?.close()
       if (atuOrders?.active) atuOrders.cancel()
       if (traveling) return
@@ -1618,6 +1723,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     centerOnHome: () => {
       closeConversation()
       siteEditor?.close()
+      facilityPanel?.close()
       // 种植槽属于第二层；回第一层时收起，避免留下一个点不动的工具。
       if (buildMode === 'planter') { buildMode = 'none'; candidate = null; hoverBuild = null; pushBuild() }
       renderer.focusHome()
@@ -1625,6 +1731,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     lookDown: () => {
       siteEditor?.close()
       roomEditor?.close()
+      facilityPanel?.close()
       closeConversation()
       lampMode = false; renderer.setLampPreview(null)
       buildMode = 'none'
@@ -1637,6 +1744,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     showOverview: () => {
       siteEditor?.close()
       roomEditor?.close()
+      facilityPanel?.close()
       closeConversation()
       lampMode = false; renderer.setLampPreview(null)
       buildMode = 'none'
@@ -1721,52 +1829,27 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       })
     },
     feed: () => {
-      if (mealing || traveling) return
-      const result = serveMeal(world)
-      if (!result.ok) {
-        notify(result.reason === 'no-food' ? '🍽 先收点菜再开饭。' : '🛏 先给伙伴安好小床，再请大家吃饭。')
-        return
-      }
-      mealing = true
-      scheduleSave()
-      if (!result.shared) {
-        // 旧存档 / 还没建灶台餐桌：保留原来的吃饭方式，仍然只结算一次。
-        renderer.focusWater()
-        playMealTime()
-        renderer.playMealCelebration()
-        renderer.playMoleReaction('开饭啦！')
-        notify(world.farm.food > 0
-          ? `🍽 伙伴们吃得好开心！还剩 ${world.farm.food} 份。`
-          : '🍽 伙伴们吃得好开心！再去收点菜吧。')
-        pushProgress()
-        mealTimer = window.setTimeout(() => finishMeal(), 1200)
-        return
-      }
-      const facilities = mealFacilities(world)!
-      const dining = facilities.dining
-      renderer.focusOn((dining.x + dining.w / 2) * TILE_SIZE, (dining.y + dining.h / 2) * TILE_SIZE)
-      playMealTime()
-      renderer.playKitchenCooking(facilities.kitchen)
-      notify('🍲 灶台热起来啦！大家去餐桌坐好。')
-      pushProgress()
-      // 保底收尾：即使画面被冻住，也不会把输入锁在演出里。
-      mealTimer = window.setTimeout(() => finishMeal(), 9000)
-      // 第一次围坐共餐（存档里累计的第 1 次）= 第二层章末完成态。
-      const firstShared = world.farm.sharedMeals === 1
-      renderer.playMealGather(planMealGathering(world), () => {
-        if (!mealing) return
-        renderer.playMealCelebration()
-        renderer.playPartnerReaction('xiaoman', '一起吃，饭更香！')
-        notify(`🍲 大家坐下来吃饭啦！还剩 ${world.farm.food} 份。`)
-        if (firstShared) {
-          hooks.onMilestone?.({ emoji: '🏡', title: '第 2 层 · 完成啦！', detail: '第一顿饭大家一起吃 · 有水、有菜、有饭，两层都亮了' })
-          // 回望：拉出整个家的剖面看一眼，再回到餐桌这边；拖动/缩放随时打断。
-          renderer.playChapterGlance()
-        }
-        window.clearTimeout(mealTimer)
-        mealTimer = window.setTimeout(() => finishMeal(), 2600)
-      })
+      facilityPanel?.close()
+      startMeal()
     },
+    facilityPrimary: () => {
+      const id = facilityPanel?.id
+      if (!id) return
+      const primary = facilityView(world, id).primary
+      if (primary.kind === 'harvest' || primary.kind === 'watering') {
+        // 面板只派发目标：小满沿真实通路过去收/浇，结算与直点完全同一套。
+        requestPartnerWork({ kind: primary.kind, x: primary.x, y: primary.y })
+        return
+      }
+      if (primary.kind === 'meal') { facilityPanel?.close(); startMeal(); return }
+      if (primary.kind === 'plant') facilityPlantNow()
+    },
+    facilityPlant: facilityPlantNow,
+    facilityLook: () => {
+      const site = facilityPanel?.id ? siteById(facilityPanel.id) : undefined
+      if (site) renderer.focusOn((site.x + site.w / 2) * TILE_SIZE, (site.y + site.h / 2) * TILE_SIZE, 'building')
+    },
+    closeFacility: () => facilityPanel?.close(),
     toggleLamp,
     destroy: () => {
       gameAudio.setPlaying(false)

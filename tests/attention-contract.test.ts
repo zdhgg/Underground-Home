@@ -6,10 +6,11 @@ import { gameAudio, SOUND_SETTINGS_KEY } from '../src/render/gameAudio'
 import type { GameSession, SessionHooks, SessionProgress } from '../src/app/session'
 import type { RoomUI } from '../src/app/roomEditor'
 import { emptySiteUI } from '../src/app/siteEditor'
+import { emptyFacilityUI, type FacilityUI } from '../src/app/facilityPanel'
 import type { PartnerConversation } from '../src/core/partnerInteractions'
 
 // 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
-const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn() }))
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn(), facilityPrimary: vi.fn() }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
     harness.hooks = hooks
@@ -17,7 +18,7 @@ vi.mock('../src/app/session', () => ({
       titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
       startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
-      feed: harness.feed,
+      feed: harness.feed, facilityPrimary: harness.facilityPrimary,
     }
   },
 }))
@@ -40,7 +41,7 @@ function assertAttention(stage: HTMLElement, expected: string | null) {
   // 包括禁用的按钮：不能让第二个主操作以灰态继续占据主要关注区。
   const primary = stage.querySelectorAll('[data-primary-action]')
   expect(primary.length, '舞台只能有一个主要推进按钮').toBeLessThanOrEqual(1)
-  if (expected === 'guide' || expected === 'conversation' || expected === 'site') expect(primary).toHaveLength(1)
+  if (expected === 'guide' || expected === 'conversation' || expected === 'site' || expected === 'facility') expect(primary).toHaveLength(1)
 }
 const room = (active: boolean): RoomUI => ({ active, available: true, kind: 'home', width: 3, minWidth: 3, selectedId: null,
   placed: false, valid: true, dirty: true, message: '当前房间', detail: '', construction: false, completed: false,
@@ -50,6 +51,12 @@ const conversation: PartnerConversation = { partnerId: 'adeng', name: '阿灯', 
   lines: ['我是阿灯！', '一起准备小窝吧？'], upgrade: null, action: { id: 'prepare-nest', label: '去准备小窝' },
 }
 const nest = () => ({ ...emptySiteUI(), active: true, selected: 'first-nest', name: '两人小窝', canBuild: true })
+const facilityState = (over: Partial<FacilityUI> = {}): FacilityUI => ({
+  active: true, id: 'spring-garden', title: '泉边小菜园', icon: '🌱',
+  slots: [{ stage: 0 }, { stage: 3 }], summary: '熟了 1 槽 · 共 2 槽菜',
+  primary: { kind: 'harvest', label: '叫小满来收菜', x: 30, y: 21 },
+  hint: '点一下，小满走过去收。', canPlant: true, ...over,
+})
 
 describe('后续内容必须遵守的单一主要关注对象契约', () => {
   it('声音开关是安静的常驻辅助操作；切换不会打断发现、对话或施工，也不会增加主面板', async () => {
@@ -75,8 +82,25 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     assertAttention(stage, 'guide')
   })
 
-  it('第二层章末：第一顿饭是引导主操作；章末后主操作轮换为做一顿饭，不新增面板', async () => {
+  it('设施面板只显示当前设施和一个主要操作；让位与回位和引导面板一致', async () => {
     const { host, stage, hooks } = await mountGame()
+    hooks.onFacility?.(facilityState()); await nextTick()
+    assertAttention(stage, 'facility')
+    expect(stage.querySelectorAll('.facility-tools .slots span')).toHaveLength(2)
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe('叫小满来收菜')
+    expect(stage.querySelector('.build-tools')).toBeNull()
+    host.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); await nextTick()
+    expect(harness.facilityPrimary).toHaveBeenCalledTimes(1)
+    // 对话打开时设施面板让位；对话关闭后回到设施面板，最后关面板回到引导。
+    hooks.onPartnerConversation?.(conversation); await nextTick()
+    assertAttention(stage, 'conversation')
+    hooks.onPartnerConversation?.(null); await nextTick()
+    assertAttention(stage, 'facility')
+    hooks.onFacility?.(emptyFacilityUI()); await nextTick()
+    assertAttention(stage, 'guide')
+  })
+
+  it('第二层章末：第一顿饭是引导主操作；章末后主操作轮换为做一顿饭，不新增面板', async () => {    const { host, stage, hooks } = await mountGame()
     const progress = (over: Partial<SessionProgress>): SessionProgress => ({
       title: '请大家吃第一顿饭', speech: '灶台和餐桌都好啦！', outcome: '第一顿饭吃完，第二层就完整啦。',
       done: 11, total: 12, finished: false, relics: { found: 3, total: 3 }, ...over,

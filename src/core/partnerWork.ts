@@ -5,11 +5,11 @@ import { availablePartners, PARTNERS, partnerById } from './partners'
 import { LANDMARKS, type Cell, type WorkerId, type WorldState } from './world'
 import { canRetrofitLamp } from './lighting'
 
-export type WorkTarget = { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'lamp' | 'lamp-retrofit'; x: number }
+export type WorkTarget = { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'watering'; x: number; y: number } | { kind: 'lamp' | 'lamp-retrofit'; x: number }
 export interface WorkPlan { worker: WorkerId; target: WorkTarget; at: Cell; route: Cell[] }
 export const WORKERS: readonly WorkerId[] = PARTNERS.map(p => p.id).filter((id): id is WorkerId => id !== 'atu')
-export const workOwner = (target: WorkTarget): WorkerId => target.kind === 'harvest' ? 'xiaoman' : target.kind === 'water' ? 'xiaoquan' : 'adeng'
-export const workTitle = (target: WorkTarget): string => target.kind === 'harvest' ? '收菜' : target.kind === 'water' ? '接水管' : target.kind === 'lamp-retrofit' ? '加装聚光灯罩' : '装壁灯'
+export const workOwner = (target: WorkTarget): WorkerId => target.kind === 'harvest' || target.kind === 'watering' ? 'xiaoman' : target.kind === 'water' ? 'xiaoquan' : 'adeng'
+export const workTitle = (target: WorkTarget): string => target.kind === 'harvest' ? '收菜' : target.kind === 'water' ? '接水管' : target.kind === 'watering' ? '浇浇水' : target.kind === 'lamp-retrofit' ? '加装聚光灯罩' : '装壁灯'
 export const workerName = (id: WorkerId): string => partnerById(id)!.name
 export function workerHomeRoute(w: WorldState, p: Cell, returning?: WorkerId): Cell[] | null {
   if (!returning) return atuRoute(w, p, initialAtuPosition(w), true)
@@ -53,15 +53,21 @@ export function initializeWorkers(w: WorldState): boolean {
 }
 
 export function workAvailable(w: WorldState, t: WorkTarget): boolean {
-  return t.kind === 'harvest' ? (planterAt(w, t.x, t.y)?.growth ?? -1) >= RIPE_STAGE
-    : t.kind === 'water' ? canSupplyWater(w) : t.kind === 'lamp-retrofit' ? canRetrofitLamp(w, t.x) : canPlaceWallLamp(w, t.x)
+  if (t.kind === 'harvest') return (planterAt(w, t.x, t.y)?.growth ?? -1) >= RIPE_STAGE
+  if (t.kind === 'watering') {
+    const planter = planterAt(w, t.x, t.y)
+    return !!planter && planter.growth < RIPE_STAGE
+  }
+  return t.kind === 'water' ? canSupplyWater(w) : t.kind === 'lamp-retrofit' ? canRetrofitLamp(w, t.x) : canPlaceWallLamp(w, t.x)
 }
 
 export function planPartnerWork(w: WorldState, target: WorkTarget): { ok: true; plan: WorkPlan } | { ok: false; message: string } {
   const worker = workOwner(target), from = w.workers[worker]
   if (!partnerById(worker)?.joins(w) || !from) return { ok: false, message: `${workerName(worker)}还没准备好，先继续探索吧。` }
   if (!workAvailable(w, target)) return { ok: false, message: '这里还没准备好，看看设施的提示吧。' }
-  const cell = target.kind === 'water' ? LANDMARKS.spring : { x: target.x, y: target.kind === 'harvest' ? target.y : 21 }
+  const cell = target.kind === 'water' ? LANDMARKS.spring
+    : target.kind === 'harvest' || target.kind === 'watering' ? { x: target.x, y: target.y }
+      : { x: target.x, y: 21 }
   const options = target.kind === 'lamp' || target.kind === 'lamp-retrofit' ? [cell] : [{ x: cell.x - 1, y: cell.y }, { x: cell.x + 1, y: cell.y }, cell]
   const routes = options.map(to => atuRoute(w, from, to)).filter((r): r is Cell[] => r !== null)
   // 尽量停在设施旁，不踩进菜槽或泉水；同类位置再选较短路径。

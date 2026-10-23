@@ -8,6 +8,8 @@ import PartnerConversationPanel from './components/PartnerConversation.vue'
 import type { PartnerConversation } from './core/partnerInteractions'
 import RoomTools from './components/RoomTools.vue'
 import SiteTools from './components/SiteTools.vue'
+import FacilityTools from './components/FacilityPanel.vue'
+import { emptyFacilityUI, type FacilityUI } from './app/facilityPanel'
 import { emptySiteUI } from './app/siteEditor'
 import type { ConversationAnchor } from './render/conversationAnchor'
 import { freshInventory } from './core/world'
@@ -48,6 +50,7 @@ const work = ref<WorkUI | null>(null)
 const workers = ref<{ id: WorkerId; name: string; verb: string }[]>([])
 const partnerMenu = ref(false)
 const sites = ref(emptySiteUI())
+const facility = ref<FacilityUI>(emptyFacilityUI())
 const inventory = ref(freshInventory())
 const bag = ref<BagItem[]>([])
 const bagOpen = ref(false)
@@ -84,7 +87,8 @@ const legendHint = computed(() => {
   if (!exploration.value.found) return '🟫 点泥土挖过去　💧 看见泉水点一下它'
   if (!farm.value.unlocked) return '🚰 泉水找到啦 · 点「把水接到菜园」'
   if (farm.value.mealActive) return '🍲 大家正在吃饭 · 点地图或「停下来」可以先结束'
-  if (farm.value.ripe > 0) return '🥕 有菜熟了 · 点菜槽，小满来收'
+  if (farm.value.ripe > 0) return '🥕 有菜熟了 · 点菜槽或菜园面板，小满来收'
+  if (farm.value.planterCount > 0 && !farm.value.mealReady) return '💧 点没熟的菜或菜园面板，小满来浇水'
   if (farm.value.mealReady && farm.value.food > 0) return '🍲 灶台和餐桌都好了 · 做饭请大家吃饭'
   if (farm.value.mealReady) return '🍲 灶台和餐桌都好了 · 收点菜就能开饭'
   if (!farm.value.kitchen) return '🔨 点「泉边建设」修一个灶台'
@@ -209,6 +213,10 @@ onMounted(async () => {
         if (next.active && !sites.value.active) toastVisible.value = false
         sites.value = next
       },
+      onFacility: next => {
+        if (next.active) toastVisible.value = false
+        facility.value = next
+      },
       onInventory: next => { inventory.value = next },
       onBag: next => { bag.value = next },
       onBagRequested: () => openBag(bag.value.find(i => i.kind === 'relic' && i.count)?.id ?? 'seed-pouch'),
@@ -286,6 +294,14 @@ onBeforeUnmount(() => {
         @close="session?.closePartnerConversation()"
         @action="session?.partnerAction()"
       />
+      <FacilityTools
+        v-else-if="facility.active && !view.overview"
+        :state="facility"
+        @close="session?.closeFacility()"
+        @primary="session?.facilityPrimary()"
+        @plant="session?.facilityPlant()"
+        @look="session?.facilityLook()"
+      />
       <GuidePanel v-else-if="!sites.working && !view.overview && build.mode === 'none' && !exploration.lampMode" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
         <template #quick-action>
           <button class="talk-action guide-primary" data-primary-action type="button" :disabled="exploration.traveling" @click="performGuide">{{ progress.action?.label ?? '看看能源石' }}</button>
@@ -310,7 +326,7 @@ onBeforeUnmount(() => {
         <button type="button" @click="session?.findAtu()">⌖ 找到阿土</button>
         <button v-if="exploration.traveling && !work" type="button" @click="session?.cancelAction()">停下来</button>
       </div>
-      <section v-if="rooms.available && !rooms.active && !sites.active && !sites.working && !work && !conversation && !discovering && !view.overview" class="build-tools" aria-label="建设工具">
+      <section v-if="rooms.available && !rooms.active && !sites.active && !sites.working && !work && !conversation && !discovering && !view.overview && !facility.active" class="build-tools" aria-label="建设工具">
         <div class="build-buttons">
           <button type="button" :aria-pressed="build.mode === 'none' && build.digging" @click="session?.setBuildMode('none')">⛏ 挖掘找材料</button>
           <button v-if="rooms.available" type="button" :disabled="exploration.traveling" @click="session?.openRooms()">🔨 {{ view.layer === 'home' ? '修建洞室' : '泉边建设' }}</button>
