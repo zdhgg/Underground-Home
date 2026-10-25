@@ -578,7 +578,7 @@ onBeforeUnmount(() => {
 .toast-enter-active, .toast-leave-active { transition: opacity .18s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; }
 
-@media (min-width: 721px) and (max-width: 1120px) { .top { flex-wrap: wrap; gap: 6px; }.top :deep(.depth-nav) { width: 100%; justify-content: space-between; }.top :deep(.depth-nav button) { flex: 1; }.brand-text small { display: none; } }
+@media (min-width: 721px) and (max-width: 1840px) { .top { flex-wrap: wrap; gap: 6px; }.top :deep(.depth-nav) { width: 100%; justify-content: space-between; }.top :deep(.depth-nav button) { flex: 1; }.brand-text small { display: none; } }
 @media (max-width: 720px) {
   .tools-toggle { width: 44px; padding: 8px; font-size: 0; }.tools-toggle:first-letter { font-size: 18px; }
   .sound-toggle { order: 0; width: 44px; padding: 8px; }
