@@ -4,7 +4,7 @@ import { DINING_SITE_ID, KITCHEN_SITE_ID, sharedMealReady } from '../core/meal'
 import type { WorldState } from '../core/world'
 
 export interface GuideAction {
-  id: 'focus' | 'site' | 'water' | 'plant' | 'power' | 'pickaxe' | 'chain' | 'travel' | 'meal'
+  id: 'focus' | 'site' | 'water' | 'plant' | 'power' | 'pickaxe' | 'chain' | 'travel' | 'meal' | 'deep' | 'hall' | 'garden' | 'reservoir' | 'ventilation' | 'ruins' | 'finale'
   label: string
   siteId?: string
 }

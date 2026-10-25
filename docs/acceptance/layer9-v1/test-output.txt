@@ -1,0 +1,617 @@
+
+ RUN  v5.0.5 D:/My Programs/Underground-Home
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 终章九层设施和九格纪念图案在人物后，窄屏目标不沉底，主动全景允许平移且不自动返回
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 终章九层设施和九格纪念图案在人物后，窄屏目标不沉底，主动全景允许平移且不自动返回
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第八层设施、已修复图案在人物后，八层不新增伙伴；窄屏目标在面板上方
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第八层设施、已修复图案在人物后，八层不新增伙伴；窄屏目标在面板上方
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第七层设施与风机反馈均在人物后侧，铃铃独立造型、真实移动和窄屏目标不沉底
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第七层设施与风机反馈均在人物后侧，铃铃独立造型、真实移动和窄屏目标不沉底
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第六层插画在伙伴后侧、水位在石池插画前侧，团团独立造型可走动且小屏目标不沉底
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第六层插画在伙伴后侧、水位在石池插画前侧，团团独立造型可走动且小屏目标不沉底
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第五层设施在角色后侧、苔苔使用独立造型且床位有效，当前菌床光路与小屏定位可恢复
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第五层设施在角色后侧、苔苔使用独立造型且床位有效，当前菌床光路与小屏定位可恢复
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四层大厅插画嵌在空洞后侧，餐桌和纪念墙在伙伴之前；六人演出实际包含五位伙伴和独立阿土
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四层大厅插画嵌在空洞后侧，餐桌和纪念墙在伙伴之前；六人演出实际包含五位伙伴和独立阿土
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 最低晶簇层在窄屏定位时留在面板上方，不被地图底界挤回下半屏
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 最低晶簇层在窄屏定位时留在面板上方，不被地图底界挤回下半屏
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第七层送礼抵达只在玩家未接管镜头时定位大厅，拖图和收起不会被抢回
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 第七层送礼抵达只在玩家未接管镜头时定位大厅，拖图和收起不会被抢回
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 收起、拖图或缩放后，晶簇层抵达回调不会再次抢回镜头
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 收起、拖图或缩放后，晶簇层抵达回调不会再次抢回镜头
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 苔斑位于家具后面；设施建成与撤销时立即更新，不必等下一次挖掘
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 苔斑位于家具后面；设施建成与撤销时立即更新，不必等下一次挖掘
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 开场自然结束与任意阶段跳过得到同一镜头和角色，世界始终不变
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 开场自然结束与任意阶段跳过得到同一镜头和角色，世界始终不变
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 专业伙伴按已保存站位待命，床位保留且不会出现床上分身；工作反馈不拉镜头
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 专业伙伴按已保存站位待命，床位保留且不会出现床上分身；工作反馈不拉镜头
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土用40px图片站在原地面；夜里脸部可辨，阿灯仍在黑暗下躲藏
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土用40px图片站在原地面；夜里脸部可辨，阿灯仍在黑暗下躲藏
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 探索使用同一个阿土；出发时隐藏大厅分身，取消未落盘的移动后恢复
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 探索使用同一个阿土；出发时隐藏大厅分身，取消未落盘的移动后恢复
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土素材加载失败仍能进入游戏、画出备用角色并继续探索
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土素材加载失败仍能进入游戏、画出备用角色并继续探索
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土素材加载失败仍能进入游戏、画出备用角色并继续探索
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 阿土素材加载失败仍能进入游戏、画出备用角色并继续探索
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 64px PNG 换入空精灵后仍为32×32，锚点和网格不变
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 64px PNG 换入空精灵后仍为32×32，锚点和网格不变
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 0：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 0：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 1：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 1：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 2：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 2：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 3：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 3：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 4：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 4：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 5：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 5：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 6：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 6：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 7：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 7：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 8：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 8：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 9：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 9：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 10：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 10：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 11：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 11：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 12：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 12：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 13：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 13：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 14：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 14：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 15：叠图在实心格上，空格不留精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 四方向组合 15：叠图在实心格上，空格不留精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 土岩实心交界不画洞边；挖掘交界后两种材质各用自己的叠图
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 土岩实心交界不画洞边；挖掘交界后两种材质各用自己的叠图
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 挖掘、撤销恢复四周边缘与原贴图，且清除已挖格的悬停框
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 挖掘、撤销恢复四周边缘与原贴图，且清除已挖格的悬停框
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 草边只覆盖地表实心格，竖井保持开口，地图外不产生洞壁
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 草边只覆盖地表实心格，竖井保持开口，地图外不产生洞壁
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 全图刷新、重新加载保持坐标变体一致，不改世界或存档字段
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 全图刷新、重新加载保持坐标变体一致，不改世界或存档字段
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 单格刷新只更新5格并复用精灵；批量重叠邻域去重、地图边界安全
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 单格刷新只更新5格并复用精灵；批量重叠邻域去重、地图边界安全
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 能源核心三态复用同一PNG、保持比例与槽心对齐，渲染不改变任务和存档数据
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 能源核心三态复用同一PNG、保持比例与槽心对齐，渲染不改变任务和存档数据
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 能源石埋藏时只有微光，挖开显示PNG，收集后消失
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 能源石埋藏时只有微光，挖开显示PNG，收集后消失
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 探索演出可以安全取消：没落镐就不改世界，重新委托才真的挖开
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 探索演出可以安全取消：没落镐就不改世界，重新委托才真的挖开
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 安装动画结束才启动和点灯；任务及存档立即完成，载入已完成世界不重播
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 安装动画结束才启动和点灯；任务及存档立即完成，载入已完成世界不重播
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 安装期间手动平移仍能取消自动拉远，晶体安装与启动继续完成
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 安装期间手动平移仍能取消自动拉远，晶体安装与启动继续完成
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 梯架和7盏未通电灯具位于原坐标、黑暗遮罩之下，刷新复用静态精灵
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 梯架和7盏未通电灯具位于原坐标、黑暗遮罩之下，刷新复用静态精灵
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 顶灯仍按原顺序逐盏点亮，光晕与PNG灯芯位置一致且不重建灯具
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 顶灯仍按原顺序逐盏点亮，光晕与PNG灯芯位置一致且不重建灯具
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮核心只解除暖窝层黑暗，第二层始终保留独立遮罩
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮核心只解除暖窝层黑暗，第二层始终保留独立遮罩
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 电送到第二层：遮罩淡下去，电线才出现
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 电送到第二层：遮罩淡下去，电线才出现
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 向下镜头可取消，返回家园恢复操作视角，全景覆盖地表到基岩
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 向下镜头可取消，返回家园恢复操作视角，全景覆盖地表到基岩
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 还没点亮：阿灯缩在角落，只有尾光、没有名字；阿土照常站在大厅
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 还没点亮：阿灯缩在角落，只有尾光、没有名字；阿土照常站在大厅
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 点亮之后：阿灯从角落飞出来，落地后有名字、不再躲着
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 点亮之后：阿灯从角落飞出来，落地后有名字、不再躲着
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 每个伙伴带着自己的物种 id：画出来的不是同一个球
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 每个伙伴带着自己的物种 id：画出来的不是同一个球
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 已点亮的存档直接站着，不重播飞出来的演出
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 点亮与阿灯 > 已点亮的存档直接站着，不重播飞出来的演出
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 四位伙伴保留各自轮廓、原落点和名字；播放动画不改变世界
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 四位伙伴保留各自轮廓、原落点和名字；播放动画不改变世界
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 某一位素材失败只使用她的备用造型，其他伙伴继续使用图片
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 某一位素材失败只使用她的备用造型，其他伙伴继续使用图片
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 某一位素材失败只使用她的备用造型，其他伙伴继续使用图片
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 某一位素材失败只使用她的备用造型，其他伙伴继续使用图片
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 四位入住后使用各自闭眼头部，32px兔耳也装得进原床位
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 四位入住后使用各自闭眼头部，32px兔耳也装得进原床位
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 载入带睡眠舱的存档时：老住户直接睡在床上，第二层的小满在洞穴里等床
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 载入带睡眠舱的存档时：老住户直接睡在床上，第二层的小满在洞穴里等床
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建成刷新只重建舱体，伙伴仍留在避难所等待出发
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建成刷新只重建舱体，伙伴仍留在避难所等待出发
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建好第一间床：只有老住户入住；下到第二层才遇见小满
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建好第一间床：只有老住户入住；下到第二层才遇见小满
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 建成后沿空洞通道走到舱门，钻进被窝才触发庆祝回调
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 路径不可达时兜底直接上床，不把伙伴留在半路
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 路径不可达时兜底直接上床，不把伙伴留在半路
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 进入第二层、水还没找到就建了第二间床：只渲染三位伙伴，空一个床位等小泉
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 进入第二层、水还没找到就建了第二间床：只渲染三位伙伴，空一个床位等小泉
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 找到水之后，泉水层和营地各多出一位等床的新朋友
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 找到水之后，泉水层和营地各多出一位等床的新朋友
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 第二间舱的入场只搬新舱那两位，老住户继续睡在自己的床上
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 第二间舱的入场只搬新舱那两位，老住户继续睡在自己的床上
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 种植槽与水管：按档位画出不同外观，引水之后才出现水管
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 种植槽与水管：按档位画出不同外观，引水之后才出现水管
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 两间舱的存档重新载入：四位伙伴各自睡在自己的舱里
+第二层环境素材加载失败，使用备用绘制。
+
+stderr | tests/terrain-renderer.test.ts > PNG 世界渲染（地形与能源核心） > 睡眠舱入场与休息 > 两间舱的存档重新载入：四位伙伴各自睡在自己的舱里
+晶簇层 workshop 素材未加载，使用备用绘制。
+晶簇层 rig 素材未加载，使用备用绘制。
+晶簇层 lift 素材未加载，使用备用绘制。
+晶簇层 ayan 素材未加载，使用备用绘制。
+
+··············································································································································································································································································································································································································································································································································································································································································································
+
+ Test Files  57 passed (57)
+      Tests  686 passed (686)
+   Start at  01:59:37
+   Duration  92.93s (tests 66%, import 21%, transform 8%, environment 4%)
+
+    Isolate  57 workers spawned · ~274ms startup each (spawn + environment, per file)
+             at least ~15.34s faster with isolate: false — reuses workers across files instead of one per file
+
+JSON report written to D:/My Programs/Underground-Home/docs/acceptance/layer9-v1/test-results.json

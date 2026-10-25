@@ -6,6 +6,7 @@ import { inspectCrack, upgradePickaxe } from '../src/core/exploration'
 import { canSendPowerDown, powerLinePath, sendPowerDown } from '../src/core/power'
 import { explorationGuide, guideHighlight } from '../src/core/missions'
 import { deserialize, serialize } from '../src/core/persistence'
+import { facilityView, panelFacilityAt } from '../src/app/facilityPanel'
 
 /** 第一夜基本做完：两间床、四位伙伴、水引上来了、收过一次菜 */
 function readyForPower(): WorldState {
@@ -89,6 +90,17 @@ describe('电向下：第一层是总电源', () => {
     world.farm.sharedMeals = 1
     expect(explorationGuide(world)).toMatchObject({ done: 12, total: 12, finished: true })
     expect(guideHighlight(world).kind).toBe('none')
+  })
+
+  it('能源核心可直接点击查看状态，并把送电作为唯一升级操作', () => {
+    const world = readyForPower()
+    expect(panelFacilityAt(world, LANDMARKS.generator.x, LANDMARKS.generator.y)).toBe('energy-core')
+    expect(facilityView(world, 'energy-core')).toMatchObject({
+      title: '能源核心',
+      primary: { kind: 'power', label: '扩大供电范围' },
+    })
+    sendPowerDown(world)
+    expect(facilityView(world, 'energy-core').primary).toEqual({ kind: 'none', label: '供电已覆盖第二层' })
   })
 })
 

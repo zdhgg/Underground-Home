@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-26",
+  "chapter": 8,
+  "title": "旧地脉遗迹",
+  "worldVersion": 22,
+  "map": [
+    44,
+    100
+  ],
+  "tests": {
+    "command": "npx vitest run --maxWorkers=1 --reporter=default --reporter=json --outputFile.json=docs/acceptance/layer8-v1/test-results.json",
+    "success": true,
+    "files": 55,
+    "passed": 652,
+    "failed": 0,
+    "skipped": 0,
+    "addedSinceChapter7": 29
+  },
+  "build": {
+    "command": "npm run build",
+    "exitCode": 0,
+    "modules": 965,
+    "mainJsKB": 900.58,
+    "mainGzipKB": 292.22,
+    "warning": "Main chunk exceeds 500 kB; loading and device performance not yet checked"
+  },
+  "diffCheck": {
+    "exitCode": 0,
+    "output": "warning: in the working copy of 'src/app/facilityPanel.ts', LF will be replaced by CRLF the next time Git touches it\n"
+  },
+  "art": {
+    "files": 3,
+    "bytes": 8264538,
+    "generator": "built-in ImageGen",
+    "transparencyInspected": true
+  },
+  "liveBrowserQA": {
+    "completed": false,
+    "reason": "Local browser use is disabled in Work settings",
+    "screenshots": []
+  },
+  "dependenciesAdded": false,
+  "deployed": false,
+  "chapter9Implemented": false
+}

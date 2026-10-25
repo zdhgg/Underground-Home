@@ -1,3 +1,6 @@
+import linglingUrl from '../assets/art/ventilation/lingling-v1.png'
+import tuantuanUrl from '../assets/art/reservoir/tuantuan-v1.png'
+import taitaiUrl from '../assets/art/garden/taitai-v2.png'
 import { Assets, Container, Graphics, Rectangle, Sprite, Texture } from 'pixi.js'
 import type { MolePose } from './moleVisual'
 import adengIdleUrl from '../assets/art/characters/adeng-idle-v1.png'
@@ -6,10 +9,12 @@ import xiaomanIdleUrl from '../assets/art/characters/xiaoman-idle-v1.png'
 import xiaomanBlinkUrl from '../assets/art/characters/xiaoman-blink-v1.png'
 import xiaoquanIdleUrl from '../assets/art/characters/xiaoquan-idle-v1.png'
 import xiaoquanBlinkUrl from '../assets/art/characters/xiaoquan-blink-v1.png'
+import ayanUrl from '../assets/art/deep/ayan-v1.png'
+import amuUrl from '../assets/art/deep/amu-v1.png'
 
-export type CompanionId = 'adeng' | 'xiaoman' | 'xiaoquan'
+export type CompanionId = 'adeng' | 'xiaoman' | 'xiaoquan' | 'ayan' | 'amu' | 'taitai' | 'tuantuan' | 'lingling'
 export interface CompanionTextures { idle: Texture; blink: Texture; rest: Texture }
-export type CompanionArt = Record<CompanionId, CompanionTextures | null>
+export type CompanionArt = Partial<Record<CompanionId, CompanionTextures | null>>
 
 /** 大厅伙伴只接受画面状态，不读取世界、任务或存档。阿土也满足这个接口。 */
 export interface CharacterVisual {
@@ -21,9 +26,14 @@ export interface CharacterVisual {
 
 /** 头部裁切比例只用于睡眠；三种不同轮廓不共用同一个圆形身体。 */
 const STYLES = {
+  lingling: { height:43,restHeight:29,restY:-7,head:[.22,0,.64,.64],urls:[linglingUrl,linglingUrl] },
   adeng: { height: 36, restHeight: 28, restY: -8, head: [0.42, 0, 0.58, 0.56], urls: [adengIdleUrl, adengBlinkUrl] },
   xiaoman: { height: 44, restHeight: 32, restY: -11, head: [0, 0, 1, 0.59], urls: [xiaomanIdleUrl, xiaomanBlinkUrl] },
   xiaoquan: { height: 40, restHeight: 28, restY: -3, head: [0.33, 0, 0.67, 0.45], urls: [xiaoquanIdleUrl, xiaoquanBlinkUrl] },
+  ayan: { height: 43, restHeight: 29, restY: -7, head: [.4, 0, .6, .5], urls: [ayanUrl, ayanUrl] },
+  tuantuan: { height: 43, restHeight: 29, restY: -6, head: [.3, 0, .7, .62], urls: [tuantuanUrl, tuantuanUrl] },
+  taitai: { height: 38, restHeight: 26, restY: -5, head: [0, 0, 1, 1], urls: [taitaiUrl, taitaiUrl] },
+  amu: { height: 44, restHeight: 30, restY: -7, head: [0, 0, .6, .5], urls: [amuUrl, amuUrl] },
 } as const
 
 async function loadCompanion(id: CompanionId): Promise<CompanionTextures | null> {
@@ -48,14 +58,15 @@ async function loadCompanion(id: CompanionId): Promise<CompanionTextures | null>
 
 /** 按角色单独回退：一位的图片失败不会影响另两位或阻止游戏启动。 */
 export async function loadCompanionTextures(): Promise<CompanionArt> {
-  const [adeng, xiaoman, xiaoquan] = await Promise.all([
+  const [adeng, xiaoman, xiaoquan, ayan, amu, taitai, tuantuan, lingling] = await Promise.all([
     loadCompanion('adeng'), loadCompanion('xiaoman'), loadCompanion('xiaoquan'),
+    loadCompanion('ayan'), loadCompanion('amu'), loadCompanion('taitai'), loadCompanion('tuantuan'), loadCompanion('lingling'),
   ])
-  return { adeng, xiaoman, xiaoquan }
+  return { adeng, xiaoman, xiaoquan, ayan, amu, taitai, tuantuan, lingling }
 }
 
 export function createCompanionVisual(id: string, art: CompanionArt): CompanionVisual | null {
-  if (id !== 'adeng' && id !== 'xiaoman' && id !== 'xiaoquan') return null
+  if (id !== 'adeng' && id !== 'xiaoman' && id !== 'xiaoquan' && id !== 'ayan' && id !== 'amu' && id !== 'taitai' && id !== 'tuantuan' && id !== 'lingling') return null
   const textures = art[id]
   return textures ? new CompanionVisual(id, textures) : null
 }
@@ -105,7 +116,7 @@ export class CompanionVisual implements CharacterVisual {
     const float = flying ? 2 + Math.sin(time * 2.5) * 1.5 : 0
     this.figure.position.set(0, 13 - hop - float)
     this.figure.scale.set(this.facing, 1 + Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.02 : 0.012))
-    this.figure.rotation = resting || hidden ? 0 : Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.035 : flying ? 0.02 : 0.006)
+    this.figure.rotation = resting || hidden || this.id === 'taitai' ? 0 : Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.035 : flying ? 0.02 : 0.006)
     this.shadow.visible = !resting && !hidden && !flying && pose !== 'climb'
     this.quilt.visible = resting
     this.drawTail(time, light, resting, hidden, float)

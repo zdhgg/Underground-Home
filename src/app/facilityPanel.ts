@@ -2,7 +2,8 @@ import { planterAt, RIPE_STAGE } from '../core/farm'
 import { sharedMealReady } from '../core/meal'
 import { DINING_SITE_ID, KITCHEN_SITE_ID, siteById } from '../core/sites'
 import { foundRelics, RELICS } from '../core/relics'
-import type { WorldState } from '../core/world'
+import { LANDMARKS, type WorldState } from '../core/world'
+import { canSendPowerDown } from '../core/power'
 
 /**
  * 设施面板（S2 试点 + S4 储物架）：已建设施的交互面。
@@ -15,7 +16,7 @@ import type { WorldState } from '../core/world'
 
 /** 有交互面板的设施：预设洞室（菜园/灶台/餐桌）+ 自由摆放的储物架与育苗架。 */
 export const PANEL_FACILITY_IDS = ['spring-garden', KITCHEN_SITE_ID, DINING_SITE_ID] as const
-export type FacilityId = (typeof PANEL_FACILITY_IDS)[number] | 'storage-shelf' | 'nursery'
+export type FacilityId = (typeof PANEL_FACILITY_IDS)[number] | 'storage-shelf' | 'nursery' | 'energy-core'
 
 /** 菜园面板的状态图示：每一槽菜的生长档位。 */
 export interface FacilitySlot { stage: number }
@@ -28,6 +29,7 @@ export type FacilityPrimary =
   | { kind: 'meal'; label: string }
   | { kind: 'find-relic'; label: string }
   | { kind: 'browse-relics'; label: string }
+  | { kind: 'power'; label: string }
   | { kind: 'none'; label: string }
 
 /** 升级入口（一次只出现一项，且必须是孩子说得出的新做法；S5 首项：育苗架）。 */
@@ -60,6 +62,17 @@ export const emptyFacilityUI = (): FacilityUI => ({
 
 /** 调用方保证设施已建成（builtSites 里存在）。 */
 export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
+  if (id === 'energy-core') {
+    const powered = world.powerDown
+    return {
+      active: true, id, title: '能源核心', icon: '⚡', slots: [],
+      summary: powered ? '第一层和第二层都已通电' : '第一层已通电',
+      primary: canSendPowerDown(world) ? { kind: 'power', label: '扩大供电范围' } : { kind: 'none', label: powered ? '供电已覆盖第二层' : '等待梯道接通' },
+      hint: powered ? '能源核心正在稳定供电，下面的泉水层也亮起来啦。' : canSendPowerDown(world) ? '梯道已经接通，可以把电送到第二层。' : '先沿梯道走到第二层并把通路挖通。',
+      canPlant: false,
+      upgrade: null,
+    }
+  }
   const site = siteById(id)!
   if (id === 'spring-garden') {
     const slots = world.farm.planters.map((planter) => ({ stage: planter.growth }))
@@ -138,6 +151,7 @@ export function facilityView(world: WorldState, id: FacilityId): FacilityUI {
 
 /** 点到的格子是不是这批有面板的已建设施（菜槽本身走直点，不开面板）。 */
 export function panelFacilityAt(world: WorldState, x: number, y: number): FacilityId | null {
+  if (world.progress.coreRepaired && x >= LANDMARKS.generatorZone.x && x < LANDMARKS.generatorZone.x + LANDMARKS.generatorZone.w && y >= LANDMARKS.generatorZone.y && y < LANDMARKS.generatorZone.y + LANDMARKS.generatorZone.h) return 'energy-core'
   if (world.shelves.some(shelf => shelf.x === x && shelf.y === y)) return 'storage-shelf'
   if (world.nurseries.some(nursery => nursery.x === x && nursery.y === y)) return 'nursery'
   const site = PANEL_FACILITY_IDS

@@ -1,4 +1,19 @@
+import { FinaleScene,loadFinaleTextures } from './finaleScene'
+import type { FinaleFacilityKind } from '../core/world'
+import { RuinsScene,loadRuinsTextures } from './ruinsScene'
+import type { RuinsFacilityKind } from '../core/world'
+import { VentilationScene,loadVentilationTextures } from './ventilationScene'
+import type { VentilationFacilityKind } from '../core/world'
+import { ReservoirScene, loadReservoirTextures } from './reservoirScene'
+import type { ReservoirFacilityKind, WaterRoute } from '../core/world'
+import { GardenScene, loadGardenTextures } from './gardenScene'
+import type { GardenFacilityKind } from '../core/world'
+import { HallScene, loadHallTextures } from './hallScene'
+import type { HallFacilityKind } from '../core/world'
 import { playCoreStarted } from './waterSound'
+import { DeepScene } from './deepScene'
+import { loadDeepTextures } from './deepArt'
+import type { DeepFacilityKind } from '../core/world'
 import { gameAudio } from './gameAudio'
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite, type Ticker } from 'pixi.js'
 import {
@@ -279,9 +294,10 @@ const IDLE_SPOTS: Record<PartnerId, Cell> = {
   atu: { x: 18.6, y: 11 }, adeng: { x: 23.9, y: 11 },
   // 小满在泉水层的洞穴里等玩家；小泉找到水后才到泉边/大厅。
   xiaoman: { x: 25.4, y: 21 }, xiaoquan: { x: 25.3, y: 11 },
+  ayan: { x: 36, y: 21 }, amu: { x: 32, y: 33 }, taitai: { x: 36, y: 58 }, tuantuan: { x: 12, y: 70 }, lingling:{x:36,y:82},
 }
 /** 阿土的备用造型也用暖灰褐色，其他伙伴保留原配色。 */
-const FRIEND_COLORS: Record<PartnerId, number> = { atu: 0xb49478, adeng: 0xb9a7e0, xiaoman: 0xe9b6a7, xiaoquan: 0xe5cf95 }
+const FRIEND_COLORS: Record<PartnerId, number> = { atu: 0xb49478, adeng: 0xb9a7e0, xiaoman: 0xe9b6a7, xiaoquan: 0xe5cf95, ayan: 0xb89a76, amu: 0xb57b50, taitai: 0x9aaa78, lingling: 0x9a829a, tuantuan: 0xa57952 }
 
 /** 还没点亮时，阿灯缩在大厅右下角，贴着岩壁 */
 const LAMP_CORNER = { x: 25.4, y: 10 } as const
@@ -321,6 +337,25 @@ function paintFriend(body: Graphics, color: number, pose: FriendPose, partnerId:
   body.clear()
   if (pose === 'rest') {
     paintResting(body, color, partnerId)
+    return
+  }
+  if(partnerId==='lingling'){
+    body.poly([-10,-4,-26,-17,-22,4,-10,10]).fill(0x978297);body.poly([10,-4,26,-17,22,4,10,10]).fill(0x978297)
+    body.ellipse(-6,-21,4,9).fill(color);body.ellipse(6,-21,4,9).fill(color)
+  }
+  if (partnerId === 'tuantuan') {
+    body.ellipse(-14, 7, 12, 6).fill(0x795e48).stroke({ width: 1.5, color: FRIEND_OUTLINE })
+    body.circle(1, 0, 12).fill(color).stroke({ width: 2, color: FRIEND_OUTLINE })
+    body.circle(-7, -11, 3).fill(color); body.circle(8, -11, 3).fill(color)
+    body.circle(-3, -3, 1.5).fill(FRIEND_OUTLINE); body.circle(5, -3, 1.5).fill(FRIEND_OUTLINE)
+    body.roundRect(-1, 3, 5, 5, 1).fill(0xfff1d4)
+    return
+  }
+  if (partnerId === 'taitai') {
+    body.ellipse(0, 8, 19, 5).fill(0x9aaa78).stroke({ width: 1.5, color: FRIEND_OUTLINE })
+    body.circle(-5, -3, 13).fill(0xaa815d).stroke({ width: 1.5, color: FRIEND_OUTLINE })
+    body.circle(-5, -3, 7).stroke({ width: 2, color: 0x7d5f43 })
+    for (const x of [9, 16]) { body.moveTo(x, 7).lineTo(x + 1, -13).stroke({ width: 3, color }); body.circle(x + 1, -13, 3).fill(0xe4dfb7); body.circle(x + 2, -13, 1).fill(FRIEND_OUTLINE) }
     return
   }
   paintBackFeatures(body, color, partnerId)
@@ -488,6 +523,13 @@ export class PixiWorldRenderer {
   private readonly partnerFeedback = new PartnerFeedback()
   private readonly ambient = new AmbientLife()
   private readonly roomScene = new RoomScene()
+  private readonly finaleScene=new FinaleScene()
+  private readonly ruinsScene=new RuinsScene()
+  private readonly ventilationScene=new VentilationScene()
+  private readonly reservoirScene=new ReservoirScene()
+  private readonly gardenScene = new GardenScene()
+  private readonly hallScene = new HallScene()
+  private readonly deepScene = new DeepScene()
   private roomPreview: RoomPreview | null = null
   private readonly explorationScene: ExplorationScene
   private readonly openingScene: OpeningScene
@@ -553,7 +595,15 @@ export class PixiWorldRenderer {
       preference: 'webgl',
     })
     host.appendChild(app.canvas)
-    return new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures, moleTextures, companionTextures, surfaceTextures, nestTextures, loungeTextures, collectionTextures, environmentTextures, facilityTextures)
+    const renderer = new PixiWorldRenderer(app, textures, energyCoreTexture, crystalTexture, fixtureTextures, moleTextures, companionTextures, surfaceTextures, nestTextures, loungeTextures, collectionTextures, environmentTextures, facilityTextures)
+    renderer.deepScene.setArt(await loadDeepTextures())
+    renderer.hallScene.setArt(await loadHallTextures())
+    renderer.gardenScene.setArt(await loadGardenTextures())
+    renderer.reservoirScene.setArt(await loadReservoirTextures())
+    renderer.finaleScene.setArt(await loadFinaleTextures())
+    renderer.ruinsScene.setArt(await loadRuinsTextures())
+    renderer.ventilationScene.setArt(await loadVentilationTextures())
+    return renderer
   }
 
   private constructor(
@@ -594,6 +644,13 @@ export class PixiWorldRenderer {
       this.surfaceScene.view,
       this.explorationScene.background,
       this.roomScene.view,
+      this.deepScene.view,
+      this.hallScene.view,
+      this.gardenScene.view,
+      this.reservoirScene.view,
+      this.ventilationScene.view,
+      this.ruinsScene.view,
+      this.finaleScene.view,
       // 蓝图属于岩层里的标记，应该压在地形上、角色和设施下面，避免挡住阿土。
       this.roomScene.overlay,
       this.lightingScene.view,
@@ -610,6 +667,13 @@ export class PixiWorldRenderer {
       this.glowLayer,
       createStrataLabels(),
       this.explorationScene.view,
+      this.deepScene.foreground,
+      this.hallScene.preview,
+      this.gardenScene.foreground,
+      this.reservoirScene.foreground,
+      this.ventilationScene.foreground,
+      this.ruinsScene.foreground,
+      this.finaleScene.foreground,
       this.openingScene.view,
       this.lamps,
       this.farmFlow,
@@ -815,11 +879,58 @@ export class PixiWorldRenderer {
   }
 
   refreshExploration(): void {
+    this.refreshDeep()
+    if (this.world) this.hallScene.refresh(this.world)
+    if (this.world) this.gardenScene.refresh(this.world)
+    if (this.world) this.reservoirScene.refresh(this.world)
+    if (this.world) this.ventilationScene.refresh(this.world)
+    if (this.world) this.ruinsScene.refresh(this.world)
+    if (this.world) this.finaleScene.refresh(this.world)
     if (this.world) this.lightingScene.refresh(this.world)
     if (this.world) this.explorationScene.refresh(this.world)
     if (this.world) this.ambient.refresh(this.world)
     this.syncMoleVisibility()
   }
+  refreshDeep(): void { if (this.world) this.deepScene.refresh(this.world) }
+  setFinalePreview(kind:FinaleFacilityKind|null,x:number|null):void{if(this.world)this.finaleScene.placePreview(this.world,kind,x)}
+  /** 玩家主动回望；没有计时返回，也不锁平移和缩放。 */
+  showFinalePanorama():void{this.cancelCameraTween();this.glance=null;this.overview=false;this.manualCamera=true;this.camera=overviewCamera(this.viewport);this.applyCamera()}
+  setRuinsPreview(kind:RuinsFacilityKind|null,x:number|null):void{if(this.world)this.ruinsScene.placePreview(this.world,kind,x)}
+  setVentilationPreview(kind:VentilationFacilityKind|null,x:number|null):void{if(this.world)this.ventilationScene.placePreview(this.world,kind,x)}
+  setReservoirPreview(kind:ReservoirFacilityKind|null,x:number|null):void{if(this.world)this.reservoirScene.placePreview(this.world,kind,x)}
+  playReservoirFlow(route:WaterRoute):void{this.reservoirScene.startFlow(route)}
+  stopReservoirFlow():void{this.reservoirScene.stopFlow()}
+  setGardenPreview(kind: GardenFacilityKind | null, x: number | null): void { if (this.world) this.gardenScene.placePreview(this.world, kind, x) }
+  setHallPreview(kind: HallFacilityKind | null, x: number | null): void { if (this.world) this.hallScene.placePreview(this.world, kind, x) }
+  playHallWork(at: Cell, done: () => void): void { this.explorationScene.work({ x: at.x, y: at.y + 1 }, () => {}, done) }
+  setDeepPreview(kind: DeepFacilityKind | null, x: number | null): void { if (this.world) this.deepScene.placePreview(this.world, kind, x) }
+  focusCrystal(): void { this.focusOn(25 * TILE_SIZE, 32 * TILE_SIZE, 'building') }
+  beginDeepCamera(): void { this.manualCamera = false }
+  releaseDeepCamera(): void { this.manualCamera = true }
+  finishChapterArrival(at:Cell):void{if(!this.manualCamera&&!this.overview)this.focusOn((at.x+.5)*TILE_SIZE,(at.y-1)*TILE_SIZE,'building')}
+  finishDeepArrival(): void { if (!this.manualCamera) this.focusCrystal() }
+  playDeepLift(from: number, to: number, done: () => void): void {
+    const w = this.world
+    if (!w || w.exploration.shaftX === null) return
+    const x = w.exploration.shaftX
+    const passenger = this.friends.find(f => f.partnerId === 'amu')
+    this.explorationScene.setRiding(true)
+    if (passenger) passenger.view.scale.set(.7)
+    this.manualCamera = false
+    this.deepScene.travelLift(w, from, to, () => {
+      this.explorationScene.setRiding(false)
+      if (passenger) passenger.view.scale.set(1)
+      done()
+    }, y => {
+      this.explorationScene.positionLift({ x: x - .18, y })
+      if (passenger) { passenger.inEntrance = true; passenger.view.position.set((x + .5) * TILE_SIZE + 7, (y + .6) * TILE_SIZE); passenger.baseY = passenger.view.y }
+      if (!this.manualCamera && !this.overview) {
+        this.camera = centerOn((x + .5) * TILE_SIZE, (y - 1) * TILE_SIZE, this.viewport, this.camera.zoom)
+        this.applyCamera()
+      }
+    })
+  }
+  cancelDeepAnimation(): void { this.reservoirScene.stopFlow(); this.deepScene.cancel(); this.explorationScene.setRiding(false); this.cancelExplorationAnimation(); this.cancelPartnerWork(); this.refreshDeep() }
   setLampPreview(cell: Cell | null): void { if (this.world) this.lightingScene.showPreview(this.world, cell) }
   playExplorationTravel(points: Cell[], done: () => void, step?: (cell: Cell) => void): void {
     this.explorationScene.travel(points, done, step)
@@ -1249,9 +1360,10 @@ export class PixiWorldRenderer {
     this.overview = false
     this.cancelCameraTween()
     this.camera = centerOn(worldX, worldY, this.viewport, Math.max(1, this.camera.zoom))
-    if (context === 'building' && this.viewport.width <= 720) this.camera = clampCamera({
+    // 窄屏面板占据下半屏；最低一层也允许留出面板后的安静背景，不能被地图底界挤回面板下面。
+    if (context === 'building' && this.viewport.width <= 720) this.camera = {
       ...this.camera, y: worldY - this.viewport.height * .25 / this.camera.zoom,
-    }, this.viewport)
+    }
     this.applyCamera()
   }
 
@@ -1264,6 +1376,7 @@ export class PixiWorldRenderer {
   }
 
   zoomBy(deltaZoom: number, anchor?: { x: number; y: number }): void {
+    this.manualCamera = true
     if (this.overview) {
       if (deltaZoom > 0) this.focusHome()
       return
@@ -1387,6 +1500,10 @@ export class PixiWorldRenderer {
     this.partnerMotion.update(dt)
     this.updateEffects(dt)
     this.explorationScene.update(dt)
+    this.deepScene.update(this.world, this.elapsed, dt)
+    this.gardenScene.update(this.world, this.elapsed)
+    this.reservoirScene.update(this.world, dt)
+    this.ventilationScene.update(this.world, dt)
     this.followAtuAtEdge(dt)
     this.partnerFeedback.update(dt)
     this.publishConversationAnchor()

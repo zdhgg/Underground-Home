@@ -1,7 +1,14 @@
+import { finaleConnected,finaleLadderCell,FINALE_FOOT } from './finaleTopology'
+import { ruinsConnected,ruinsLadderCell,RUINS_FOOT } from './ruinsTopology'
+import { ventilationConnected, ventilationLadderCell, VENTILATION_FOOT } from './ventilationTopology'
+import { reservoirConnected, reservoirLadderCell, RESERVOIR_FOOT } from './reservoirTopology'
+import { gardenConnected, gardenLadderCell, GARDEN_FOOT } from './gardenTopology'
 import { podBlocksPassage } from './passages'
 import { canDig, type DigResult } from './dig'
 import { canStand, isShaftColumn, shaftConnected } from './exploration'
 import { TILE, type Cell, type WorldState } from './world'
+import { deepConnected, deepLadderCell, DEEP_FOOT, mineralCell } from './deepTopology'
+import { hallConnected, hallLadderCell, HALL_FOOT } from './hallTopology'
 
 export const sameCell = (a: Cell | null, b: Cell): boolean => a?.x === b.x && a.y === b.y
 const occupied = (w: WorldState, x: number, y: number): boolean => w.pods.some(p => podBlocksPassage(w, p) && x >= p.x && x < p.x + 3 && y >= p.y && y < p.y + 2)
@@ -9,7 +16,14 @@ const clear = (w: WorldState, x: number, y: number): boolean => w.tiles[y]?.[x] 
 
 /** 脚所在格 + 上方净空，覆盖40px身体。梯道是唯一允许上下移动的交通。 */
 export function atuCanStand(w: WorldState, p: Cell, deep = false): boolean {
-  return p.x > 0 && p.x < w.width - 1 && p.y >= 11 && p.y <= 21
+  return p.x > 0 && p.x < w.width - 1 && p.y >= 11 && p.y <= FINALE_FOOT
+    && (p.y <= RUINS_FOOT || finaleLadderCell(w,p.x,p.y) || w.finale.entered || (deep && finaleConnected(w)))
+    && (p.y <= VENTILATION_FOOT || ruinsLadderCell(w,p.x,p.y) || w.ruins.entered || (deep && ruinsConnected(w)))
+    && (p.y <= RESERVOIR_FOOT || ventilationLadderCell(w,p.x,p.y) || w.ventilation.entered || (deep && ventilationConnected(w)))
+    && (p.y <= GARDEN_FOOT || reservoirLadderCell(w, p.x, p.y) || w.reservoir.entered || (deep && reservoirConnected(w)))
+    && (p.y <= HALL_FOOT || gardenLadderCell(w, p.x, p.y) || w.garden.entered || (deep && gardenConnected(w)))
+    && (p.y <= DEEP_FOOT || hallLadderCell(w, p.x, p.y) || w.hall.entered || (deep && hallConnected(w)))
+    && (p.y <= 21 || deepLadderCell(w, p.x, p.y) || w.deep.entered || (deep && deepConnected(w)))
     && (p.y < 19 || w.exploration.entered || (deep && shaftConnected(w)))
     && clear(w, p.x, p.y) && clear(w, p.x, p.y - 1) && canStand(w, p.x, p.y)
 }
@@ -26,7 +40,7 @@ export function atuRoute(w: WorldState, from: Cell, to: Cell, deep = false): Cel
       return result
     }
     for (const n of [{ x: p.x - 1, y: p.y }, { x: p.x + 1, y: p.y }, { x: p.x, y: p.y - 1 }, { x: p.x, y: p.y + 1 }]) {
-      if (n.y !== p.y && (!isShaftColumn(p.x) || p.x !== w.exploration.shaftX)) continue
+      if (n.y !== p.y && ((!isShaftColumn(p.x) && !deepLadderCell(w, p.x, p.y) && !hallLadderCell(w, p.x, p.y) && !gardenLadderCell(w, p.x, p.y) && !reservoirLadderCell(w, p.x, p.y) && !ventilationLadderCell(w,p.x,p.y) && !ruinsLadderCell(w,p.x,p.y) && !finaleLadderCell(w,p.x,p.y)) || p.x !== w.exploration.shaftX)) continue
       const key = `${n.x},${n.y}`
       if (!previous.has(key) && atuCanStand(w, n, deep)) { previous.set(key, p); queue.push(n) }
     }
@@ -36,7 +50,7 @@ export function atuRoute(w: WorldState, from: Cell, to: Cell, deep = false): Cel
 
 export function moveDestination(w: WorldState, from: Cell, clicked: Cell): Cell[] | null {
   if (w.tiles[clicked.y]?.[clicked.x] !== TILE.EMPTY) return null
-  const limit = clicked.y < 12 ? 11 : 21
+  const limit = clicked.y < 12 ? 11 : clicked.y < 22 ? 21 : clicked.y < 34 ? DEEP_FOOT : clicked.y < 47 ? HALL_FOOT : clicked.y < 59 ? GARDEN_FOOT : clicked.y < 71 ? RESERVOIR_FOOT : clicked.y < 83 ? VENTILATION_FOOT : clicked.y < 95 ? RUINS_FOOT : FINALE_FOOT
   for (let y = Math.max(11, clicked.y); y <= limit; y++) {
     if (w.tiles[y]?.[clicked.x] !== TILE.EMPTY) break
     const route = atuRoute(w, from, { x: clicked.x, y })
@@ -45,17 +59,17 @@ export function moveDestination(w: WorldState, from: Cell, clicked: Cell): Cell[
   return null
 }
 
-export interface SoilPlan { target: Cell; stand: Cell; route: Cell[]; lift: 0 | 1; overhead?: true }
+export interface SoilPlan { target: Cell; stand: Cell; route: Cell[]; lift: 0 | 1 | 2; overhead?: true }
 export type SoilPlanning = { ok: true; plan: SoilPlan } | { ok: false; message: string; blocker?: Cell; failure?: DigResult }
 
 /** 暴露的侧面才能接触；下两格地面施工，第三格需一格高踏台。踏台不能叠加或放在梯子上。 */
 export function soilPlan(w: WorldState, from: Cell, target: Cell): SoilPlanning {
   const permission = canDig(w, target.x, target.y)
   if (!permission.ok) return { ok: false, message: '', failure: permission }
-  if (permission.tile !== TILE.SOIL) return { ok: false, message: '裂纹岩要用小铁镐。' }
+  if (permission.tile !== TILE.SOIL && !(permission.tile === TILE.ROCK && w.deep.hardPickaxe && mineralCell(target.x, target.y))) return { ok: false, message: '裂纹岩要用小铁镐。' }
   const options: SoilPlan[] = []
-  for (const dx of [-1, 1]) for (const dy of [0, 1, 2]) {
-    const stand = { x: target.x + dx, y: target.y + dy }, lift = dy === 2 ? 1 : 0
+  for (const dx of [-1, 1]) for (const dy of (target.y >= 43 ? [0, 1, 2, 3] : [0, 1, 2])) {
+    const stand = { x: target.x + dx, y: target.y + dy }, lift = (Math.max(0, dy - 1)) as 0 | 1 | 2
     if (!clear(w, stand.x, target.y)) continue
     if (lift && (!clear(w, stand.x, stand.y - 2) || w.tiles[stand.y + 1]?.[stand.x] === TILE.EMPTY)) continue
     const route = atuRoute(w, from, stand)

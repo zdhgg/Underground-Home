@@ -1,0 +1,100 @@
+
+> underground-home@0.2.0 build
+> vue-tsc --noEmit && vite build
+
+vite v8.3.4 building client environment for production...
+transforming...
+✓ 976 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                       1.18 kB │ gzip:   0.49 kB
+dist/assets/backgroundWorker-DaxSsipl.js              1.38 kB
+dist/assets/soil-variant-02-DiI47k7_.png              6.57 kB
+dist/assets/soil-variant-01-C02Qe35J.png              6.61 kB
+dist/assets/soil-CHflR7zr.png                         6.70 kB
+dist/assets/rock-sz4u6DdV.png                         8.03 kB
+dist/assets/rock-variant-02-DaxlFp7v.png              8.16 kB
+dist/assets/rock-variant-01-BqWPwMlK.png              8.47 kB
+dist/assets/atu-portrait-v1-g2uiBWQ5.png             57.74 kB
+dist/assets/cave-bg-D8TWKyeK.png                     89.32 kB
+dist/assets/lift-v1-DPJ9r_Bg.png                    172.51 kB
+dist/assets/amu-v1-CLuKilJB.png                     183.24 kB
+dist/assets/ayan-v1-Buy8oZOD.png                    186.53 kB
+dist/assets/xiaoman-blink-v1-1-o2Ai31.png           247.29 kB
+dist/assets/xiaoman-idle-v1-B1Rrfwxp.png            258.35 kB
+dist/assets/adeng-blink-v1-UIhsG7iD.png             344.47 kB
+dist/assets/xiaoquan-blink-v1-CQL8dZ3v.png          344.80 kB
+dist/assets/crystal-rig-v1-BicgeM8u.png             354.02 kB
+dist/assets/adeng-idle-v1-CEcVuenL.png              360.21 kB
+dist/assets/xiaoquan-idle-v1-CLgDBIgL.png           366.87 kB
+dist/assets/atu-blink-v1-kQ-SGpVo.png               367.00 kB
+dist/assets/atu-idle-v1-B8R3HysZ.png                382.30 kB
+dist/assets/atu-dig-side-v1-gZ13CK2n.png            411.68 kB
+dist/assets/atu-dig-up-v1-C4td-XzQ.png              445.86 kB
+dist/assets/workshop-v1-CFhvY63F.png                542.27 kB
+dist/assets/planter-v1-DW-ji6eK.png                 556.96 kB
+dist/assets/barrel-v1-BcdHJ_Qi.png                  594.27 kB
+dist/assets/energy-crystal-v1-BBWKmwUb.png          925.22 kB
+dist/assets/wrench-v1-C42jRI45.png                1,121.29 kB
+dist/assets/ceiling-lamp-v1-C0876UrF.png          1,292.64 kB
+dist/assets/planter-empty-v1-DW6xATES.png         1,446.65 kB
+dist/assets/shaft-ladder-v1-DPTrQFe3.png          1,449.71 kB
+dist/assets/dining-furniture-v1-fg2kf-8l.png      1,450.65 kB
+dist/assets/lingling-v1-DBsz6JDB.png              1,461.77 kB
+dist/assets/windwood-snow-v1-859T0Yu4.png         1,688.29 kB
+dist/assets/lamp-shade-v1-jfrB7y9j.png            1,710.41 kB
+dist/assets/storm-horizon-v1-BEsWzurP.png         1,721.44 kB
+dist/assets/stone-v1-tkG-R7Hw.png                 1,761.52 kB
+dist/assets/shelf-v1--nkj2z5g.png                 1,780.26 kB
+dist/assets/taitai-v2-B_3MvXrU.png                1,800.46 kB
+dist/assets/lounge-furniture-v1-CDy8JUF7.png      1,810.41 kB
+dist/assets/tuantuan-v1-BcGfhJbG.png              1,857.97 kB
+dist/assets/rill-v1-Bq364BDc.png                  1,885.75 kB
+dist/assets/table-v2-CsmFw1MM.png                 1,922.71 kB
+dist/assets/fan-v1-CVQ_o0om.png                   1,972.75 kB
+dist/assets/bell-v1-BCfW2hF4.png                  1,992.11 kB
+dist/assets/stove-furniture-v1-C02LQvGP.png       2,018.48 kB
+dist/assets/wood-v1-qtt4h_lu.png                  2,032.45 kB
+dist/assets/shell-v1-DpUWuXfA.png                 2,081.61 kB
+dist/assets/seed-pouch-v1-jNyNtVan.png            2,138.15 kB
+dist/assets/nest-bunks-v1-DCpJh7wg.png            2,199.67 kB
+dist/assets/spring-v1-8e2fxYCq.png                2,203.27 kB
+dist/assets/energy-core-body-v1-w-roTDyM.png      2,325.75 kB
+dist/assets/bag-v1-Bam19Ysx.png                   2,367.68 kB
+dist/assets/basin-v1-DwBWmNQW.png                 2,411.07 kB
+dist/assets/shelter-mouth-snow-v1-jdDEb0sI.png    2,450.85 kB
+dist/assets/wheel-v1-DY7rITB6.png                 2,452.96 kB
+dist/assets/nest-shell-v1-8aftnYL_.png            2,469.22 kB
+dist/assets/intake-v1-NqFabXuj.png                2,522.02 kB
+dist/assets/utility-shell-v1-C4qQKzc9.png         2,545.03 kB
+dist/assets/lounge-shell-v1-BNXmpylc.png          2,573.76 kB
+dist/assets/mosaic-v1-mIUi6s4U.png                2,588.87 kB
+dist/assets/folio-v1-lq2u_2A1.png                 2,618.26 kB
+dist/assets/bench-v1-CKa8BDPD.png                 2,642.69 kB
+dist/assets/heart-v1-BNAvW6cx.png                 2,810.90 kB
+dist/assets/fan-v1-C9Z05feX.png                   2,828.86 kB
+dist/assets/memory-v1-BouFFJj-.png                2,894.05 kB
+dist/assets/memory-v1-zwvz6M4z.png                3,013.29 kB
+dist/assets/table-v1-D8LhnOsA.png                 3,045.65 kB
+dist/assets/desk-v1-tZkCdwK3.png                  3,057.39 kB
+dist/assets/index-zQ_30NK7.css                       74.84 kB │ gzip:  12.30 kB
+dist/assets/webworkerAll-DTKlxd0e.js                  0.05 kB │ gzip:   0.06 kB
+dist/assets/getTextureBatchBindGroup-MvIF-nKe.js      0.34 kB │ gzip:   0.26 kB
+dist/assets/Cache-BhMPrw7z.js                         1.10 kB │ gzip:   0.55 kB
+dist/assets/canvasUtils-CKP7VAtb.js                   6.01 kB │ gzip:   2.04 kB
+dist/assets/getTexelRangeRects-BSXK62Lz.js           11.35 kB │ gzip:   2.99 kB
+dist/assets/init-WBtOIv2G.js                         14.84 kB │ gzip:   4.59 kB
+dist/assets/GCManagedHash-ChdVTLg1.js                19.34 kB │ gzip:   6.28 kB
+dist/assets/Filter-BsRXtV6l.js                       41.95 kB │ gzip:  12.02 kB
+dist/assets/browserAll-CNi3BZo_.js                   43.51 kB │ gzip:  11.25 kB
+dist/assets/RenderTargetSystem-BGIDDz61.js           58.80 kB │ gzip:  16.47 kB
+dist/assets/GraphicsContext-CWVfC9aB.js              61.68 kB │ gzip:  20.62 kB
+dist/assets/CanvasPool-CszDlLCi.js                   71.19 kB │ gzip:  23.30 kB
+dist/assets/index-BSuanhIy.js                       946.96 kB │ gzip: 303.51 kB
+
+✓ built in 1.38s
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.

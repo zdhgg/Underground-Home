@@ -1,0 +1,16 @@
+{
+  "numTotalTests": 557,
+  "numPassedTests": 557,
+  "numFailedTests": 0,
+  "success": true,
+  "startTime": 1792934545563,
+  "testFiles": 49,
+  "passedFiles": 49,
+  "build": {
+    "passed": true,
+    "entryKb": 778.0,
+    "entryGzipKb": 263.62,
+    "chunkWarning": true
+  },
+  "visualQA": "blocked: local browser use disabled in Work settings"
+}

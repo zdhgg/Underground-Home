@@ -21,27 +21,41 @@ export type TileType = (typeof TILE)[keyof typeof TILE]
 
 /** 地图尺寸（瓦片数）与瓦片像素尺寸 */
 export const MAP_WIDTH = 44
-export const MAP_HEIGHT = 28
+export const MAP_HEIGHT = 112
 export const TILE_SIZE = 32
 
 /** 地表行：y < SURFACE_Y 为天空，y >= SURFACE_Y 为地层 */
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 16
+export const WORLD_VERSION = 23
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
   home: { id: 'home', name: '第 1 层 · 暖窝层', top: 4, bottom: 12, focus: { x: 22, y: 10 } },
   seal: { id: 'seal', name: '坚硬岩层', top: 12, bottom: 15, focus: { x: 22, y: 13.5 } },
-  water: { id: 'water', name: '第 2 层 · 泉水层', top: 15, bottom: 28, focus: { x: 22, y: 20 } },
+  water: { id: 'water', name: '第 2 层 · 泉水层', top: 15, bottom: 23, focus: { x: 22, y: 20 } },
+  deepSeal: { id: 'deepSeal', name: '晶纹硬岩盖层', top: 23, bottom: 29, focus: { x: 22, y: 26 } },
+  crystal: { id: 'crystal', name: '第 3 层 · 晶簇层', top: 29, bottom: 35, focus: { x: 25, y: 32 } },
+  hallSeal: { id: 'hallSeal', name: '旧大厅岩盖', top: 35, bottom: 42, focus: { x: 22, y: 38 } },
+  hall: { id: 'hall', name: '第 4 层 · 暖光大厅', top: 42, bottom: 48, focus: { x: 25, y: 45 } },
+  gardenSeal: { id: 'gardenSeal', name: '潮湿岩盖', top: 48, bottom: 55, focus: { x: 22, y: 51 } },
+  garden: { id: 'garden', name: '第 5 层 · 菌光花园', top: 55, bottom: 60, focus: { x: 28, y: 57 } },
+  reservoirSeal: { id: 'reservoirSeal', name: '渗水岩盖', top: 60, bottom: 67, focus: { x: 22, y: 63 } },
+  reservoir: { id: 'reservoir', name: '第 6 层 · 蓄水回廊', top: 67, bottom: 72, focus: { x: 25, y: 69 } },
+  ventilationSeal: { id: 'ventilationSeal', name: '旧风井岩盖', top: 72, bottom: 79, focus: { x:22,y:75 } },
+  ventilation: { id: 'ventilation', name: '第 7 层 · 听风工区', top: 79, bottom: 84, focus: { x:25,y:81 } },
+  ruinsSeal: { id:'ruinsSeal',name:'旧地脉岩盖',top:84,bottom:91,focus:{x:22,y:87} },
+  finaleSeal:{id:'finaleSeal',name:'暖晶岩盖',top:96,bottom:103,focus:{x:22,y:99}},
+  finale:{id:'finale',name:'第 9 层 · 地心暖光',top:103,bottom:112,focus:{x:25,y:105}},
+  ruins: { id:'ruins',name:'第 8 层 · 旧地脉遗迹',top:91,bottom:96,focus:{x:25,y:93} },
 } as const
 /** 一层是一个可居住层高。两翼净高3格，共用y=12的实心地板。 */
 export const HOME_ROOM_TOP = 9
 export const HOME_FLOOR_Y = STRATA.home.bottom
 export type StratumId = keyof typeof STRATA
 export function stratumAt(y: number): StratumId {
-  return y < STRATA.seal.top ? 'home' : y < STRATA.water.top ? 'seal' : 'water'
+  return y < STRATA.seal.top ? 'home' : y < STRATA.water.top ? 'seal' : y < STRATA.deepSeal.top ? 'water' : y < STRATA.crystal.top ? 'deepSeal' : y < STRATA.hallSeal.top ? 'crystal' : y < STRATA.hall.top ? 'hallSeal' : y < STRATA.gardenSeal.top ? 'hall' : y < STRATA.garden.top ? 'gardenSeal' : y < STRATA.reservoirSeal.top ? 'garden' : y < STRATA.reservoir.top ? 'reservoirSeal' : y < STRATA.ventilationSeal.top ? 'reservoir' : y < STRATA.ventilation.top ? 'ventilationSeal' : y < STRATA.ruinsSeal.top ? 'ventilation' : y < STRATA.ruins.top ? 'ruinsSeal' : y < STRATA.finaleSeal.top ? 'ruins' : y < STRATA.finale.top ? 'finaleSeal' : 'finale'
 }
 export const isPreviewLayer = (y: number): boolean => y >= STRATA.water.top
 
@@ -156,8 +170,100 @@ export interface FarmState {
 
 export const freshFarm = (): FarmState => ({ waterSupplied: false, planters: [], food: 0, harvests: 0, sharedMeals: 0 })
 
+export type DeepFacilityKind = 'collector' | 'distributor' | 'workshop' | 'furnace' | 'lamp'
+export interface DeepFacility extends Cell { kind: DeepFacilityKind }
+export interface DeepState {
+  metAyan: boolean; entered: boolean; foundCrystal: boolean; foundMoss: boolean; foundDrill: boolean
+  crystals: number; ore: number; ingots: number; parts: number; batches: number
+  facilities: DeepFacility[]
+  precision: boolean; hardPickaxe: boolean; farLight: boolean; supported: boolean
+  lift: boolean; rides: number; completed: boolean
+}
+export const freshDeep = (): DeepState => ({
+  metAyan: false, entered: false, foundCrystal: false, foundMoss: false, foundDrill: false,
+  crystals: 0, ore: 0, ingots: 0, parts: 0, batches: 0, facilities: [],
+  precision: false, hardPickaxe: false, farLight: false, supported: false,
+  lift: false, rides: 0, completed: false,
+})
+
+export type HallFacilityKind = 'hall' | 'memory' | 'nest'
+export interface HallFacility extends Cell { kind: HallFacilityKind; podId?: number }
+export interface HallState {
+  inspected: boolean; braced: boolean; entered: boolean; liftExtended: boolean; powered: boolean
+  tableReady: boolean; muralFound: boolean; warmLightFound: boolean
+  facilities: HallFacility[]; feasts: number; completed: boolean
+}
+export const freshHall = (): HallState => ({ inspected: false, braced: false, entered: false, liftExtended: false, powered: false,
+  tableReady: false, muralFound: false, warmLightFound: false, facilities: [], feasts: 0, completed: false })
+
+export type GardenFacilityKind = 'rill' | 'bed' | 'lamp' | 'bench' | 'nest'
+export interface GardenFacility extends Cell { kind: GardenFacilityKind; growth?: 0 | 1 | 2; variety?: 'bell' | 'fan'; podId?: number }
+export interface GardenState {
+  inspected: boolean; drained: boolean; entered: boolean; metTaitai: boolean; liftExtended: boolean
+  foundSpores: boolean; foundRoot: boolean; facilities: GardenFacility[]; trail: number[]
+  harvests: number; walks: number; completed: boolean
+}
+export const freshGarden = (): GardenState => ({ inspected: false, drained: false, entered: false, metTaitai: false, liftExtended: false,
+  foundSpores: false, foundRoot: false, facilities: [], trail: [], harvests: 0, walks: 0, completed: false })
+
+export type ReservoirFacilityKind = 'intake' | 'basin' | 'gate' | 'wheel' | 'nest'
+export type WaterRoute = 'closed' | 'garden' | 'hall'
+export interface ReservoirFacility extends Cell { kind: ReservoirFacilityKind; podId?: number }
+export interface ReservoirState {
+  inspected: boolean; shored: boolean; entered: boolean; metTuantuan: boolean; liftExtended: boolean
+  facilities: ReservoirFacility[]; canal: number[]; valve: WaterRoute; water: number
+  fills: number; gardenDeliveries: number; hallDeliveries: number; irrigation: number
+  foundShell: boolean; foundReed: boolean; tours: number; completed: boolean
+}
+export const freshReservoir = (): ReservoirState => ({ inspected: false, shored: false, entered: false, metTuantuan: false, liftExtended: false,
+  facilities: [], canal: [], valve: 'closed', water: 0, fills: 0, gardenDeliveries: 0, hallDeliveries: 0, irrigation: 0,
+  foundShell: false, foundReed: false, tours: 0, completed: false })
+
+export type VentilationFacilityKind = 'inlet' | 'fan' | 'baffle' | 'bench' | 'nest'
+export type AirMode = 'off' | 'home' | 'work'
+export type WindCraft = 'chime' | 'mobile'
+export interface VentilationFacility extends Cell { kind: VentilationFacilityKind; podId?: number }
+export interface VentilationState {
+  inspected: boolean; braced: boolean; entered: boolean; metLingling: boolean; liftExtended: boolean
+  facilities: VentilationFacility[]; duct: number[]; mode: AirMode; tested: boolean
+  variety: WindCraft; readyCraft: WindCraft | null; hallArt: WindCraft | null
+  crafts: number; gifts: number; tours: number; completed: boolean; foundEcho: boolean; foundVane: boolean
+}
+export const freshVentilation = (): VentilationState => ({ inspected:false, braced:false, entered:false, metLingling:false, liftExtended:false,
+  facilities:[], duct:[], mode:'off', tested:false, variety:'chime', readyCraft:null, hallArt:null, crafts:0, gifts:0, tours:0, completed:false, foundEcho:false, foundVane:false })
+
+export type RuinsMotif = 'lamp' | 'spring' | 'tools'
+export type RuinsFacilityKind = 'desk' | 'mosaic' | 'light' | 'bench'
+export type RuinsEdition = 'together' | 'journey'
+export interface RuinsFacility extends Cell { kind:RuinsFacilityKind }
+export interface RuinsState {
+  inspected:boolean; braced:boolean; entered:boolean; liftExtended:boolean
+  facilities:RuinsFacility[]; revealed:RuinsMotif[]; rubbings:RuinsMotif[]; mounted:RuinsMotif[]
+  edition:RuinsEdition; todayReady:boolean; showcases:number; walks:number; rests:number; completed:boolean
+  foundSeal:boolean; foundFootprint:boolean
+}
+export const freshRuins = ():RuinsState => ({inspected:false,braced:false,entered:false,liftExtended:false,facilities:[],revealed:[],rubbings:[],mounted:[],edition:'together',todayReady:false,showcases:0,walks:0,rests:0,completed:false,foundSeal:false,foundFootprint:false})
+
+export type FinaleFacilityKind='beacon'|'table'|'memory'|'bench'
+export type FinaleTheme='lantern'|'garden'
+export interface FinaleFacility extends Cell{kind:FinaleFacilityKind}
+export interface FinaleState{
+ inspected:boolean;braced:boolean;entered:boolean;foundWarmth:boolean;liftExtended:boolean
+ facilities:FinaleFacility[];lit:boolean;foodReady:boolean;waterReady:boolean;chimePlaced:boolean;woven:boolean;storyReady:boolean
+ theme:FinaleTheme;decorations:number;foodTrips:number;waterTrips:number;feasts:number
+ reviewOpened:boolean;memoriesRead:number;completed:boolean;rests:number
+}
+export const freshFinale=():FinaleState=>({inspected:false,braced:false,entered:false,foundWarmth:false,liftExtended:false,facilities:[],lit:false,foodReady:false,waterReady:false,chimePlaced:false,woven:false,storyReady:false,theme:'lantern',decorations:0,foodTrips:0,waterTrips:0,feasts:0,reviewOpened:false,memoriesRead:0,completed:false,rests:0})
+
 /** 世界状态：一张固定小地图 + 第一夜进度 */
 export interface WorldState {
+  finale:FinaleState
+  ruins:RuinsState
+  ventilation: VentilationState
+  reservoir: ReservoirState
+  garden: GardenState
+  hall: HallState
+  deep: DeepState
   inventory: Inventory
   builtSites: BuiltSite[]
   version: number
@@ -216,9 +322,16 @@ export const freshExploration = (): ExplorationState => ({ clueFound: false, pic
  * 避免玩家误挖整张地图，同时给自由建设留出空间。
  */
 const SOFT_POCKETS: readonly Rect[] = [
+  {x:3,y:103,w:38,h:4},
+  {x:3,y:91,w:38,h:4},
+  { x:3,y:79,w:38,h:4 },
   { x: 2, y: HOME_ROOM_TOP, w: 15, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 左翼横向扩建，不再纵向掏成高洞
   { x: 26, y: HOME_ROOM_TOP, w: 16, h: HOME_FLOOR_Y - HOME_ROOM_TOP }, // 右翼与大厅共用同一地板
   { x: 3, y: 19, w: 38, h: 3 }, // 连续横向建设带，底面保持实心
+  { x: 3, y: 31, w: 38, h: 3 }, // 晶簇层：三格净高、自由横向建设
+  { x: 3, y: 43, w: 38, h: 4 }, // 暖光大厅：四格净高的公共建设带
+  { x: 3, y: 67, w: 38, h: 4 },
+  { x: 3, y: 55, w: 38, h: 4 }, // 菌光花园：四格净高，保留地板与前侧通路
 ]
 
 /**
@@ -226,6 +339,12 @@ const SOFT_POCKETS: readonly Rect[] = [
  * 大厅四周保持坚硬岩石，天然禁止破坏初始核心房间。
  */
 const CARVED_CAVES: readonly Rect[] = [
+  {x:10,y:103,w:9,h:4},
+  {x:24,y:103,w:15,h:4},
+  {x:10,y:91,w:9,h:4},
+  {x:24,y:91,w:15,h:4},
+  { x:10,y:79,w:9,h:4 },
+  { x:24,y:79,w:15,h:4 },
   { x: 17, y: 7, w: 9, h: 5 },
   { x: 21, y: 4, w: 2, h: 4 },
   { x: 15, y: 9, w: 2, h: 3 }, // 大厅左门落地连通，不必爬墙上床
@@ -233,6 +352,14 @@ const CARVED_CAVES: readonly Rect[] = [
   { x: 24, y: 18, w: 8, h: 4 },
   { x: 10, y: 19, w: 7, h: 3 },
   { x: 32, y: 19, w: 5, h: 3 },
+  { x: 14, y: 31, w: 5, h: 3 },
+  { x: 24, y: 30, w: 13, h: 4 },
+  { x: 24, y: 42, w: 14, h: 5 },
+  { x: 10, y: 43, w: 9, h: 4 },
+  { x: 24, y: 55, w: 15, h: 4 },
+  { x: 10, y: 55, w: 9, h: 4 },
+  { x: 10, y: 67, w: 9, h: 4 },
+  { x: 24, y: 67, w: 15, h: 4 },
 ]
 
 /** 创建第一夜初始世界 */
@@ -245,7 +372,16 @@ export function createInitialWorld(): WorldState {
   for (const x of BREAKTHROUGHS) for (let y = HOME_FLOOR_Y; y < 19; y++) {
     if (tiles[y][x] !== TILE.EMPTY) tiles[y][x] = TILE.WEAK_ROCK
   }
+  // 指定的小矿脉；硬岩镐只处理这几格，不开放整个地壳。
+  for (const y of [31, 32, 33]) for (const x of [10, 11]) tiles[y][x] = TILE.ROCK
   return {
+    finale:freshFinale(),
+    ruins:freshRuins(),
+    ventilation: freshVentilation(),
+    reservoir: freshReservoir(),
+    garden: freshGarden(),
+    hall: freshHall(),
+    deep: freshDeep(),
     version: WORLD_VERSION,
     width: MAP_WIDTH,
     height: MAP_HEIGHT,

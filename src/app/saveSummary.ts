@@ -1,5 +1,12 @@
+import { finaleGoal,finaleReady } from '../core/finale'
+import { ruinsGoal,ruinsReady } from '../core/ruins'
+import { ventilationGoal,ventilationReady } from '../core/ventilation'
+import { reservoirGoal, reservoirReady } from '../core/reservoir'
+import { gardenGoal, gardenReady } from '../core/garden'
 import { currentMission, explorationGuide, missionSummary } from '../core/missions'
 import type { WorldState } from '../core/world'
+import { hallGoal, hallReady } from '../core/hall'
+import { deepGoal, deepReady } from '../core/deep'
 
 /**
  * 进入页只需要一点点存档信息：上次玩到哪、第一阶段走到第几步、什么时候存的。
@@ -21,6 +28,22 @@ export type SaveStatus =
   | { status: 'broken'; error: string }
 
 export function summarizeSave(world: WorldState): SaveSummary {
+  if(finaleReady(world)){const g=finaleGoal(world);return{phase:world.finale.completed?'九层家园 · 终章已完成':'地心暖光 · 终章',missionTitle:g.title,done:g.done,total:20,finished:world.finale.completed}}
+  if(ruinsReady(world)){const g=ruinsGoal(world);return{phase:'旧地脉遗迹',missionTitle:g.title,done:world.ruins.completed?19:g.done,total:19,finished:world.ruins.completed}}
+  if(ventilationReady(world)){const g=ventilationGoal(world);return{phase:'听风工区',missionTitle:g.title,done:world.ventilation.completed?19:g.done,total:19,finished:world.ventilation.completed}}
+  if(reservoirReady(world)){const goal=reservoirGoal(world);return{phase:'蓄水回廊',missionTitle:goal.title,done:world.reservoir.completed?18:goal.done,total:18,finished:world.reservoir.completed}}
+  if (gardenReady(world)) {
+    const goal = gardenGoal(world)
+    return { phase: '菌光花园', missionTitle: goal.title, done: goal.done, total: 14, finished: world.garden.completed }
+  }
+  if (hallReady(world)) {
+    const goal = hallGoal(world)
+    return { phase: '暖光大厅', missionTitle: goal.title, done: goal.done, total: 11, finished: world.hall.completed }
+  }
+  if (deepReady(world)) {
+    const goal = deepGoal(world)
+    return { phase: '晶簇与工坊', missionTitle: goal.title, done: goal.done, total: 13, finished: world.deep.completed }
+  }
   const firstNight = missionSummary(world)
   if (firstNight.done < firstNight.total) {
     const mission = currentMission(world)

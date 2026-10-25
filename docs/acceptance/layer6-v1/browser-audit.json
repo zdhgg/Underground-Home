@@ -1,0 +1,39 @@
+{
+  "mobileViewport": {
+    "width": 398,
+    "height": 756,
+    "documentScrollWidth": 398,
+    "panel": {
+      "left": 17.996,
+      "right": 379.804,
+      "top": 367.016,
+      "bottom": 659.663
+    },
+    "primary": {
+      "top": 598.787,
+      "bottom": 646.786,
+      "height": 47.999
+    }
+  },
+  "desktopViewport": {
+    "width": 842,
+    "height": 526
+  },
+  "singleAttention": {
+    "panel": "reservoir",
+    "primary": "确认转动水闸",
+    "otherPanels": 0
+  },
+  "observedWaterStates": [
+    0,
+    3,
+    2,
+    1
+  ],
+  "observedGardenCareCredits": [
+    0,
+    2
+  ],
+  "completedTitle": "清水连回了八位伙伴的家",
+  "consoleWarningsOrErrors": []
+}

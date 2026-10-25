@@ -1,5 +1,17 @@
+import { completedFinale } from './fixtures/finaleWorld'
+import { loadFinaleTextures } from '../src/render/finaleScene'
+import { completedRuins } from './fixtures/ruinsWorld'
+import { loadRuinsTextures } from '../src/render/ruinsScene'
+import { completedVentilation } from './fixtures/ventilationWorld'
+import { loadVentilationTextures } from '../src/render/ventilationScene'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Container, Sprite, Text, Texture, TextureSource, type Graphics, type Ticker } from 'pixi.js'
+import { completedReservoir } from './fixtures/reservoirWorld'
+import { loadReservoirTextures } from '../src/render/reservoirScene'
+import { completedGarden } from './fixtures/gardenWorld'
+import { loadGardenTextures } from '../src/render/gardenScene'
+import { furnishedHall } from './fixtures/hallWorld'
+import { loadHallTextures } from '../src/render/hallScene'
 import { placePod } from '../src/core/build'
 import { dig } from '../src/core/dig'
 import { createDigHistory } from '../src/core/history'
@@ -23,6 +35,13 @@ import { loadCompanionTextures, type CompanionArt } from '../src/render/companio
 import { loadSurfaceTextures } from '../src/render/surfaceTextures'
 import type { SurfaceScene } from '../src/render/surfaceScene'
 import { OPENING_DURATION } from '../src/render/openingTimeline'
+
+vi.mock('../src/render/finaleScene',async original=>({...await original<typeof import('../src/render/finaleScene')>(),loadFinaleTextures:vi.fn()}))
+vi.mock('../src/render/ruinsScene',async original=>({...await original<typeof import('../src/render/ruinsScene')>(),loadRuinsTextures:vi.fn()}))
+vi.mock('../src/render/ventilationScene', async original=>({...await original<typeof import('../src/render/ventilationScene')>(),loadVentilationTextures:vi.fn()}))
+vi.mock('../src/render/reservoirScene', async original => ({ ...await original<typeof import('../src/render/reservoirScene')>(), loadReservoirTextures: vi.fn() }))
+vi.mock('../src/render/gardenScene', async (original) => ({ ...await original<typeof import('../src/render/gardenScene')>(), loadGardenTextures: vi.fn() }))
+vi.mock('../src/render/hallScene', async (original) => ({ ...await original<typeof import('../src/render/hallScene')>(), loadHallTextures: vi.fn() }))
 
 // 只替换 GPU/资源入口，地形使用真实 Pixi Sprite、Texture 和 Graphics。
 vi.mock('pixi.js', async (importOriginal) => {
@@ -159,6 +178,87 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   let moleArt: MoleTextures
   let companionArt: CompanionArt
 
+  it('终章九层设施和九格纪念图案在人物后，窄屏目标不沉底，主动全景允许平移且不自动返回',()=>{
+    const w=completedFinale();renderer.setWorld(w);const layer=view.worldLayer.getChildByLabel('finale-chapter')as Container;expect(view.worldLayer.getChildIndex(layer)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer));const art=layer.getChildByLabel('finale-memory')!,memories=layer.getChildByLabel('finale-nine-memories')!;expect(layer.getChildByLabel('finale-heart')).not.toBeNull();expect(layer.getChildByLabel('finale-table')).not.toBeNull();expect(layer.getChildIndex(memories)).toBeGreaterThan(layer.getChildIndex(art));expect(view.friends.filter(f=>f.view.visible)).toHaveLength(8);view.viewport={width:398,height:756};renderer.focusOn(32*TILE_SIZE,105*TILE_SIZE,'building');expect((107*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45);renderer.setFinalePreview('table',3);renderer.setFinalePreview(null,null);const snapshot=JSON.stringify(w);view.viewport={width:1200,height:800};renderer.showFinalePanorama();expect(renderer.isOverview).toBe(false);renderer.zoomBy(.4);const camera={...view.camera};renderer.panBy(8,9);expect(view.camera).not.toEqual(camera);const after={...view.camera};for(let i=0;i<100;i++)view.tick({deltaMS:100}as Ticker);expect(view.camera).toEqual(after);expect(JSON.stringify(w)).toBe(snapshot)
+  })
+  it('第八层设施、已修复图案在人物后，八层不新增伙伴；窄屏目标在面板上方',()=>{
+    const w=completedRuins();renderer.setWorld(w);const layer=view.worldLayer.getChildByLabel('ruins-chapter')as Container;expect(view.worldLayer.getChildIndex(layer)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer));const art=layer.getChildByLabel('ruins-mosaic')!,overlay=layer.getChildByLabel('ruins-restored-stories')!;expect(art).not.toBeNull();expect(layer.getChildIndex(overlay)).toBeGreaterThan(layer.getChildIndex(art));expect(layer.getChildByLabel('ruins-desk')).not.toBeNull();expect(view.friends.filter(f=>f.view.visible)).toHaveLength(8);view.viewport={width:398,height:756};renderer.focusOn(30*TILE_SIZE,93*TILE_SIZE,'building');expect((95*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45);renderer.setRuinsPreview('mosaic',32);renderer.setRuinsPreview(null,null)
+  })
+  it('第七层设施与风机反馈均在人物后侧，铃铃独立造型、真实移动和窄屏目标不沉底',()=>{
+    const w=completedVentilation();renderer.setWorld(w);const layer=view.worldLayer.getChildByLabel('ventilation-chapter')as Container;expect(view.worldLayer.getChildIndex(layer)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer));expect(layer.getChildByLabel('ventilation-fan')).not.toBeNull();expect(layer.getChildByLabel('ventilation-bench')).not.toBeNull();expect(layer.getChildByLabel('ventilation-motion')).not.toBeNull();const f=view.friends.find(f=>f.partnerId==='lingling')!;expect(f.view.getChildByLabel('lingling-sprite',true)).not.toBeNull();expect(view.friends.filter(f=>f.view.visible)).toHaveLength(8);let done=0;renderer.playPartnerTravel('lingling',[{x:36,y:82},{x:35,y:82}],()=>{},()=>done++);for(let i=0;i<4;i++)view.tick({deltaMS:100}as Ticker);expect(done).toBe(1);view.viewport={width:398,height:756};renderer.focusOn(30*TILE_SIZE,81*TILE_SIZE,'building');expect((83*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45);renderer.setVentilationPreview('bench',34);renderer.setVentilationPreview(null,null)
+  })
+  it('第六层插画在伙伴后侧、水位在石池插画前侧，团团独立造型可走动且小屏目标不沉底',()=>{
+    const w=completedReservoir();renderer.setWorld(w)
+    const layer=view.worldLayer.getChildByLabel('reservoir-chapter') as Container
+    expect(layer).toBeDefined();expect(view.worldLayer.getChildIndex(layer)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer))
+    const basin=layer.getChildByLabel('reservoir-basin')!,water=layer.getChildByLabel('reservoir-water-level')!
+    expect(layer.getChildIndex(water)).toBeGreaterThan(layer.getChildIndex(basin))
+    expect(layer.getChildByLabel('reservoir-intake')).not.toBeNull();expect(layer.getChildByLabel('reservoir-wheel')).not.toBeNull()
+    const friend=view.friends.find(f=>f.partnerId==='tuantuan')!;expect(friend.view.getChildByLabel('tuantuan-sprite',true)).not.toBeNull()
+    expect(view.friends.filter(f=>f.view.visible)).toHaveLength(7)
+    let done=0;renderer.playPartnerTravel('tuantuan',[{x:12,y:70},{x:13,y:70}],()=>{},()=>done++);for(let i=0;i<4;i++)view.tick({deltaMS:100} as Ticker);expect(done).toBe(1)
+    view.viewport={width:398,height:756};renderer.focusOn(26*TILE_SIZE,69*TILE_SIZE,'building');expect((71*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45)
+    renderer.playReservoirFlow('garden');for(let i=0;i<30;i++)view.tick({deltaMS:100} as Ticker);renderer.stopReservoirFlow()
+    renderer.setReservoirPreview('basin',33);renderer.setReservoirPreview(null,null)
+  })
+  it('第五层设施在角色后侧、苔苔使用独立造型且床位有效，当前菌床光路与小屏定位可恢复',()=>{
+    const w=completedGarden(); renderer.setWorld(w)
+    const garden=view.worldLayer.children.find(c=>c.label==='fungal-garden') as Container
+    expect(garden).toBeDefined(); expect(view.worldLayer.getChildIndex(garden)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer))
+    expect(garden.children.filter(c=>c instanceof Sprite).length).toBeGreaterThanOrEqual(2)
+    const taitai=view.friends.find(f=>f.partnerId==='taitai')!
+    expect(taitai).toBeDefined(); expect(taitai.view.visible).toBe(true)
+    expect(taitai.view.getChildByLabel('taitai-sprite',true)).not.toBeNull()
+    let done=0; renderer.playPartnerTravel('taitai',[{x:36,y:58},{x:35,y:58}],()=>{},()=>done++)
+    for(let i=0;i<4;i++) view.tick({deltaMS:100} as Ticker)
+    expect(done).toBe(1)
+    view.viewport={width:398,height:756}; renderer.focusOn(30*TILE_SIZE,57*TILE_SIZE,'building')
+    expect((59*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45)
+    renderer.setGardenPreview('bed',34); renderer.setGardenPreview(null,null)
+  })
+
+  it('四层大厅插画嵌在空洞后侧，餐桌和纪念墙在伙伴之前；六人演出实际包含五位伙伴和独立阿土', () => {
+    const w = furnishedHall(); renderer.setWorld(w)
+    const hall = view.worldLayer.children.find(c => c.label === 'warm-hall-chapter') as Container
+    expect(hall).toBeDefined(); expect(view.worldLayer.getChildIndex(hall)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer))
+    const sprites = hall.children.filter(c => c instanceof Sprite) as Sprite[]
+    expect(sprites).toHaveLength(3)
+    expect(sprites[0].width).toBeLessThanOrEqual(8 * TILE_SIZE)
+    expect(sprites[0].y).toBe(47 * TILE_SIZE)
+    expect(view.friends.filter(f => f.partnerId !== 'atu' && f.view.visible)).toHaveLength(5)
+    let worked = 0; renderer.playHallWork({ x: 28, y: 46 }, () => worked++)
+    for (let i = 0; i < 12; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(worked).toBe(1)
+    view.viewport = { width: 398, height: 756 }
+    renderer.focusOn(32 * TILE_SIZE, 45 * TILE_SIZE, 'building')
+    expect((47 * TILE_SIZE - view.camera.y) * view.camera.zoom).toBeLessThan(view.viewport.height * .45)
+  })
+
+  it('最低晶簇层在窄屏定位时留在面板上方，不被地图底界挤回下半屏', () => {
+    view.viewport = { width: 398, height: 756 }
+    renderer.focusOn(27.5 * TILE_SIZE, 32 * TILE_SIZE, 'building')
+    const footY = (34 * TILE_SIZE - view.camera.y) * view.camera.zoom
+    expect(footY).toBeLessThan(view.viewport.height * .45)
+    expect(footY).toBeGreaterThan(0)
+    renderer.focusCrystal()
+    expect((34 * TILE_SIZE - view.camera.y) * view.camera.zoom).toBeLessThan(view.viewport.height * .45)
+  })
+
+  it('第七层送礼抵达只在玩家未接管镜头时定位大厅，拖图和收起不会被抢回',()=>{
+    const focus=vi.spyOn(renderer,'focusOn');renderer.beginDeepCamera();renderer.releaseDeepCamera();renderer.finishChapterArrival({x:30,y:46});expect(focus).not.toHaveBeenCalled();renderer.beginDeepCamera();renderer.panBy(10,5);renderer.finishChapterArrival({x:30,y:46});expect(focus).not.toHaveBeenCalled();renderer.beginDeepCamera();renderer.finishChapterArrival({x:30,y:46});expect(focus).toHaveBeenCalledTimes(1)
+  })
+  it('收起、拖图或缩放后，晶簇层抵达回调不会再次抢回镜头', () => {
+    const focus = vi.spyOn(renderer, 'focusCrystal')
+    renderer.beginDeepCamera(); renderer.releaseDeepCamera(); renderer.finishDeepArrival()
+    expect(focus).not.toHaveBeenCalled()
+    renderer.beginDeepCamera(); renderer.panBy(20, 10); renderer.finishDeepArrival()
+    expect(focus).not.toHaveBeenCalled()
+    renderer.beginDeepCamera(); renderer.zoomBy(.1); renderer.finishDeepArrival()
+    expect(focus).not.toHaveBeenCalled()
+    renderer.beginDeepCamera(); renderer.finishDeepArrival()
+    expect(focus).toHaveBeenCalledTimes(1)
+  })
+
   it('初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根', () => {
     for (const [width, height] of [[1440, 800], [1024, 600], [927, 482], [760, 360]]) {
       view.viewport = { width, height }
@@ -172,6 +272,12 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   beforeEach(async () => {
     vi.stubGlobal('window', { devicePixelRatio: 1 })
     art = textures()
+    vi.mocked(loadFinaleTextures).mockResolvedValue({heart:texture(1024),table:texture(1024),memory:texture(1024)})
+    vi.mocked(loadRuinsTextures).mockResolvedValue({mosaic:texture(1024),desk:texture(1024),folio:texture(1024)})
+    vi.mocked(loadVentilationTextures).mockResolvedValue({lingling:texture(1024),fan:texture(1024),bench:texture(1024)})
+    vi.mocked(loadReservoirTextures).mockResolvedValue({ tuantuan:texture(1024), basin:texture(1024), wheel:texture(1024), intake:texture(1024) })
+    vi.mocked(loadGardenTextures).mockResolvedValue({ bell: texture(1024), fan: texture(1024), rill: texture(1024), taitai: texture(1024) })
+    vi.mocked(loadHallTextures).mockResolvedValue({ shell: new Texture({ source: new TextureSource({ width: 1800, height: 900 }) }), table: texture(1024), memory: texture(1024) })
     vi.mocked(loadNestTextures).mockResolvedValue({ shell: texture(1254), bunks: texture(1536) })
     vi.mocked(loadLoungeTextures).mockResolvedValue({ shell: texture(1618), furniture: texture(2172) })
     vi.mocked(loadCollectionTextures).mockResolvedValue({ shelf: texture(2172), items: { 'seed-pouch': texture(), wrench: texture(), 'lamp-shade': texture() } })
@@ -183,7 +289,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     }
     vi.mocked(loadMoleTextures).mockResolvedValue(moleArt)
     const companion = () => ({ idle: texture(512), blink: texture(512), rest: texture(256) })
-    companionArt = { adeng: companion(), xiaoman: companion(), xiaoquan: companion() }
+    companionArt = { adeng: companion(), xiaoman: companion(), xiaoquan: companion(), taitai: companion(), tuantuan: companion(),lingling:companion() }
     vi.mocked(loadCompanionTextures).mockResolvedValue(companionArt)
     vi.mocked(loadTerrainTextures).mockResolvedValue(art)
     vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({

@@ -50,9 +50,9 @@ describe('伙伴与床位：每位伙伴有自己的出场理由', () => {
       expect(partnerBed(world, 'xiaoquan')).toEqual({ pod: world.pods[1], slot: 1 })
     } finally { definitions.splice(0, definitions.length, ...original) }
   })
-  it('四位伙伴按出场顺序排好：阿土、阿灯、小满、小泉', () => {
-    expect(PARTNERS.map((partner) => partner.name)).toEqual(['阿土', '阿灯', '小满', '小泉'])
-    expect(PARTNERS.map((partner) => partner.verb)).toEqual(['挖', '照', '种', '引'])
+  it('九位伙伴按层独立加入，旧四位床位与动词保持原顺序', () => {
+    expect(PARTNERS.map((partner) => partner.name)).toEqual(['阿土', '阿灯', '小满', '小泉', '阿岩', '阿木', '苔苔', '团团', '铃铃'])
+    expect(PARTNERS.map((partner) => partner.verb)).toEqual(['挖', '照', '种', '引', '凿', '造', '连菌', '筑渠', '听风'])
     expect(partnerById('atu')?.name).toBe('阿土')
     expect(partnerById('xiaoquan')?.name).toBe('小泉')
     expect(partnerById('unknown')).toBeNull()

@@ -71,10 +71,10 @@ describe('功能先行的房间建设', () => {
   })
 
   it('扩建保留原房间与设施，完工才增加容量，撤销只撤新增部分', () => {
-    const w = powered(), r = planRoom(w, blueprint())!.after!
+    const w = powered(), r = planRoom(w, blueprint(10, 5))!.after!
     clear(w, r); finishRoom(w, r.id)
     const original = structuredClone(w.rooms[0]), oldPods = structuredClone(w.pods), history = createWorldHistory()
-    const plan = planRoom(w, { ...blueprint(9, 6), replaces: original.id })!.after!
+    const plan = planRoom(w, { ...blueprint(10, 6), replaces: original.id })!.after!
     expect(w.rooms).toContainEqual(original); expect(w.pods).toEqual(oldPods)
     expect(roomCapacity(plan)).toBe('4个床位')
     clear(w, plan)
@@ -82,11 +82,11 @@ describe('功能先行的房间建设', () => {
     history.record({ kind: 'room', change: done })
     expect(w.rooms).toHaveLength(1); expect(w.rooms[0].id).toBe(original.id)
     expect(w.pods).toHaveLength(2); expect(w.pods[0]).toEqual(oldPods[0])
-    expect(atuRoute(w, { x: 18, y: 11 }, { x: 9, y: 11 })).not.toBeNull()
+    expect(atuRoute(w, { x: 18, y: 11 }, { x: 10, y: 11 })).not.toBeNull()
     expect(deserialize(serialize(w)).ok).toBe(true)
     history.undo(w)
     expect(w.rooms).toContainEqual(original); expect(w.rooms).toContainEqual(plan)
-    expect(w.pods).toEqual(oldPods); expect(w.tiles[10][9]).toBe(TILE.EMPTY)
+    expect(w.pods).toEqual(oldPods); expect(w.tiles[10][15]).toBe(TILE.EMPTY)
     expect(deserialize(serialize(w)).ok).toBe(true)
   })
 
@@ -94,10 +94,10 @@ describe('功能先行的房间建设', () => {
     const w = powered(), r = planRoom(w, blueprint())!.after!
     clear(w, r); finishRoom(w, r.id)
     const old = structuredClone(w.rooms[0])
-    expect(planRoom(w, { ...blueprint(12), replaces: old.id })).toBeNull()
-    expect(planRoom(w, { ...blueprint(9, 6, 'garden'), replaces: old.id })).toBeNull()
-    const p = planRoom(w, { ...blueprint(9, 6), replaces: old.id })!.after!
-    expect(planRoom(w, { ...blueprint(8, 7), replaces: old.id })).toBeNull()
+    expect(planRoom(w, { ...blueprint(12, 2), replaces: old.id })).toBeNull()
+    expect(planRoom(w, { ...blueprint(12, 4, 'garden'), replaces: old.id })).toBeNull()
+    const p = planRoom(w, { ...blueprint(12, 4), replaces: old.id })!.after!
+    expect(planRoom(w, { ...blueprint(12, 5), replaces: old.id })).toBeNull()
     removeRoom(w, p.id); expect(w.rooms).toEqual([old]); expect(w.pods).toHaveLength(1)
   })
 
@@ -194,7 +194,21 @@ describe('功能先行的房间建设', () => {
     clear(w, w.rooms[0]); editor.open(); editor.select(1); busy = true; editor.refresh(); editor.save()
     expect(states.at(-1)?.valid).toBe(false); expect(w.pods).toHaveLength(0)
     busy = false; editor.save(); expect(states.at(-1)?.completed).toBe(true)
-    editor.resize(1); expect(states.at(-1)?.width).toBe(6)
+    editor.resize(1); expect(states.at(-1)?.width).toBe(4)
+    editor.chooseKind('lounge'); expect(states.at(-1)?.kind).toBe('home')
     editor.close(); expect(w.rooms[0].w).toBe(3)
+  })
+
+  it('扩建确认时扣除每格材料，空间或材料不足都会挡住确认', () => {
+    const w = powered(), r = planRoom(w, blueprint())!.after!
+    clear(w, r); expect(finishRoom(w, r.id)).not.toBeNull()
+    const editor = new RoomEditor({ world: () => w, emit: vi.fn(), preview: vi.fn(), commit: vi.fn(), notify: vi.fn() })
+    editor.open(); editor.select(w.rooms[0].id); editor.resize(1)
+    expect(w.inventory).toEqual({ stone: 4, wood: 3 })
+    editor.save() // 放下扩建蓝图，不扣材料
+    expect(w.inventory).toEqual({ stone: 4, wood: 3 })
+    editor.select(w.rooms.find(room => room.status === 'blueprint')!.id); editor.save()
+    expect(w.rooms[0].w).toBe(4)
+    expect(w.inventory).toEqual({ stone: 3, wood: 2 })
   })
 })

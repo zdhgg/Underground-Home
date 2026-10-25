@@ -3,6 +3,13 @@ import { canPlacePlanter, placePlanter } from './farm'
 import { checkRoom, checkRoomPlan, roomContains, type RoomChange } from './rooms'
 import { HOME_FLOOR_Y, TILE, type Rect, type Room, type RoomKind, type WorldState } from './world'
 
+/** 扩建每增加一格的材料；用途不能在扩建时改变。 */
+export const ROOM_EXPANSION_COST = { stone: 1, wood: 1 } as const
+export function roomExpansionCost(from: Room, to: Room): { stone: number; wood: number } {
+  const cells = Math.max(0, to.w - from.w)
+  return { stone: ROOM_EXPANSION_COST.stone * cells, wood: ROOM_EXPANSION_COST.wood * cells }
+}
+
 /** 新用途只需增加规格和设施布局；施工不负责角色寻路或动画。 */
 export const ROOM_SPECS: Record<RoomKind, { width: number; min: number; purpose: string }> = {
   home: { width: 3, min: 3, purpose: '睡觉与安顿伙伴' },

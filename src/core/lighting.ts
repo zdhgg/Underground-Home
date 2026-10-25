@@ -7,6 +7,18 @@ export const WIDE_LIGHT_RANGE = 4
 export const hasWideLampAbility = (w: WorldState): boolean => w.partnerUpgrades.includes(WIDE_LAMP_ID)
 export interface LitCell extends Cell { strength: number }
 
+/** 晶光灯同样只沿真实空洞传播，升级改变距离，不改变穿岩规则。 */
+export function deepLampCoverage(w: WorldState, lampX: number): LitCell[] {
+  if (!w.deep.entered || !w.deep.facilities.some(f => f.kind === 'distributor')) return []
+  const range = w.deep.farLight ? 6 : 3, field: LitCell[] = []
+  for (const dir of [-1, 1]) for (let distance = dir === -1 ? 0 : 1; distance <= range; distance++) {
+    const x = lampX + distance * dir
+    if (![31, 32, 33].every(y => w.tiles[y]?.[x] === TILE.EMPTY)) break
+    for (const y of [31, 32, 33]) field.push({ x, y, strength: 1 - distance / (range + 1) })
+  }
+  return field
+}
+
 /** 沿有两格身体净空的已挖通洞室传播。每盏灯独立计算，土/岩阻断扩散。 */
 export function lampCoverage(w: WorldState, lamp: Cell, wide = false): LitCell[] {
   if (!w.powerDown || !w.exploration.entered || ![19, 20, 21].every(y => w.tiles[y]?.[lamp.x] === TILE.EMPTY)) return []

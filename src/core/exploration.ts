@@ -1,4 +1,11 @@
+import { finaleLadderCell,FINALE_FOOT } from './finaleTopology'
+import { ruinsLadderCell,RUINS_FOOT } from './ruinsTopology'
+import { ventilationLadderCell, VENTILATION_FOOT } from './ventilationTopology'
+import { reservoirLadderCell, RESERVOIR_FOOT } from './reservoirTopology'
+import { gardenLadderCell, GARDEN_FOOT } from './gardenTopology'
 import { podBlocksPassage } from './passages'
+import { deepLadderCell, DEEP_FOOT } from './deepTopology'
+import { hallLadderCell, HALL_FOOT } from './hallTopology'
 import { BREAKTHROUGHS, HOME_FLOOR_Y, LANDMARKS, TILE, type Cell, type WorldState } from './world'
 
 export const isShaftColumn = (x: number): boolean => BREAKTHROUGHS.some((column) => column === x)
@@ -17,7 +24,7 @@ export function suggestedBreakthrough(world: WorldState): number {
 /** 阿土只在有地面承托的水平通道和真实梯道行走，不复用贴墙攀爬。 */
 export function canStand(world: WorldState, x: number, y: number): boolean {
   return world.tiles[y]?.[x] === TILE.EMPTY && !occupied(world, x, y)
-    && (world.tiles[y + 1]?.[x] !== TILE.EMPTY || (isShaftColumn(x) && y >= 11 && y <= 21))
+    && (world.tiles[y + 1]?.[x] !== TILE.EMPTY || (isShaftColumn(x) && y >= 11 && y <= 21) || deepLadderCell(world, x, y) || hallLadderCell(world, x, y) || gardenLadderCell(world, x, y) || reservoirLadderCell(world, x, y) || ventilationLadderCell(world,x,y) || ruinsLadderCell(world,x,y) || finaleLadderCell(world,x,y))
 }
 
 export function walkingRoute(world: WorldState, from: Cell, to: Cell): Cell[] | null {
@@ -32,8 +39,8 @@ export function walkingRoute(world: WorldState, from: Cell, to: Cell): Cell[] | 
       return route
     }
     for (const next of [{ x: cell.x - 1, y: cell.y }, { x: cell.x + 1, y: cell.y }, { x: cell.x, y: cell.y - 1 }, { x: cell.x, y: cell.y + 1 }]) {
-      if (next.x < 1 || next.x >= world.width - 1 || next.y < 11 || next.y > 21) continue
-      if (next.y !== cell.y && (!isShaftColumn(cell.x) || cell.x !== next.x)) continue
+      if (next.x < 1 || next.x >= world.width - 1 || next.y < 11 || next.y > Math.max(DEEP_FOOT, HALL_FOOT, GARDEN_FOOT, RESERVOIR_FOOT, VENTILATION_FOOT, RUINS_FOOT,FINALE_FOOT)) continue
+      if (next.y !== cell.y && ((!isShaftColumn(cell.x) && !deepLadderCell(world, cell.x, cell.y) && !hallLadderCell(world, cell.x, cell.y) && !gardenLadderCell(world, cell.x, cell.y) && !reservoirLadderCell(world, cell.x, cell.y) && !ventilationLadderCell(world,cell.x,cell.y) && !ruinsLadderCell(world,cell.x,cell.y) && !finaleLadderCell(world,cell.x,cell.y)) || cell.x !== next.x)) continue
       const key = `${next.x},${next.y}`
       if (previous.has(key) || !canStand(world, next.x, next.y)) continue
       previous.set(key, cell)

@@ -30,12 +30,13 @@ export class AtuConstruction {
     if (!s) return 0
     s.time += dt
     const { plan: p, time: t } = s, setup = p.lift ? .34 : 0, strikeAt = setup + .25, end = setup + .48 + (p.lift ? .2 : 0)
-    const stoolHeight = p.overhead ? 12 : T
-    this.lift = p.lift * stoolHeight * Math.max(0, Math.min(1, (t - .14) / .2, (end - t) / .2))
+    const stoolHeight = p.overhead ? 12 : T * p.lift
+    this.lift = stoolHeight * Math.max(0, Math.min(1, (t - .14) / .2, (end - t) / .2))
     const x = (p.stand.x + .5) * T, floor = (p.stand.y + 1) * T - 2
     const g = this.stool.clear()
     if (p.lift) {
       const size = Math.min(1, t / .14, (end - t) / .1)
+      if (p.lift === 2) g.moveTo(x - 11, floor - T).lineTo(x + 11, floor - T).stroke({ width: 3, color: 0xb89867, alpha: size })
       g.roundRect(x - 14, floor - stoolHeight, 28, 5, 2).fill({ color: 0xd5b37c, alpha: size })
       g.moveTo(x - 11, floor - stoolHeight + 5).lineTo(x - 13, floor).moveTo(x + 11, floor - stoolHeight + 5).lineTo(x + 13, floor)
         .moveTo(x - 10, floor - stoolHeight * .3).lineTo(x + 10, floor - stoolHeight * .75).stroke({ width: 3, color: 0x8b6847, alpha: size })

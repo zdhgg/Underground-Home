@@ -3,8 +3,13 @@ import { collectCrystal, repairCore } from '../src/core/interact'
 import { createInitialWorld, LANDMARKS } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { savedAtLabel, summarizeSave } from '../src/app/saveSummary'
+import { completedFinale,readyFinale } from './fixtures/finaleWorld'
 
 describe('进入页存档摘要', () => {
+  it('终章未完成与后日谈在继续游戏入口明确区分，读档不退回旧章',()=>{
+    expect(summarizeSave(readyFinale())).toMatchObject({phase:'地心暖光 · 终章',done:16,total:20,finished:false})
+    expect(summarizeSave(completedFinale())).toMatchObject({phase:'九层家园 · 终章已完成',done:20,total:20,finished:true})
+  })
   it('刚开始的第一夜显示第一个任务和 0/4', () => {
     const summary = summarizeSave(createInitialWorld())
     expect(summary).toEqual({

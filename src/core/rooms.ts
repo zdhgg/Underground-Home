@@ -1,4 +1,4 @@
-import { BREAKTHROUGHS, HOME_FLOOR_Y, HOME_ROOM_TOP, LANDMARKS, TILE, type Cell, type Rect, type Room, type RoomKind, type SiteKind, type WorldState, type SleepPod, type Planter } from './world'
+import { BREAKTHROUGHS, HOME_FLOOR_Y, HOME_ROOM_TOP, LANDMARKS, TILE, type Cell, type Inventory, type Rect, type Room, type RoomKind, type SiteKind, type WorldState, type SleepPod, type Planter } from './world'
 import { atuCanStand, atuRoute, initialAtuPosition, workersSafe } from './atu'
 
 export const ROOM_MIN_WIDTH = 3
@@ -33,6 +33,7 @@ export function checkRoom(w: WorldState, r: Room, ignoreId = r.id, planning = fa
   if (r.replaces !== undefined) {
     const old = w.rooms.find(other => other.id === r.replaces && other.status !== 'blueprint')
     if (!old || old.kind !== r.kind || !encloses(r, old) || r.w <= old.w) return { ok: false, reason: 'expansion' }
+    if (r.w !== old.w + 1) return { ok: false, reason: 'expansion' }
   }
   if (w.rooms.some(other => other.id !== ignoreId && other.id !== r.replaces && other.replaces !== ignoreId && overlaps(r, other))) return { ok: false, reason: 'overlap' }
   for (let x = r.x; x < r.x + r.w; x++) {
@@ -57,6 +58,8 @@ export interface RoomChange {
   before: Room | null; after: Room | null
   /** 扩建完成时，旧房间与蓝图一并替换；撤销只移除本次新增设施。 */
   alsoBefore?: Room; addedPods?: SleepPod[]; addedPlanters?: Planter[]
+  /** 扩建完工时扣除的材料；撤销完工会退回。 */
+  cost?: Inventory
 }
 export function saveRoom(w: WorldState, draft: Room): RoomChange | null {
   if (!ROOM_KINDS.includes(draft.kind) || !checkRoom(w, draft).ok) return null
@@ -100,6 +103,11 @@ export function undoRoom(w: WorldState, change: RoomChange): boolean {
   if (!workersSafe(candidate) || actor && (!atuCanStand(candidate, actor, true) || !atuRoute(candidate, actor, initialAtuPosition(candidate), true))) return false
   w.rooms = candidate.rooms; w.pods = candidate.pods; w.farm.planters = candidate.farm.planters
   w.rooms.sort((a, b) => a.id - b.id)
+  if (change.cost) {
+    w.inventory.stone += change.cost.stone
+    w.inventory.wood += change.cost.wood
+    if (change.cost.clay) w.inventory.clay = (w.inventory.clay ?? 0) + change.cost.clay
+  }
   return true
 }
 export function roomSummary(w: WorldState, r: Room): string {

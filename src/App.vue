@@ -24,11 +24,27 @@ import InventoryDialog from './components/InventoryDialog.vue'
 import type { BagItem } from './core/bag'
 import { ITEM_ART } from './app/itemArt'
 import { gameAudio } from './render/gameAudio'
+import FinalePanel from './components/FinalePanel.vue'
+import { emptyFinaleUI } from './app/finaleChapter'
+import RuinsPanel from './components/RuinsPanel.vue'
+import { emptyRuinsUI } from './app/ruinsChapter'
+import VentilationPanel from './components/VentilationPanel.vue'
+import { emptyVentilationUI } from './app/ventilationChapter'
+import ReservoirPanel from './components/ReservoirPanel.vue'
+import { emptyReservoirUI } from './app/reservoirChapter'
+import GardenPanel from './components/GardenPanel.vue'
+import { emptyGardenUI } from './app/gardenChapter'
+import HallPanel from './components/HallPanel.vue'
+import { emptyHallUI } from './app/hallChapter'
+import DeepPanel from './components/DeepPanel.vue'
+import { emptyDeepUI } from './app/deepChapter'
+const props = defineProps<{ saveStore?: SaveStore }>()
 
 const stageEl = ref<HTMLElement | null>(null)
 const session = shallowRef<GameSession | null>(null)
 const fatalError = ref('')
 const screen = ref<'title' | 'opening' | 'playing'>('title')
+const toolsOpen = ref(false)
 watch(screen, next => gameAudio.setPlaying(next === 'playing'), { flush: 'sync', immediate: true })
 /** 进入页的存档摘要：没有、可继续或读不出来 */
 const save = ref<SaveStatus>({ status: 'loading' })
@@ -51,11 +67,26 @@ const workers = ref<{ id: WorkerId; name: string; verb: string }[]>([])
 const partnerMenu = ref(false)
 const sites = ref(emptySiteUI())
 const facility = ref<FacilityUI>(emptyFacilityUI())
+const finale=ref(emptyFinaleUI())
+watch(()=>finale.value.active,active=>{if(active)toolsOpen.value=false})
+const ruins=ref(emptyRuinsUI())
+watch(()=>ruins.value.active,active=>{if(active)toolsOpen.value=false})
+const ventilation=ref(emptyVentilationUI())
+watch(()=>ventilation.value.active,active=>{if(active)toolsOpen.value=false})
+const reservoir=ref(emptyReservoirUI())
+watch(()=>reservoir.value.active,active=>{if(active)toolsOpen.value=false})
+const garden = ref(emptyGardenUI())
+watch(() => garden.value.active, active => { if (active) toolsOpen.value = false })
+const hall = ref(emptyHallUI())
+watch(() => hall.value.active, active => { if (active) toolsOpen.value = false })
+const deep = ref(emptyDeepUI())
+watch(() => deep.value.active, active => { if (active) toolsOpen.value = false })
 const inventory = ref(freshInventory())
 const bag = ref<BagItem[]>([])
 const bagOpen = ref(false)
 const bagInitialItem = ref('stone')
 const rooms = ref<RoomUI>({ active: false, available: false, kind: 'home', width: 3, minWidth: 3, selectedId: null, placed: false, valid: false, dirty: false, message: '', detail: '', items: [], construction: false, completed: false, busy: false, action: '放下蓝图', left: 0 })
+watch(() => rooms.value.active || sites.value.active, active => { if (active) toolsOpen.value = false })
 const message = ref('')
 const messageWarning = ref(false)
 const toastVisible = ref(false)
@@ -77,6 +108,34 @@ const milestone = ref<Milestone | null>(null)
 
 /** 底部状态栏的一行提示：跟着当前能做的事走 */
 const legendHint = computed(() => {
+  if(finale.value.busy)return '☼ 伙伴正在准备暖屋日 · 随时停下来'
+  if(finale.value.placing)return '点第九层洞壁选位置 · 拖动只移动地图 · Esc 取消'
+  if(finale.value.active)return `☼ ${finale.value.title} · 随时收起`
+  if(view.value.layer==='finale')return finale.value.completed?'九层终章已完成 · 家园由你继续建设':'地心暖光 · 自由建家，准备九位伙伴的暖屋日'
+  if(ruins.value.busy)return '▥ 伙伴正在拓印与修复 · 随时停下来'
+  if(ruins.value.placing)return '点第八层洞壁选位置 · 拖动只移动地图 · Esc 取消'
+  if(ruins.value.active)return `▥ ${ruins.value.title} · 随时收起`
+  if(view.value.layer==='ruins')return '旧地脉遗迹 · 看清岩画、拓印修复、添上今天的家'
+  if(ventilation.value.busy)return '〰 伙伴正在接通风路 · 随时停下来'
+  if(ventilation.value.placing)return '点第七层洞壁选位置 · 拖动只移动地图 · Esc 取消'
+  if(ventilation.value.active)return `〰 ${ventilation.value.title} · 随时收起`
+  if(view.value.layer==='ventilation')return '听风工区 · 听风接管、调节微风、做手作送回家'
+  if(reservoir.value.busy)return '💧 伙伴正在修建水路 · 可以拖图看看，随时停下来'
+  if(reservoir.value.placing)return '点第六层洞壁选位置 · 绿框能建 · 拖动只移动地图 · Esc 取消'
+  if(reservoir.value.active)return `💧 ${reservoir.value.title} · 随时收起，自由建设`
+  if(view.value.layer==='reservoir')return '蓄水回廊 · 关闸蓄水、选择水路、转轮提水 · 清水连回楼上的家'
+  if (garden.value.busy) return '🌱 伙伴正在花园动手 · 拖图看看，随时可以停下来'
+  if (garden.value.placing) return '点第五层岩壁选位置 · 绿框能建 · 拖动只移动地图 · Esc 取消'
+  if (garden.value.active) return `🌱 ${garden.value.title} · 随时收起，自由建设`
+  if (view.value.layer === 'garden') return '菌光花园 · 点菌床照料和收获，点泥土扩建 · 苔苔把菌丝连起来'
+  if (hall.value.busy) return '🔨 伙伴正在准备暖光大厅 · 拖图看看，随时可以停下来'
+  if (hall.value.placing) return '点第四层岩壁选位置 · 绿框能建 · 拖动只移动地图 · Esc 取消'
+  if (hall.value.active) return `♧ ${hall.value.title} · 随时收起，自由建设`
+  if (view.value.layer === 'hall') return '暖光大厅 · 点设施使用，点泥土扩建 · 九层故事仍在继续'
+  if (deep.value.busy) return '🔧 伙伴正在晶簇层施工 · 拖动看地图，随时可以停下来'
+  if (deep.value.placing) return '◇ 点岩壁选位置 · 绿框能建 · 拖动只移动地图 · Esc 取消'
+  if (deep.value.active) return `◇ ${deep.value.title} · 可以随时收起面板，自由建设`
+  if (view.value.layer === 'crystal') return '◇ 晶簇层 · 点设施使用，点泥土扩建 · 工坊和电梯把三层连起来'
   if (sites.value.working) return '🔨 阿土正在修建洞室 · 拖动看地图，随时可以停下来'
   if (build.value.digging) return '⛏ 点泥土挖一块、找到材料 · 拖动看地图'
   if (work.value) return `${work.value.name}正在${work.value.title} · 可以拖图看家园，或停下来改目标`
@@ -117,6 +176,13 @@ function performGuide(): void {
   const game = session.value
   if (!game) return
   switch (progress.value.action?.id) {
+    case 'finale':game.openFinale();break
+    case 'ruins':game.openRuins();break
+    case 'ventilation':game.openVentilation();break
+    case 'reservoir':game.openReservoir();break
+    case 'garden': game.openGarden(); break
+    case 'hall': game.openHall(); break
+    case 'deep': game.openDeep(); break
     case 'site': game.prepareNest(); break
     case 'water': game.supplyWater(); break
     case 'plant': game.startPlanting(); break
@@ -154,6 +220,8 @@ function showMessage(text: string, warning = false): void {
 }
 
 function showMilestone(card: Milestone): void {
+  // 第六章的相遇和庆典在当前情境面板内交接，避免中央弹卡同时抢注意力。
+  if (finale.value.active || finale.value.busy || ruins.value.active || ruins.value.busy || ventilation.value.active || ventilation.value.busy || reservoir.value.active || reservoir.value.busy) { milestone.value = null; return }
   milestone.value = card
   window.clearTimeout(milestoneTimer)
   milestoneTimer = window.setTimeout(() => {
@@ -184,9 +252,9 @@ async function startGame(mode: 'new' | 'continue'): Promise<void> {
 onMounted(async () => {
   const host = stageEl.value
   if (!host) return
-  let store: SaveStore | undefined
+  let store: SaveStore | undefined = props.saveStore
   try {
-    if (typeof indexedDB !== 'undefined') {
+    if (!store && typeof indexedDB !== 'undefined') {
       store = createIndexedDbStore()
       persistent.value = true
     }
@@ -220,6 +288,13 @@ onMounted(async () => {
         if (next.active) toastVisible.value = false
         facility.value = next
       },
+      onFinale:next=>{const opened=next.active&&!finale.value.active;finale.value=next;if(opened){toastVisible.value=false;partnerMenu.value=false;milestone.value=null}},
+      onRuins:next=>{const opened=next.active&&!ruins.value.active;ruins.value=next;if(opened){toastVisible.value=false;partnerMenu.value=false;milestone.value=null}},
+      onVentilation:next=>{const opened=next.active&&!ventilation.value.active;ventilation.value=next;if(opened){toastVisible.value=false;partnerMenu.value=false;milestone.value=null}},
+      onReservoir:next=>{const opened=next.active&&!reservoir.value.active;reservoir.value=next;if(opened){toastVisible.value=false;partnerMenu.value=false;milestone.value=null}},
+      onGarden: next => { const opened = next.active && !garden.value.active; garden.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
+      onHall: next => { const opened = next.active && !hall.value.active; hall.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
+      onDeep: next => { const opened = next.active && !deep.value.active; deep.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
       onInventory: next => { inventory.value = next },
       onBag: next => { bag.value = next },
       onBagRequested: () => openBag(bag.value.find(i => i.kind === 'relic' && i.count)?.id ?? 'seed-pouch'),
@@ -262,8 +337,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <button class="inventory" type="button" aria-label="打开物品栏" aria-haspopup="dialog" :aria-expanded="bagOpen" @click="openBag()"><span class="bag-label"><img :src="ITEM_ART.bag" alt="" /><span>物品栏</span></span><span><img :src="ITEM_ART.stone" alt="" /><b>{{ inventory.stone }}</b><small>石料</small></span><span><img :src="ITEM_ART.wood" alt="" /><b>{{ inventory.wood }}</b><small>旧木料</small></span></button>
+      <button class="tools-toggle" type="button" :aria-expanded="toolsOpen" aria-controls="build-tools" @click="toolsOpen = build.mode === 'none' ? !toolsOpen : true">🧰 <span>工具</span></button>
       <button class="sound-toggle" type="button" :aria-pressed="!soundMuted" :aria-label="soundMuted ? '开启声音' : '关闭声音'" @click="toggleSound"><span class="sound-icon" aria-hidden="true">{{ soundMuted ? '🔇' : '🔊' }}</span><span class="sound-label">{{ soundMuted ? '声音已关闭' : '声音已开启' }}</span></button>
-      <DepthNavigation :view="view" @home="session?.centerOnHome()" @water="session?.lookDown()" @overview="session?.showOverview()" />
+      <DepthNavigation :view="view" :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available" :reservoir-available="reservoir.available" :ventilation-available="ventilation.available" :ruins-available="ruins.available" :finale-available="finale.available" @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()" @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()" @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()" @overview="session?.showOverview()" />
     </header>
 
     <main class="stage">
@@ -277,7 +353,7 @@ onBeforeUnmount(() => {
       </section>
 
       <SiteTools v-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
-      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @select="session?.selectRoom($event)" @create="session?.newRoom()" />
+      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" />
       <section v-else-if="work" class="work-status" data-attention-panel="work" aria-label="伙伴工作" role="status">
         <small>伙伴来帮忙</small>
         <strong>{{ work.name }} · {{ work.title }}</strong>
@@ -306,7 +382,14 @@ onBeforeUnmount(() => {
         @look="session?.facilityLook()"
         @upgrade="session?.facilityUpgrade()"
       />
-      <GuidePanel v-else-if="!sites.working && !view.overview && build.mode === 'none' && !exploration.lampMode" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
+      <FinalePanel v-else-if="(finale.active||finale.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="finale" :traveling="exploration.traveling" @close="session?.closeFinale()" @stop="session?.cancelAction()" @primary="session?.finalePrimary()" @select="session?.finaleSelect($event)" @theme="session?.finaleTheme($event)" @ride="session?.deepRide($event)" @review="session?.finalePanorama()" />
+      <RuinsPanel v-else-if="(ruins.active||ruins.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="ruins" :traveling="exploration.traveling" @close="session?.closeRuins()" @stop="session?.cancelAction()" @primary="session?.ruinsPrimary()" @select="session?.ruinsSelect($event)" @motif="session?.ruinsMotif($event)" @edition="session?.ruinsEdition($event)" @ride="session?.deepRide($event)" />
+      <VentilationPanel v-else-if="(ventilation.active||ventilation.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="ventilation" :traveling="exploration.traveling" @close="session?.closeVentilation()" @stop="session?.cancelAction()" @primary="session?.ventilationPrimary()" @select="session?.ventilationSelect($event)" @mode="session?.ventilationMode($event)" @variety="session?.ventilationVariety()" @ride="session?.deepRide($event)" />
+      <ReservoirPanel v-else-if="(reservoir.active||reservoir.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="reservoir" :traveling="exploration.traveling" @close="session?.closeReservoir()" @stop="session?.cancelAction()" @primary="session?.reservoirPrimary()" @select="session?.reservoirSelect($event)" @route="session?.reservoirRoute($event)" @ride="session?.deepRide($event)" />
+      <GardenPanel v-else-if="(garden.active || garden.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="garden" :traveling="exploration.traveling" @close="session?.closeGarden()" @stop="session?.cancelAction()" @primary="session?.gardenPrimary()" @select="session?.gardenSelect($event)" @add="session?.gardenAdd($event)" @variety="session?.gardenVariety()" @ride="session?.deepRide($event)" />
+      <HallPanel v-else-if="(hall.active || hall.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="hall" :traveling="exploration.traveling" @close="session?.closeHall()" @stop="session?.cancelAction()" @primary="session?.hallPrimary()" @select="session?.hallSelect($event)" @page="session?.hallAlbumPage($event)" @ride="session?.deepRide($event)" />
+      <DeepPanel v-else-if="(deep.active || deep.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="deep" :traveling="exploration.traveling" @close="session?.closeDeep()" @stop="session?.cancelAction()" @primary="session?.deepPrimary()" @select="session?.deepSelect($event)" @lamp="session?.deepPlaceLamp()" @upgrade="(action, label) => session?.deepUpgrade(action, label)" @ride="session?.deepRide($event)" />
+      <GuidePanel v-else-if="!sites.working && !view.overview && build.mode === 'none' && !exploration.lampMode && view.layer !== 'crystal' && view.layer !== 'hall' && view.layer !== 'garden' && view.layer !== 'reservoir' && view.layer !== 'ventilation' && view.layer !== 'ruins' && view.layer !== 'finale'" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
         <template #quick-action>
           <button class="talk-action guide-primary" data-primary-action type="button" :disabled="exploration.traveling" @click="performGuide">{{ progress.action?.label ?? '看看能源石' }}</button>
         </template>
@@ -330,10 +413,10 @@ onBeforeUnmount(() => {
         <button type="button" @click="session?.findAtu()">⌖ 找到阿土</button>
         <button v-if="exploration.traveling && !work" type="button" @click="session?.cancelAction()">停下来</button>
       </div>
-      <section v-if="rooms.available && !rooms.active && !sites.active && !sites.working && !work && !conversation && !discovering && !view.overview && !facility.active" class="build-tools" aria-label="建设工具">
+      <section v-if="toolsOpen && rooms.available && !rooms.active && !sites.active && !sites.working && !work && !conversation && !discovering && !view.overview && !facility.active && !deep.active && !deep.busy && !hall.active && !hall.busy && !garden.active && !garden.busy && !reservoir.active && !reservoir.busy && !ventilation.active && !ventilation.busy && !ruins.active && !ruins.busy && !finale.active && !finale.busy" id="build-tools" class="build-tools" aria-label="建设工具">
         <div class="build-buttons">
           <button type="button" :aria-pressed="build.mode === 'none' && build.digging" @click="session?.setBuildMode('none')">⛏ 挖掘找材料</button>
-          <button v-if="rooms.available" type="button" :disabled="exploration.traveling" @click="session?.openRooms()">🔨 {{ view.layer === 'home' ? '修建洞室' : '泉边建设' }}</button>
+          <button v-if="rooms.available && view.layer === 'water'" type="button" :disabled="exploration.traveling" @click="session?.openRooms()">🔨 泉边建设</button>
           <button v-for="room in rooms.items.filter(item => !item.built)" :key="room.id" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">继续原来的{{ room.name }}</button>
           <button v-for="room in expandableRooms" :key="`expand-${room.id}`" type="button" :disabled="exploration.traveling" @click="session?.selectRoom(room.id)">🏠 扩建{{ room.name }}</button>
           <button v-if="build.planterAvailable && view.layer === 'water'" type="button" :aria-pressed="build.mode === 'planter'" :disabled="exploration.traveling" @click="session?.setBuildMode('planter')">🌱 自己摆菜槽</button>
@@ -350,6 +433,7 @@ onBeforeUnmount(() => {
         <details class="extra-tools">
           <summary>更多工具与家园</summary>
           <div class="extra-actions">
+            <button v-if="view.layer === 'home'" type="button" :disabled="exploration.traveling" @click="session?.openRooms()">🔨 规划新房间</button>
             <button v-if="exploration.connected" type="button" :disabled="exploration.traveling" @click="session?.travel()">{{ exploration.downstairs ? '沿梯子回家' : '沿梯子下去' }}</button>
             <button v-if="exploration.canChain" type="button" :disabled="exploration.traveling" @click="session?.digToBottom()">一路挖到底</button>
             <button v-if="exploration.found" type="button" :aria-pressed="exploration.lampMode" @click="session?.toggleLamp()">{{ exploration.wideLighting ? '布置聚光灯' : '安一盏小壁灯' }}</button>
@@ -393,6 +477,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .sound-toggle { min-height: 44px; padding: 8px 12px; border-radius: 10px; background: #edf2ec; color: #536b5d; font-size: 13px; white-space: nowrap; flex-shrink: 0; pointer-events: auto; }
+.tools-toggle { min-height: 44px; padding: 8px 12px; border-radius: 10px; background: #edf2ec; color: #536b5d; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.tools-toggle[aria-expanded="true"] { background: #dcebdd; color: #315b46; }
+.tools-toggle:hover { background: #e1ebe1; }
 .sound-icon { display: none; }
 .sound-toggle:hover { background: #e1ebe1; }
 .sound-toggle[aria-pressed="false"] { color: #727c74; }
@@ -491,17 +578,19 @@ onBeforeUnmount(() => {
 .toast-enter-active, .toast-leave-active { transition: opacity .18s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; }
 
+@media (min-width: 721px) and (max-width: 1120px) { .top { flex-wrap: wrap; gap: 6px; }.top :deep(.depth-nav) { width: 100%; justify-content: space-between; }.top :deep(.depth-nav button) { flex: 1; }.brand-text small { display: none; } }
 @media (max-width: 720px) {
-  .sound-toggle { order: 3; width: 44px; padding: 8px; }
+  .tools-toggle { width: 44px; padding: 8px; font-size: 0; }.tools-toggle:first-letter { font-size: 18px; }
+  .sound-toggle { order: 0; width: 44px; padding: 8px; }
   .sound-icon { display: inline; font-size: 18px; }
   .sound-label { display: none; }
-  .top :deep(.depth-nav) { order: 2; flex: 1 0 calc(100% - 48px); width: calc(100% - 48px); min-width: 0; }
+  .top :deep(.depth-nav) { order: 2; flex: 1 0 100%; width: 100%; min-width: 0; }
   .top :deep(.depth-nav button) { padding: 0 4px; gap: 4px; font-size: 12px; }
-  .inventory { gap: 8px; margin-left: auto; }.inventory .bag-label > span { display: none; }.inventory small { font-size: 10px; }
+  .inventory { gap: 8px; margin-left: auto; padding: 6px 8px; }.inventory .bag-label { display: none; }.inventory small { display: none; }
   .app { padding: 6px; gap: 6px; }
   .top { flex-wrap: wrap; gap: 4px; padding: 6px; border-radius: 12px; }
-  .brand { padding: 2px 6px; gap: 8px; }
-  .brand-text h1 { font-size: 16px; }
+  .brand { padding: 2px; gap: 6px; }
+  .brand-text h1 { font-size: 15px; }
   .brand-text small { display: none; }
   .logo { font-size: 20px; }
   .stage { border-radius: 12px; }

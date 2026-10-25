@@ -1,3 +1,8 @@
+import { undoFinale,type FinaleChange } from './finale'
+import { undoRuins,type RuinsChange } from './ruins'
+import { undoVentilation, type VentilationChange } from './ventilation'
+import { undoReservoir, type ReservoirChange } from './reservoir'
+import { undoGarden, type GardenChange } from './garden'
 import { TILE, type Cell, type Inventory, type TileType, type WorldState } from './world'
 import { canRestoreDig } from './build'
 import { undoRoom, type RoomChange } from './rooms'
@@ -5,6 +10,9 @@ import { workersSafe } from './atu'
 import { canAfford, changeMaterials, digLoot } from './materials'
 import { siteById, siteWorkCells, undoSite, type SiteChange } from './sites'
 import { roomContains } from './rooms'
+import { undoHall, type HallChange } from './hall'
+import { undoDeep, type DeepChange } from './deep'
+import { mineralCell } from './deepTopology'
 
 /**
  * 挖掘撤销栈：只记录"挖开一格"，撤销即把这一格恢复成泥土。
@@ -22,6 +30,13 @@ export interface DigHistory {
 }
 
 type WorldAction =
+  | {kind:'finale';change:FinaleChange}
+  | {kind:'ruins';change:RuinsChange}
+  | { kind:'ventilation';change:VentilationChange }
+  | { kind: 'reservoir'; change: ReservoirChange }
+  | { kind: 'garden'; change: GardenChange }
+  | { kind: 'hall'; change: HallChange }
+  | { kind: 'deep'; change: DeepChange }
   | { kind: 'dig'; x: number; y: number; tile?: TileType }
   | { kind: 'pod'; id: number }
   | { kind: 'planter'; id: number; cost?: Inventory }
@@ -46,6 +61,7 @@ export function createWorldHistory(limit = 200) {
     undo(world: WorldState): WorldAction | null {
       while (stack.length) {
         const pending = stack.at(-1)!
+        if (pending.kind === 'dig' && pending.tile === TILE.ROCK && mineralCell(pending.x, pending.y) && world.deep.ore < 2) return null
         if (pending.kind === 'dig' && !canAfford(world, digLoot(pending.x, pending.y, pending.tile ?? TILE.SOIL))) return null
         const actor = world.exploration.explorer
         if (pending.kind === 'dig' && actor && pending.x === actor.x && (pending.y === actor.y || pending.y === actor.y - 1)) return null
@@ -56,6 +72,25 @@ export function createWorldHistory(limit = 200) {
           if (!safe) return null // 暂时有人或有人依赖这条路，保留记录供稍后重试。
         }
         const action = stack.pop()!
+        if(action.kind==='finale'){if(undoFinale(world,action.change))return action;stack.push(action);return null}
+        if(action.kind==='ruins'){if(undoRuins(world,action.change))return action;stack.push(action);return null}
+        if(action.kind==='ventilation'){if(undoVentilation(world,action.change))return action;stack.push(action);return null}
+        if (action.kind === 'reservoir') {
+          if (undoReservoir(world, action.change)) return action
+          stack.push(action); return null
+        }
+        if (action.kind === 'garden') {
+          if (undoGarden(world, action.change)) return action
+          stack.push(action); return null
+        }
+        if (action.kind === 'hall') {
+          if (undoHall(world, action.change)) return action
+          stack.push(action); return null
+        }
+        if (action.kind === 'deep') {
+          if (undoDeep(world, action.change)) return action
+          stack.push(action); return null
+        }
         if (action.kind === 'site') {
           if (undoSite(world, action.change)) return action
           stack.push(action); return null
@@ -103,6 +138,7 @@ export function createWorldHistory(limit = 200) {
           return action
         }
         if (action.kind === 'pod') {
+          if (world.ventilation.facilities.some(f=>f.podId===action.id) || world.ventilation.completed && world.pods.length<=5 || world.reservoir.facilities.some(f => f.podId === action.id) || world.reservoir.completed && world.pods.length <= 4 || world.garden.completed && world.pods.length <= 4 || world.garden.facilities.some(f => f.podId === action.id) || world.hall.feasts > 0 && world.pods.length <= 3 || world.hall.facilities.some(f => f.podId === action.id)) { stack.push(action); return null }
           if (world.exploration.clueFound && world.pods.length === 1) continue
           const index = world.pods.findIndex((pod) => pod.id === action.id)
           if (index < 0) continue
@@ -112,6 +148,7 @@ export function createWorldHistory(limit = 200) {
         if (world.builtSites.some(b => { const s = siteById(b.id); return s && siteWorkCells(world, s).some(p => p.x === action.x && p.y === action.y) })) continue
         if (!canRestoreDig(world, action.x, action.y)) continue
         world.tiles[action.y][action.x] = action.tile ?? TILE.SOIL
+        if (action.tile === TILE.ROCK && mineralCell(action.x, action.y)) world.deep.ore -= 2
         world.dugCount = Math.max(0, world.dugCount - 1)
         changeMaterials(world, digLoot(action.x, action.y, action.tile ?? TILE.SOIL), -1)
         return action

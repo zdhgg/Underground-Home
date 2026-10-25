@@ -1,4 +1,28 @@
+import { FinaleChapter,type FinaleUI } from './finaleChapter'
+import { finaleGoal,finaleReady } from '../core/finale'
+import type { FinaleFacilityKind,FinaleTheme } from '../core/world'
+import { RuinsChapter,type RuinsUI } from './ruinsChapter'
+import { ruinsGoal,ruinsReady } from '../core/ruins'
+import type { RuinsFacilityKind,RuinsMotif,RuinsEdition } from '../core/world'
+import { VentilationChapter, type VentilationUI } from './ventilationChapter'
+import { ventilationGoal, ventilationReady } from '../core/ventilation'
+import type { VentilationFacilityKind,AirMode } from '../core/world'
+import { ReservoirChapter, type ReservoirUI } from './reservoirChapter'
+import { reservoirGoal, reservoirReady } from '../core/reservoir'
+import type { ReservoirFacilityKind, WaterRoute } from '../core/world'
+import { ROOT_SPOT, SPORE_SPOT } from '../core/gardenTopology'
+import { GardenChapter, type GardenUI } from './gardenChapter'
+import { gardenGoal, gardenReady } from '../core/garden'
+import type { GardenFacilityKind } from '../core/world'
+import { HallChapter, type HallUI } from './hallChapter'
+import { hallGoal, hallReady } from '../core/hall'
+import { MURAL_SPOT, WARM_LIGHT_SPOT } from '../core/hallTopology'
+import type { HallFacilityKind } from '../core/world'
 import { gameAudio } from '../render/gameAudio'
+import { DeepChapter, type DeepUI } from './deepChapter'
+import { deepGoal, deepReady, type DeepAction } from '../core/deep'
+import type { DeepFacilityKind } from '../core/world'
+import { CRYSTAL_SPOT, MOSS_SPOT, DRILL_SPOT } from '../core/deepTopology'
 import { playSoilDig, playBuildComplete, playPartnerFound, playCrystalCollected, playPowerConnected, playUndo, playUnavailable } from '../render/waterSound'
 import { dig, type DigResult } from '../core/dig'
 import { AtuOrders } from './atuOrders'
@@ -8,6 +32,7 @@ import { FacilityPanel, facilityView, panelFacilityAt, type FacilityUI } from '.
 import { primaryGuideAction, type GuideAction } from './guideAction'
 import type { ConversationAnchor } from '../render/conversationAnchor'
 import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
+import { roomAt } from '../core/rooms'
 import { canAfford, changeMaterials, digLoot, materialText, PLANTER_COST } from '../core/materials'
 import { canPlaceShelf, placeShelf, SHELF_COST, type ShelfFailure } from '../core/storage'
 import { canPlaceNursery, isMushroomSpot, NURSERY_COST, placeNursery } from '../core/nursery'
@@ -55,6 +80,13 @@ import { PixiWorldRenderer } from '../render/PixiRenderer'
 import { playBreakthrough, playHarvest, playLayerArrival, playMealTime, playRockHit, playSpringFound, playWaterClue, playWaterSupplied } from '../render/waterSound'
 
 export interface SessionHooks {
+  onFinale?(state:FinaleUI):void
+  onRuins?(state:RuinsUI):void
+  onVentilation?(state:VentilationUI):void
+  onReservoir?(state:ReservoirUI):void
+  onGarden?(state: GardenUI): void
+  onHall?(state: HallUI): void
+  onDeep?(state: DeepUI): void
   onOpening?(state: { active: boolean; caption: string }): void
   /** 状态提示（儿童可读的短句） */
   onMessage(message: string, kind?: 'info' | 'warning'): void
@@ -206,6 +238,48 @@ export interface SessionProgress {
 
 /** 组合根：把 world / rules / missions / persistence / render / input 装配成一次游戏会话 */
 export interface GameSession {
+  openFinale():void
+  closeFinale():void
+  finalePrimary():void
+  finaleSelect(kind:FinaleFacilityKind):void
+  finaleTheme(theme:FinaleTheme):void
+  finalePanorama():void
+  openRuins():void
+  closeRuins():void
+  ruinsPrimary():void
+  ruinsSelect(kind:RuinsFacilityKind):void
+  ruinsMotif(motif:RuinsMotif):void
+  ruinsEdition(edition:RuinsEdition):void
+  openVentilation():void
+  closeVentilation():void
+  ventilationPrimary():void
+  ventilationSelect(kind:VentilationFacilityKind):void
+  ventilationMode(mode:AirMode):void
+  ventilationVariety():void
+  openReservoir():void
+  closeReservoir():void
+  reservoirPrimary():void
+  reservoirSelect(kind:ReservoirFacilityKind):void
+  reservoirRoute(route:WaterRoute):void
+  openGarden(): void
+  closeGarden(): void
+  gardenPrimary(): void
+  gardenSelect(kind: GardenFacilityKind): void
+  gardenAdd(kind: GardenFacilityKind): void
+  gardenVariety(): void
+  openHall(): void
+  closeHall(): void
+  hallPrimary(): void
+  hallSelect(kind: HallFacilityKind): void
+  hallAlbumPage(delta: number): void
+  openDeep(): void
+  closeDeep(): void
+  deepPrimary(): void
+  deepSelect(kind: DeepFacilityKind): void
+  deepPlaceLamp(): void
+  deepUpgrade(action: DeepAction, label: string): void
+  deepRide(action: DeepAction): void
+  lookCrystal(): void
   setInputBlocked(blocked: boolean): void
   focusCollection(): void
   focusRelic(id: string): void
@@ -369,6 +443,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   let siteEditor: SiteEditor | null = null
   let facilityPanel: FacilityPanel | null = null
   let partnerOrders: PartnerOrders | null = null
+  let finaleChapter:FinaleChapter|undefined
+  let ruinsChapter:RuinsChapter|undefined
+  let ventilationChapter:VentilationChapter|undefined
+  let reservoirChapter:ReservoirChapter|undefined
+  let gardenChapter: GardenChapter | undefined
+  let hallChapter: HallChapter | undefined
+  let deepChapter: DeepChapter | null = null
   let currentWork: WorkUI | null = null
   /** 一次共餐演出：结算已完成，演出期间不再重复扣食物。 */
   let mealing = false
@@ -385,7 +466,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     const action = primaryGuideAction(world)
     const site = action.siteId ? siteById(action.siteId) : undefined
     const rect = site ?? (guide.kind !== 'none' ? guide.rect : null)
-    renderer.setHighlight(talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || facilityPanel?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
+    renderer.setHighlight(finaleChapter?.active || finaleChapter?.busy || ruinsChapter?.active || ruinsChapter?.busy || ventilationChapter?.active || ventilationChapter?.busy || reservoirChapter?.active || reservoirChapter?.busy || gardenChapter?.active || gardenChapter?.busy || hallChapter?.active || hallChapter?.busy || deepChapter?.active || deepChapter?.busy || talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || facilityPanel?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
       x: rect.x * TILE_SIZE, y: rect.y * TILE_SIZE,
       width: rect.w * TILE_SIZE, height: rect.h * TILE_SIZE,
       tone: guide.kind === 'dig' || guide.kind === 'collect' ? 'cyan' : 'amber',
@@ -565,6 +646,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
    * 用于切后台、画面被冻住、这一趟异常拖太久——绝不重复挖，也不会永久锁定操作。
    */
   const abortOrder = (message?: string): void => {
+    if(finaleChapter?.busy){finaleChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ruinsChapter?.busy){ruinsChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ventilationChapter?.busy){ventilationChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(reservoirChapter?.busy){reservoirChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if (gardenChapter?.busy) { gardenChapter.cancel(); notify('先停下来啦，完成的部分已经保留。'); return }
+    if (hallChapter?.busy) { hallChapter.cancel(); notify('先停下来啦，完成的施工已经保留。'); return }
+    if(finaleChapter?.active){finaleChapter.close();return}
+    if(ruinsChapter?.active){ruinsChapter.close();return}
+    if(ventilationChapter?.active){ventilationChapter.close();return}
+    if(reservoirChapter?.active){reservoirChapter.close();return}
+    if (gardenChapter?.active) { gardenChapter.close(); return }
+    if (hallChapter?.active) { hallChapter.close(); return }
+    if (deepChapter?.busy) { deepChapter.cancel(); if (message) notify(message); return }
     if (siteEditor?.working) { siteEditor.cancel(); if (message) notify(message); return }
     if (partnerOrders?.active) { partnerOrders.cancel(); return }
     if (atuOrders?.active) {
@@ -642,6 +736,32 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       relics: relicSummary(world),
     })
     if (chainDone && !pendingRest) hooks.onProgress({ ...explorationGuide(world), action: primaryGuideAction(world), relics: relicSummary(world) })
+    if (deepReady(world) && !world.deep.completed) {
+      const goal = deepGoal(world)
+      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: '把晶光、工坊和电梯连成新一层家园。', done: goal.done, total: 13, finished: false, action: { id: 'deep', label: '看看第 3 层的新线索' }, relics: relicSummary(world) })
+    }
+    if (hallReady(world)) {
+      const goal = hallGoal(world)
+      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: world.hall.completed ? '九层旅途继续，四层家园由你布置。' : '把旧岩洞建成六位伙伴相聚的暖光大厅。', done: goal.done, total: 11, finished: world.hall.completed, action: { id: 'hall', label: '看看暖光大厅' }, relics: relicSummary(world) })
+    }
+    if (gardenReady(world)) {
+      const goal = gardenGoal(world)
+      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: '让水、菌丝和灯光连成新朋友的花园。', done: goal.done, total: 14, finished: world.garden.completed, action: { id: 'garden', label: '看看菌光花园' }, relics: relicSummary(world) })
+    }
+    if(reservoirReady(world)) {
+      const goal=reservoirGoal(world)
+      hooks.onProgress({title:goal.title,speech:`${goal.speaker}：${goal.speech}`,outcome:'让清水沿新回廊送回花园与大厅。',done:world.reservoir.completed?18:goal.done,total:18,finished:world.reservoir.completed,action:{id:'reservoir',label:'看看蓄水回廊'},relics:relicSummary(world)})
+    }
+    if(ventilationReady(world)){const g=ventilationGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'连起风路，把手作送回九位伙伴的家。',done:world.ventilation.completed?19:g.done,total:19,finished:world.ventilation.completed,action:{id:'ventilation',label:'看看听风工区'},relics:relicSummary(world)})}
+    if(ruinsReady(world)){const g=ruinsGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'修复三段旧故事，添上九位伙伴今天的家。',done:world.ruins.completed?19:g.done,total:19,finished:world.ruins.completed,action:{id:'ruins',label:'看看旧地脉遗迹'},relics:relicSummary(world)})}
+    if(finaleReady(world)){const g=finaleGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:world.finale.completed?'九层终章已完成，家园由你继续建设。':'把九位伙伴和九层成果聚成一次暖屋日。',done:g.done,total:20,finished:world.finale.completed,action:{id:'finale',label:world.finale.completed?'看看九层家园':'看看地心暖光'},relics:relicSummary(world)})}
+    finaleChapter?.refresh()
+    ruinsChapter?.refresh()
+    ventilationChapter?.refresh()
+    reservoirChapter?.refresh()
+    gardenChapter?.refresh()
+    hallChapter?.refresh()
+    deepChapter?.refresh()
     const facilities = mealFacilities(world)
     hooks.onFarm?.({
       canSupplyWater: canSupplyWater(world), supplying,
@@ -709,6 +829,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   }
 
   const talkToPartner = (id: string, focus = true): void => {
+    if (deepChapter?.busy) return
+    finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
     if (mealBusy()) return
     if (traveling || buildMode !== 'none' || lampMode || renderer.isOverview || roomEditor?.active) return
     const conversation = partnerConversation(world, id)
@@ -1329,6 +1451,129 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   }
 
   let inputBlocked = false
+  deepChapter = new DeepChapter({
+    world: () => world, view: renderer, emit: state => hooks.onDeep?.(state),
+    prepare: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close()
+      if (order) abortOrder()
+      if (atuOrders?.active) atuOrders.cancel()
+      partnerOrders?.cancel(false)
+      if (mealing) cancelMeal()
+      siteEditor?.cancel(); siteEditor?.close(); roomEditor?.close(); facilityPanel?.close(); closeConversation()
+      buildMode = 'none'; lampMode = false; diggingSites = false; candidate = null; hoverBuild = null
+      renderer.setLampPreview(null); renderer.setHoverCell(null); renderer.setAtuTarget(null); renderer.setHighlight(null)
+      pushBuild()
+    },
+    changed: () => { renderer.refreshExploration(); scheduleSave(); pushProgress() },
+    record: change => history.record({ kind: 'deep', change }),
+    dig: (cell, tile) => { history.record({ kind: 'dig', ...cell, tile }); renderer.refreshTerrain([cell]); renderer.playDigEffect(cell) },
+    notify, milestone: (title, detail) => hooks.onMilestone?.({ emoji: '💎', title, detail }),
+  })
+  deepChapter.refresh()
+  hallChapter = new HallChapter({
+    world: () => world, view: renderer, emit: state => hooks.onHall?.(state),
+    prepare: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close()
+      if (order) abortOrder()
+      if (atuOrders?.active) atuOrders.cancel()
+      partnerOrders?.cancel(false)
+      if (mealing) cancelMeal()
+      deepChapter?.close(); siteEditor?.cancel(); siteEditor?.close(); roomEditor?.close(); facilityPanel?.close(); closeConversation()
+      buildMode = 'none'; lampMode = false; diggingSites = false; candidate = null; hoverBuild = null
+      renderer.setLampPreview(null); renderer.setHoverCell(null); renderer.setAtuTarget(null); renderer.setHighlight(null); pushBuild()
+    },
+    changed: () => { renderer.refreshExploration(); scheduleSave(); pushProgress() },
+    record: change => history.record({ kind: 'hall', change }),
+    dig: cell => { history.record({ kind: 'dig', ...cell, tile: TILE.ROCK }); renderer.refreshTerrain([cell]); renderer.playDigEffect(cell) },
+    notify, milestone: (title, detail) => hooks.onMilestone?.({ emoji: '🏮', title, detail }),
+  })
+  hallChapter.refresh()
+  gardenChapter = new GardenChapter({
+    world: () => world, view: renderer, emit: state => hooks.onGarden?.(state),
+    prepare: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close()
+      if (order) abortOrder()
+      if (atuOrders?.active) atuOrders.cancel()
+      partnerOrders?.cancel(false)
+      if (mealing) cancelMeal()
+      if (deepChapter?.busy) deepChapter.cancel()
+      hallChapter?.close(); deepChapter?.close(); siteEditor?.cancel(); siteEditor?.close(); roomEditor?.close(); facilityPanel?.close(); closeConversation()
+      buildMode = 'none'; lampMode = false; diggingSites = false; candidate = null; hoverBuild = null
+      renderer.setLampPreview(null); renderer.setHoverCell(null); renderer.setAtuTarget(null); renderer.setHighlight(null); pushBuild()
+    },
+    changed: () => { renderer.refreshExploration(); scheduleSave(); pushProgress() },
+    record: change => history.record({ kind: 'garden', change }),
+    dig: cell => { history.record({ kind: 'dig', ...cell, tile: TILE.ROCK }); renderer.refreshTerrain([cell]); renderer.playDigEffect(cell) },
+    notify, milestone: (title, detail) => hooks.onMilestone?.({ emoji: '🌿', title, detail }),
+  })
+  gardenChapter.refresh()
+  reservoirChapter=new ReservoirChapter({
+    world:()=>world,view:renderer,emit:state=>hooks.onReservoir?.(state),
+    prepare:()=>{
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close()
+      if(order)abortOrder()
+      if(atuOrders?.active)atuOrders.cancel()
+      partnerOrders?.cancel(false)
+      if(mealing)cancelMeal()
+      if(deepChapter?.busy)deepChapter.cancel()
+      gardenChapter?.close();hallChapter?.close();deepChapter?.close();siteEditor?.cancel();siteEditor?.close();roomEditor?.close();facilityPanel?.close();closeConversation()
+      buildMode='none';lampMode=false;diggingSites=false;candidate=null;hoverBuild=null
+      renderer.setLampPreview(null);renderer.setHoverCell(null);renderer.setAtuTarget(null);renderer.setHighlight(null);pushBuild()
+    },
+    changed:()=>{renderer.refreshExploration();scheduleSave();pushProgress()},
+    record:change=>history.record({kind:'reservoir',change}),
+    dig:cell=>{history.record({kind:'dig',...cell,tile:TILE.ROCK});renderer.refreshTerrain([cell]);renderer.playDigEffect(cell)},
+    notify,milestone:(title,detail)=>hooks.onMilestone?.({emoji:'💧',title,detail}),
+  })
+  reservoirChapter.refresh()
+  ventilationChapter=new VentilationChapter({
+    world:()=>world,view:renderer,emit:state=>hooks.onVentilation?.(state),
+    prepare:()=>{
+      if(order)abortOrder()
+      if(atuOrders?.active)atuOrders.cancel()
+      partnerOrders?.cancel(false);if(mealing)cancelMeal()
+      if(deepChapter?.busy)deepChapter.cancel()
+      finaleChapter?.close(); ruinsChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();siteEditor?.cancel();siteEditor?.close();roomEditor?.close();facilityPanel?.close();closeConversation()
+      buildMode='none';lampMode=false;diggingSites=false;candidate=null;hoverBuild=null
+      renderer.setLampPreview(null);renderer.setHoverCell(null);renderer.setAtuTarget(null);renderer.setHighlight(null);pushBuild()
+    },
+    changed:()=>{renderer.refreshExploration();scheduleSave();pushProgress()},
+    record:change=>history.record({kind:'ventilation',change}),
+    dig:cell=>{history.record({kind:'dig',...cell,tile:TILE.ROCK});renderer.refreshTerrain([cell]);renderer.playDigEffect(cell)},notify,
+  })
+  ventilationChapter.refresh()
+  ruinsChapter=new RuinsChapter({
+    world:()=>world,view:renderer,emit:state=>hooks.onRuins?.(state),
+    prepare:()=>{
+      if(order)abortOrder()
+      if(atuOrders?.active)atuOrders.cancel()
+      partnerOrders?.cancel(false);if(mealing)cancelMeal()
+      if(deepChapter?.busy)deepChapter.cancel()
+      finaleChapter?.close();ventilationChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();siteEditor?.cancel();siteEditor?.close();roomEditor?.close();facilityPanel?.close();closeConversation()
+      buildMode='none';lampMode=false;diggingSites=false;candidate=null;hoverBuild=null
+      renderer.setLampPreview(null);renderer.setHoverCell(null);renderer.setAtuTarget(null);renderer.setHighlight(null);pushBuild()
+    },
+    changed:()=>{renderer.refreshExploration();scheduleSave();pushProgress()},
+    record:change=>history.record({kind:'ruins',change}),
+    dig:cell=>{history.record({kind:'dig',...cell,tile:TILE.ROCK});renderer.refreshTerrain([cell]);renderer.playDigEffect(cell)},notify,
+  })
+  ruinsChapter.refresh()
+  finaleChapter=new FinaleChapter({
+    world:()=>world,view:renderer,emit:state=>hooks.onFinale?.(state),
+    prepare:()=>{
+      if(order)abortOrder()
+      if(atuOrders?.active)atuOrders.cancel()
+      partnerOrders?.cancel(false);if(mealing)cancelMeal()
+      if(deepChapter?.busy)deepChapter.cancel()
+      ruinsChapter?.close();ventilationChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();siteEditor?.cancel();siteEditor?.close();roomEditor?.close();facilityPanel?.close();closeConversation()
+      buildMode='none';lampMode=false;diggingSites=false;candidate=null;hoverBuild=null
+      renderer.setLampPreview(null);renderer.setHoverCell(null);renderer.setAtuTarget(null);renderer.setHighlight(null);pushBuild()
+    },
+    changed:()=>{renderer.refreshExploration();scheduleSave();pushProgress()},
+    record:change=>history.record({kind:'finale',change}),
+    dig:cell=>{history.record({kind:'dig',...cell,tile:TILE.ROCK});renderer.refreshTerrain([cell]);renderer.playDigEffect(cell)},notify,
+  })
+  finaleChapter.refresh()
   const pointer = attachPointerControls(renderer.canvasElement, {
     onTap: (screen) => {
       if (openingActive || inputBlocked) return
@@ -1340,6 +1585,20 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         return
       }
       const cell = renderer.tileAtScreen(screen)
+      if(finaleChapter?.busy)return
+      if(cell&&buildMode==='none'&&!lampMode&&!traveling&&finaleChapter?.tap(cell))return
+      if(ruinsChapter?.busy)return
+      if(cell&&buildMode==='none'&&!lampMode&&!traveling&&ruinsChapter?.tap(cell))return
+      if(ventilationChapter?.busy)return
+      if(cell&&buildMode==='none'&&!lampMode&&!traveling&&ventilationChapter?.tap(cell))return
+      if(reservoirChapter?.busy)return
+      if(cell && buildMode==='none' && !lampMode && !traveling && reservoirChapter?.tap(cell))return
+      if (gardenChapter?.busy) return
+      if (cell && buildMode === 'none' && !lampMode && !traveling && gardenChapter?.tap(cell)) return
+      if (hallChapter?.busy) return
+      if (cell && buildMode === 'none' && !lampMode && !traveling && hallChapter?.tap(cell)) return
+      if (deepChapter?.busy) return
+      if (cell && buildMode === 'none' && !lampMode && !traveling && deepChapter?.tap(cell)) return
       if (cell && world.progress.coreRepaired && !traveling && buildMode === 'none' && !lampMode && inRect(COLLECTION_SHELF, cell)) {
         hooks.onBagRequested?.(); return
       }
@@ -1353,6 +1612,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         // 已建好的设施（菜园/灶台/餐桌）：点本体打开它的面板；菜槽本身仍走直点。
         const facility = panelFacilityAt(world, cell.x, cell.y)
         if (facility) {
+          finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
           closeConversation(); siteEditor?.close(); roomEditor?.close()
           diggingSites = false
           renderer.setHoverCell(null)
@@ -1360,10 +1620,22 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
           pushBuild(); pushHighlight()
           return
         }
+        // 已建成的住处/客厅也是建筑本体：点床或房间内部，直接打开房间详情与扩建入口。
+        const room = roomAt(world, cell)
+        if (room && room.status !== 'blueprint' && roomEditor) {
+          closeConversation(); siteEditor?.close(); facilityPanel?.close()
+          diggingSites = false
+          renderer.setHoverCell(null)
+          roomEditor.active = true
+          roomEditor.select(room.id)
+          renderer.focusOn((room.x + room.w / 2) * TILE_SIZE, (room.y + room.h / 2) * TILE_SIZE, 'building')
+          pushBuild(); pushHighlight()
+          return
+        }
       }
       if (roomEditor?.active && (!cell || roomEditor.tap(cell))) return
       // 实心地形始终保留挖掘/施工命中，不让角色的触屏容错抢走旁边岩块。
-      const facility = cell && (planterAt(world, cell.x, cell.y) || (world.exploration.springFound && cell.y >= 19 && Math.abs(cell.x - LANDMARKS.spring.x) <= 1))
+      const facility = cell && (planterAt(world, cell.x, cell.y) || (world.exploration.springFound && cell.y >= 19 && cell.y <= 21 && Math.abs(cell.x - LANDMARKS.spring.x) <= 1))
       if (!facility && !traveling && buildMode === 'none' && !lampMode && cell && world.tiles[cell.y][cell.x] === TILE.EMPTY) {
         const partner = renderer.partnerAtScreen(screen)
         if (partner) { talkToPartner(partner); return }
@@ -1388,6 +1660,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('pointer'); return
       }
       if (!traveling && buildMode === 'none' && !lampMode && cell && panelFacilityAt(world, cell.x, cell.y)) {
+        renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('pointer'); return
+      }
+      const room = cell && roomAt(world, cell)
+      if (!traveling && buildMode === 'none' && !lampMode && room && room.status !== 'blueprint') {
         renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('pointer'); return
       }
       renderer.hoverPartner(screen && !traveling ? renderer.partnerAtScreen(screen) : null)
@@ -1415,6 +1691,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const onVisibilityChange = (): void => {
     gameAudio.setHidden(document.visibilityState === 'hidden')
     if (document.visibilityState === 'hidden') {
+      if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel()
+      if (gardenChapter?.busy) gardenChapter.cancel()
+      if (hallChapter?.busy) hallChapter.cancel()
+      if (deepChapter?.busy) deepChapter.cancel()
       if (discovering) closeConversation()
       if (openingActive) renderer.finishOpening()
       pointer.reset()
@@ -1437,14 +1717,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       notify(hint)
     }
   }
-  const onPageHide = (): void => { gameAudio.setHidden(true); if (openingActive) renderer.finishOpening(); partnerOrders?.cancel(false); if (mealing) cancelMeal(); void persist() }
+  const onPageHide = (): void => { if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel(); if (gardenChapter?.busy) gardenChapter.cancel(); hallChapter?.cancel(); gameAudio.setHidden(true); if (deepChapter?.busy) deepChapter.cancel(); if (openingActive) renderer.finishOpening(); partnerOrders?.cancel(false); if (mealing) cancelMeal(); void persist() }
   /** 窗口失焦不会停帧，只把指针手势复位，避免拖到一半的拖动卡住下一次点击。 */
   const onWindowBlur = (): void => { pointer.reset() }
   const undoLast = (): void => {
     const restored = history.undo(world)
     if (!restored) { playUnavailable(); notify('这里有伙伴、设施或回家的路，先留着这片空地。'); return }
     playUndo()
-    if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
+    if (restored.kind === 'finale' || restored.kind === 'ruins' || restored.kind === 'ventilation' || restored.kind === 'deep' || restored.kind === 'hall' || restored.kind === 'garden' || restored.kind === 'reservoir') { renderer.refresh(); deepChapter?.refresh() }
+    else if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
     else if (restored.kind === 'planter') renderer.refreshFarm()
     else if (restored.kind === 'shelf') renderer.refreshShelves()
     else if (restored.kind === 'nursery') renderer.refreshFarm()
@@ -1454,6 +1735,20 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     renderer.refreshExploration(); scheduleSave(); pushProgress(); hooks.onMessage('↶ 已撤销上一步')
   }
   const cancelAction = (): void => {
+    if(finaleChapter?.busy){finaleChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ruinsChapter?.busy){ruinsChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ventilationChapter?.busy){ventilationChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(reservoirChapter?.busy){reservoirChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if (gardenChapter?.busy) { gardenChapter.cancel(); notify('先停下来啦，完成的部分已经保留。'); return }
+    if (hallChapter?.busy) { hallChapter.cancel(); notify('先停下来啦。已完成的施工和材料都保留。'); return }
+    if(finaleChapter?.active){finaleChapter.close();return}
+    if(ruinsChapter?.active){ruinsChapter.close();return}
+    if(ventilationChapter?.active){ventilationChapter.close();return}
+    if(reservoirChapter?.active){reservoirChapter.close();return}
+    if (gardenChapter?.active) { gardenChapter.close(); return }
+    if (hallChapter?.active) { hallChapter.close(); return }
+    if (deepChapter?.busy) { deepChapter.cancel(); notify('先停下来啦。已完成的施工和材料都保留。'); return }
+    if (deepChapter?.active) { deepChapter.close(); return }
     gameAudio.stopEffects()
     if (cancelMeal('🍽 大家先停一下，再点一次就好。')) return
     if (siteEditor?.working) { siteEditor.cancel(); notify('阿土停下来啦，已挖的地方和找到的材料都保留。'); return }
@@ -1550,6 +1845,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   /** 明确选择“重新开始”：清掉旧档，世界和会话状态都回到初始值。 */
   const resetToNewGame = (): void => {
+    if (deepChapter?.busy) deepChapter.cancel()
+    finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
     gameAudio.stopEffects()
     partnerOrders?.cancel(false)
     if (atuOrders?.active) atuOrders.cancel()
@@ -1667,6 +1964,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   /** 引导或面板里“找旧物”：把镜头带到第一件还没挖到的旧物旁。 */
   const focusRelicById = (id: string): void => {
+    if(id==='earth-warmth'){finaleChapter?.close();ruinsChapter?.close();ventilationChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();renderer.focusOn(36.5*TILE_SIZE,105*TILE_SIZE,'building');return}
+    const ruinsSpot=id==='ruins-seal'?{x:10,y:94}:id==='ruins-footprint'?{x:36,y:94}:id==='ruins-lamp'?{x:12,y:94}:id==='ruins-spring'?{x:30,y:94}:id==='ruins-tools'?{x:38,y:94}:null
+    if(ruinsSpot){finaleChapter?.close(); ruinsChapter?.close();ventilationChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();renderer.focusOn((ruinsSpot.x+.5)*TILE_SIZE,(ruinsSpot.y-1)*TILE_SIZE,'building');return}
+    const windSpot=id==='wind-echo'?{x:38,y:82}:id==='wind-vane'?{x:10,y:82}:null
+    if(windSpot){finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close();reservoirChapter?.close();gardenChapter?.close();hallChapter?.close();deepChapter?.close();renderer.focusOn((windSpot.x+.5)*TILE_SIZE,(windSpot.y-1)*TILE_SIZE,'building');return}
+    const reservoirSpot = id === 'water-shell' ? {x:38,y:70} : id === 'water-reed' ? {x:10,y:70} : null
+    if (reservoirSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((reservoirSpot.x+.5)*TILE_SIZE, (reservoirSpot.y-1)*TILE_SIZE, 'building'); return }
+    const gardenSpot = id === 'garden-spores' ? SPORE_SPOT : id === 'garden-root' ? ROOT_SPOT : null
+    if (gardenSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((gardenSpot.x + .5) * TILE_SIZE, (gardenSpot.y - 1) * TILE_SIZE, 'building'); return }
+    const hallSpot = id === 'hall-mural' ? MURAL_SPOT : id === 'warm-wick' ? WARM_LIGHT_SPOT : null
+    if (hallSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((hallSpot.x + .5) * TILE_SIZE, (hallSpot.y - 1) * TILE_SIZE, 'building'); return }
+    const deepSpot = id === 'crystal-cluster' ? CRYSTAL_SPOT : id === 'crystal-moss' ? MOSS_SPOT : id === 'old-drill' ? DRILL_SPOT : null
+    if (deepSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((deepSpot.x + .5) * TILE_SIZE, (deepSpot.y - 1) * TILE_SIZE); return }
     const relic = RELICS.find(r => r.id === id)
     if (!relic) return
     facilityPanel?.close()
@@ -1719,7 +2029,74 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     pushBuild(); pushProgress()
   }
 
+  /** 能源核心面板 → 把已经接通的电送到第二层。 */
+  const sendPowerNow = (): void => {
+    if (mealBusy() || traveling || supplying || powering || !canSendPowerDown(world)) return
+    const from = world.exploration.explorer
+    const shaftX = world.exploration.shaftX
+    if (!from || shaftX === null) return
+    const route = atuRoute(world, from, { x: shaftX, y: 19 })
+    if (!route) { notify('先让阿土走回梯子那边，再送电。'); return }
+    facilityPanel?.close()
+    powering = true
+    pushProgress()
+    moveExplorer(route, () => {
+      sendPowerDown(world)
+      powering = false
+      renderer.playPowerDown()
+      playPowerConnected()
+      renderer.refreshExploration()
+      renderer.playMoleReaction('电到下面啦！')
+      notify('⚡ 电流顺着梯子下去了，第二层亮起来了！')
+      hooks.onMilestone?.({ emoji: '⚡', title: '第二层通电！', detail: '家里的电送下来了 · 这儿不再是黑的了' })
+      scheduleSave()
+      pushProgress()
+    })
+  }
+
   return {
+    openFinale:()=>finaleChapter?.show(true),
+    closeFinale:()=>finaleChapter?.close(),
+    finalePrimary:()=>{if(!traveling)finaleChapter?.primary()},
+    finaleSelect:kind=>finaleChapter?.select(kind),
+    finaleTheme:theme=>finaleChapter?.chooseTheme(theme),
+    finalePanorama:()=>finaleChapter?.panorama(),
+    openRuins:()=>ruinsChapter?.show(true),
+    closeRuins:()=>{finaleChapter?.close(); ruinsChapter?.close()},
+    ruinsPrimary:()=>{if(!traveling)ruinsChapter?.primary()},
+    ruinsSelect:kind=>ruinsChapter?.select(kind),
+    ruinsMotif:motif=>ruinsChapter?.chooseMotif(motif),
+    ruinsEdition:edition=>ruinsChapter?.chooseEdition(edition),
+    openVentilation:()=>ventilationChapter?.show(true),
+    closeVentilation:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close()},
+    ventilationPrimary:()=>{if(!traveling)ventilationChapter?.primary()},
+    ventilationSelect:kind=>ventilationChapter?.select(kind),
+    ventilationMode:mode=>ventilationChapter?.chooseMode(mode),
+    ventilationVariety:()=>ventilationChapter?.changeVariety(),
+    openReservoir:()=>reservoirChapter?.show(true),
+    closeReservoir:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close()},
+    reservoirPrimary:()=>{if(!traveling)reservoirChapter?.primary()},
+    reservoirSelect:kind=>reservoirChapter?.select(kind),
+    reservoirRoute:route=>reservoirChapter?.chooseRoute(route),
+    openGarden: () => gardenChapter?.show(true),
+    closeGarden: () => {finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close();gardenChapter?.close()},
+    gardenPrimary: () => { if (!traveling) gardenChapter?.primary() },
+    gardenSelect: kind => gardenChapter?.select(kind),
+    gardenAdd: kind => gardenChapter?.select(kind, undefined, true),
+    gardenVariety: () => gardenChapter?.changeVariety(),
+    openHall: () => hallChapter?.show(true),
+    closeHall: () => { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close() },
+    hallPrimary: () => { if (!traveling) hallChapter?.primary() },
+    hallSelect: kind => hallChapter?.select(kind),
+    hallAlbumPage: delta => hallChapter?.albumPage(delta),
+    openDeep: () => deepChapter?.show(true),
+    closeDeep: () => { if (deepChapter?.busy) deepChapter.cancel(); finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close() },
+    deepPrimary: () => { if (!traveling) deepChapter?.primary(); else notify('等阿土走稳，再来做这件事。') },
+    deepSelect: kind => deepChapter?.select(kind),
+    deepPlaceLamp: () => deepChapter?.select('lamp', true),
+    deepUpgrade: (action, label) => deepChapter?.selectUpgrade(action, label),
+    deepRide: action => { if (!traveling && !hallChapter?.busy && !gardenChapter?.busy && !reservoirChapter?.busy && !ventilationChapter?.busy && !ruinsChapter?.busy && !finaleChapter?.busy) { deepChapter?.show(); deepChapter?.perform(action) } },
+    lookCrystal: () => deepChapter?.show(true),
     setInputBlocked: blocked => {
       inputBlocked = blocked; pointer.reset()
       if (blocked) { renderer.setHoverCell(null); renderer.hoverPartner(null) }
@@ -1745,6 +2122,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.playPartnerReaction(id, currentWork?.worker === id ? '我在这里忙着呢！' : '我在这里！点设施，我来帮忙。')
     },
     openRooms: () => {
+      if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel()
+      if (gardenChapter?.busy) gardenChapter.cancel()
+      if (hallChapter?.busy) hallChapter.cancel()
+      if (deepChapter?.busy) deepChapter.cancel()
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       if (mealBusy() || !world.progress.coreRepaired || traveling) return
       closeConversation(); facilityPanel?.close(); buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null; pushBuild()
       diggingSites = false
@@ -1790,9 +2172,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
           else renderer.focusWater()
         }
       }
+      else if(conversation?.action?.id==='open-finale'){closeConversation();finaleChapter?.show(true)}
+      else if(conversation?.action?.id==='open-ruins'){closeConversation();ruinsChapter?.show(true)}
+      else if(conversation?.action?.id==='open-ventilation'){closeConversation();ventilationChapter?.show(true)}
+      else if (conversation?.action?.id === 'open-reservoir') { closeConversation(); reservoirChapter?.show(true) }
+      else if (conversation?.action?.id === 'open-garden') { closeConversation(); gardenChapter?.show(true) }
       else if (conversation?.action?.id === 'look-at-clue') { closeConversation(); focusCurrentClue() }
     },
     setBuildMode: (mode) => {
+      if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel()
+      if (gardenChapter?.busy) gardenChapter.cancel()
+      if (hallChapter?.busy) hallChapter.cancel()
+      if (deepChapter?.busy) deepChapter.cancel()
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       if (mealBusy()) return
       if (siteEditor?.working) siteEditor.cancel()
       siteEditor?.close()
@@ -1880,6 +2272,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     },
     zoomBy: (delta) => { closeConversation(); renderer.zoomBy(delta) },
     centerOnHome: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       closeConversation()
       siteEditor?.close()
       facilityPanel?.close()
@@ -1888,6 +2281,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.focusHome()
     },
     lookDown: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       siteEditor?.close()
       roomEditor?.close()
       facilityPanel?.close()
@@ -1901,6 +2295,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.focusWater()
     },
     showOverview: () => {
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       siteEditor?.close()
       roomEditor?.close()
       facilityPanel?.close()
@@ -1914,6 +2309,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.focusOverview()
     },
     undo: () => {
+      if(finaleChapter?.busy){finaleChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ruinsChapter?.busy){ruinsChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(ventilationChapter?.busy){ventilationChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if(reservoirChapter?.busy){reservoirChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
+    if (gardenChapter?.busy) { gardenChapter.cancel(); notify('先停下来啦，完成的部分已经保留。'); return }
+      if (hallChapter?.busy) { hallChapter.cancel(); notify('先停下来，再点一次撤销。'); return }
+      if (deepChapter?.busy) { deepChapter.cancel(); notify('先停下来，再点一次撤销。'); return }
       if (mealBusy()) return
       if (siteEditor?.working) { siteEditor.cancel(); notify('先停下施工了，再点一次撤销。'); return }
       siteEditor?.close()
@@ -1965,28 +2367,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       requestPartnerWork({ kind: 'water' })
     },
     startPlanting,
-    sendPower: () => {
-      if (mealBusy() || traveling || supplying || powering || !canSendPowerDown(world)) return
-      const from = world.exploration.explorer
-      const shaftX = world.exploration.shaftX
-      if (!from || shaftX === null) return
-      const route = atuRoute(world, from, { x: shaftX, y: 19 })
-      if (!route) { notify('先让阿土走回梯子那边，再送电。'); return }
-      powering = true
-      pushProgress()
-      moveExplorer(route, () => {
-        sendPowerDown(world)
-        powering = false
-        renderer.playPowerDown()
-        playPowerConnected()
-        renderer.refreshExploration()
-        renderer.playMoleReaction('电到下面啦！')
-        notify('⚡ 电流顺着梯子下去了，第二层亮起来了！')
-        hooks.onMilestone?.({ emoji: '⚡', title: '第二层通电！', detail: '家里的电送下来了 · 这儿不再是黑的了' })
-        scheduleSave()
-        pushProgress()
-      })
-    },
+    sendPower: sendPowerNow,
     feed: () => {
       facilityPanel?.close()
       startMeal()
@@ -1995,6 +2376,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       const id = facilityPanel?.id
       if (!id) return
       const primary = facilityView(world, id).primary
+      if (primary.kind === 'power') { sendPowerNow(); return }
       if (primary.kind === 'harvest' || primary.kind === 'watering') {
         // 面板只派发目标：小满沿真实通路过去收/浇，结算与直点完全同一套。
         requestPartnerWork({ kind: primary.kind, x: primary.x, y: primary.y })
@@ -2024,6 +2406,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     closeFacility: () => facilityPanel?.close(),
     toggleLamp,
     destroy: () => {
+      if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel()
+      if (gardenChapter?.busy) gardenChapter.cancel()
+      if (hallChapter?.busy) hallChapter.cancel()
+      if (deepChapter?.busy) deepChapter.cancel()
+      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       gameAudio.setPlaying(false)
       gameAudio.stopEffects()
       siteEditor?.cancel()

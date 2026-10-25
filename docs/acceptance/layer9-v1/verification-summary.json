@@ -1,0 +1,52 @@
+{
+  "date": "2026-10-26",
+  "chapter": 9,
+  "title": "地心暖光（终章）",
+  "worldVersion": 23,
+  "map": [
+    44,
+    112
+  ],
+  "partners": 9,
+  "tests": {
+    "command": "npx vitest run --maxWorkers=1 --reporter=dot --reporter=json --outputFile.json=docs/acceptance/layer9-v1/test-results.json",
+    "success": true,
+    "files": 57,
+    "passed": 686,
+    "failed": 0,
+    "skipped": 0,
+    "addedSinceChapter8": 34,
+    "finalPanelCheck": {
+      "command": "npx vitest run tests/attention-contract.test.ts",
+      "passed": 30,
+      "failed": 0,
+      "reason": "Final illustration visibility refinement only; full regression preceded this UI-only change"
+    }
+  },
+  "build": {
+    "command": "npm run build",
+    "exitCode": 0,
+    "modules": 976,
+    "mainJsKB": 946.96,
+    "mainGzipKB": 303.51,
+    "warning": "Main chunk exceeds 500 kB; device performance and loading not yet tested"
+  },
+  "diffCheck": {
+    "exitCode": 0,
+    "output": "warning: in the working copy of 'src/app/facilityPanel.ts', LF will be replaced by CRLF the next time Git touches it\n"
+  },
+  "art": {
+    "generator": "built-in ImageGen",
+    "files": 3,
+    "bytes": 8750605,
+    "transparencyInspected": true
+  },
+  "liveBrowserQA": {
+    "completed": false,
+    "reason": "Local browser use is disabled in Work settings",
+    "screenshots": []
+  },
+  "dependenciesAdded": false,
+  "deployed": false,
+  "epilogue": "Permanent completion, free building, repeat feast, theme changes, memory replay; all existing chapters retained"
+}

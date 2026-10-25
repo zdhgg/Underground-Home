@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-26",
+  "scope": "第七章听风工区与第九位伙伴蝙蝠铃铃",
+  "map": [
+    44,
+    88
+  ],
+  "worldVersion": 21,
+  "tests": {
+    "command": "npm test -- --maxWorkers=1 --reporter=json --outputFile=docs/acceptance/layer7-v1/test-results.json",
+    "files": 53,
+    "total": 623,
+    "passed": 623,
+    "failed": 0,
+    "previousChapterTests": 590,
+    "added": 33
+  },
+  "diffCheck": {
+    "command": "git diff --check",
+    "passed": true,
+    "note": "既有 facilityPanel.ts 有 LF/CRLF 转换提示"
+  },
+  "assets": {
+    "tool": "内置 ImageGen",
+    "selectedFiles": 3,
+    "bytes": 6933331,
+    "RGBA": true,
+    "alphaRanges": {
+      "lingling-v1.png": [
+        0,
+        255
+      ],
+      "bench-v1.png": [
+        0,
+        255
+      ],
+      "fan-v1.png": [
+        0,
+        254
+      ]
+    },
+    "prompts": "../../../src/assets/art/ventilation/ART.md",
+    "manifest": "../../../src/assets/art/ventilation/manifest.json",
+    "note": "风机编辑试稿未采用，原始生成文件保留；没有脚本改图。"
+  },
+  "browser": {
+    "status": "blocked",
+    "attemptedURL": "http://127.0.0.1:5174/tests/manual/ventilation.html?phase=working",
+    "toolError": "Local browser use is disabled in Work settings",
+    "gameScreenshots": 0,
+    "claim": "未进行第七章浏览器实景、实体触屏或实际试听，不使用第六章截图充数。"
+  },
+  "deployment": false,
+  "newRuntimeDependencies": false,
+  "build": {
+    "command": "npm run build",
+    "success": true,
+    "typecheck": true,
+    "modules": 954,
+    "mainJsKB": 862.67,
+    "mainGzipKB": 283.52,
+    "warning": "主 JS 分块超过 500 kB，构建成功"
+  }
+}

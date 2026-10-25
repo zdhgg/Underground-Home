@@ -1,0 +1,43 @@
+{
+  "generator": "built-in ImageGen",
+  "date": "2026-10-26",
+  "editing": "none; generated original PNGs copied",
+  "assets": [
+    {
+      "file": "heart-v1.png",
+      "bytes": 2810900,
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        254
+      ],
+      "sha256": "df3a4711c312dc2f47baeeb1ab232857533542b74461514e226ddbc70587cdcd"
+    },
+    {
+      "file": "memory-v1.png",
+      "bytes": 2894052,
+      "width": 1428,
+      "height": 1101,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "sha256": "6fbe59d7be83624e1611c91b71db1c1433853fbfdfbdd5885328b669f71f1a79"
+    },
+    {
+      "file": "table-v1.png",
+      "bytes": 3045653,
+      "width": 2143,
+      "height": 734,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "sha256": "39acef394a70cf651e0cca2f278dbbdfe2fa049a0a75395e1ee9363c0ca215ce"
+    }
+  ]
+}

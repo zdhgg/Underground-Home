@@ -1,0 +1,253 @@
+{
+  "success": true,
+  "tests": 557,
+  "passed": 557,
+  "failed": 0,
+  "files": [
+    {
+      "name": "tests\\ambient-life.test.ts",
+      "status": "passed",
+      "assertions": 4
+    },
+    {
+      "name": "tests\\attention-contract.test.ts",
+      "status": "passed",
+      "assertions": 23
+    },
+    {
+      "name": "tests\\atu-construction.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\atu-orders.test.ts",
+      "status": "passed",
+      "assertions": 13
+    },
+    {
+      "name": "tests\\audio.test.ts",
+      "status": "passed",
+      "assertions": 35
+    },
+    {
+      "name": "tests\\bag.test.ts",
+      "status": "passed",
+      "assertions": 3
+    },
+    {
+      "name": "tests\\build.test.ts",
+      "status": "passed",
+      "assertions": 5
+    },
+    {
+      "name": "tests\\cave-moss.test.ts",
+      "status": "passed",
+      "assertions": 4
+    },
+    {
+      "name": "tests\\crystal-feedback.test.ts",
+      "status": "passed",
+      "assertions": 3
+    },
+    {
+      "name": "tests\\deep-chapter.test.ts",
+      "status": "passed",
+      "assertions": 11
+    },
+    {
+      "name": "tests\\deep.test.ts",
+      "status": "passed",
+      "assertions": 17
+    },
+    {
+      "name": "tests\\depth.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\dig.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\exploration.test.ts",
+      "status": "passed",
+      "assertions": 20
+    },
+    {
+      "name": "tests\\facility-art.test.ts",
+      "status": "passed",
+      "assertions": 4
+    },
+    {
+      "name": "tests\\farm.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\focus-ui.test.ts",
+      "status": "passed",
+      "assertions": 4
+    },
+    {
+      "name": "tests\\friend-routes.test.ts",
+      "status": "passed",
+      "assertions": 5
+    },
+    {
+      "name": "tests\\garden-chapter.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\garden.test.ts",
+      "status": "passed",
+      "assertions": 12
+    },
+    {
+      "name": "tests\\hall-chapter.test.ts",
+      "status": "passed",
+      "assertions": 6
+    },
+    {
+      "name": "tests\\hall.test.ts",
+      "status": "passed",
+      "assertions": 10
+    },
+    {
+      "name": "tests\\history.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\input-camera.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\interact.test.ts",
+      "status": "passed",
+      "assertions": 13
+    },
+    {
+      "name": "tests\\inventory-dialog.test.ts",
+      "status": "passed",
+      "assertions": 3
+    },
+    {
+      "name": "tests\\lighting.test.ts",
+      "status": "passed",
+      "assertions": 9
+    },
+    {
+      "name": "tests\\meal.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\missions.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\mole-dig-visual.test.ts",
+      "status": "passed",
+      "assertions": 6
+    },
+    {
+      "name": "tests\\nursery.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\opening.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\partner-interactions.test.ts",
+      "status": "passed",
+      "assertions": 8
+    },
+    {
+      "name": "tests\\partner-work.test.ts",
+      "status": "passed",
+      "assertions": 9
+    },
+    {
+      "name": "tests\\partners.test.ts",
+      "status": "passed",
+      "assertions": 11
+    },
+    {
+      "name": "tests\\persistence.test.ts",
+      "status": "passed",
+      "assertions": 16
+    },
+    {
+      "name": "tests\\power.test.ts",
+      "status": "passed",
+      "assertions": 10
+    },
+    {
+      "name": "tests\\release-notes.test.ts",
+      "status": "passed",
+      "assertions": 3
+    },
+    {
+      "name": "tests\\relics.test.ts",
+      "status": "passed",
+      "assertions": 5
+    },
+    {
+      "name": "tests\\room-construction.test.ts",
+      "status": "passed",
+      "assertions": 13
+    },
+    {
+      "name": "tests\\rooms.test.ts",
+      "status": "passed",
+      "assertions": 20
+    },
+    {
+      "name": "tests\\save-summary.test.ts",
+      "status": "passed",
+      "assertions": 6
+    },
+    {
+      "name": "tests\\session-exploration.test.ts",
+      "status": "passed",
+      "assertions": 66
+    },
+    {
+      "name": "tests\\sites.test.ts",
+      "status": "passed",
+      "assertions": 11
+    },
+    {
+      "name": "tests\\storage.test.ts",
+      "status": "passed",
+      "assertions": 9
+    },
+    {
+      "name": "tests\\surface-scene.test.ts",
+      "status": "passed",
+      "assertions": 7
+    },
+    {
+      "name": "tests\\terrain-renderer.test.ts",
+      "status": "passed",
+      "assertions": 60
+    },
+    {
+      "name": "tests\\terrain-textures.test.ts",
+      "status": "passed",
+      "assertions": 2
+    },
+    {
+      "name": "tests\\world.test.ts",
+      "status": "passed",
+      "assertions": 8
+    }
+  ]
+}

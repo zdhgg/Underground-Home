@@ -4,7 +4,7 @@ import { pickaxeUpgrade, wideLampUpgrade, type PartnerUpgrade } from './partnerA
 import { partnerById, type PartnerId } from './partners'
 import type { WorldState } from './world'
 
-export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp'
+export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale'
 export interface PartnerConversation {
   partnerId: PartnerId
   name: string
@@ -67,10 +67,24 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
       : world.farm.food > 0 ? ['有新鲜菜啦！', '咱们一起吃一口？']
         : ripePlanters(world).length > 0 ? ['菜长熟啦！', '点菜槽，我走过去收。']
           : world.farm.planters.length > 0 ? ['小芽正在长大。', '你忙建设，我看着菜。'] : ['水到菜园啦！', '去第二层种一槽菜，我来照顾。']
+  } else if(partner.id==='lingling'){
+    result.lines=['我是铃铃，能听见风经过哪条洞壁。','工区风帮我们做手作，家园微风让大厅的作品轻轻摇。'];result.action={id:'open-ventilation',label:'去看看听风工区'}
+  } else if (partner.id === 'tuantuan') {
+    result.lines = ['我是团团，最喜欢筑渠、修闸。', '你来选清水送花园还是大厅，我去转水闸！']
+    result.action = { id: 'open-reservoir', label: '去看看分水闸' }
+  } else if (partner.id === 'taitai') {
+    result.action = { id: 'open-garden', label: '去看看菌床' }
+    result.lines = ['我是苔苔，我会把菌床连成发光的小路。', world.garden.completed ? '花园的菌根留着，还能接着种！' : '在花园选一张菌床，就能请我铺菌毯。']
+  } else if (partner.id === 'ayan') {
+    result.lines = world.deep.entered ? ['硬岩爪负责凿盖层，硬岩镐负责小矿脉。', '大家各有所长，慢慢把家建大吧。'] : ['我是阿岩！刚才在侧洞里搬石头。', '我的硬岩爪能凿开下面的盖层。你准备好了，我们再开工。']
+  } else if (partner.id === 'amu') {
+    result.lines = world.deep.precision ? ['精密工具装好啦！同样材料能做两个部件。', '你选要做的东西，我来帮忙。'] : ['我是阿木，最喜欢做东西。', '两块金属锭和一簇晶光，就能做一个部件！']
   } else {
     result.lines = world.farm.waterSupplied
       ? ['水已经流到菜园啦。', '泉水边能种菜了。']
       : ['哗啦！我是小泉，这口泉水一直在等人听见。', '我能把水送回家……如果你们也给我和小满留个住处。']
   }
+  if(world.ventilation.completed&&id==='atu'){result.lines=['旧地脉岩壁上留着灯、水和一起建造的故事。','我们可以把九位伙伴现在的家，也添进旧故事里。'];result.action={id:'open-ruins',label:'去看看旧地脉遗迹'}}
+  if(world.ruins.completed&&id==='atu'){result.upgrade=null;result.lines=world.finale.completed?['九层终章已经留进家园相册。','每位伙伴和每一层都还在，继续把家建成你喜欢的样子吧。']:['最深的岩缝里透出温柔的金色。','把大家请到一起，办一次九位伙伴的暖屋日吧。'];result.action={id:'open-finale',label:world.finale.completed?'去看看九层家园':'去迎接地心暖光'}}
   return result
 }

@@ -1,6 +1,7 @@
 import { checkRoom, checkRoomPlan, removeRoom, roomAt, roomFromPoint, roomSummary, ROOM_HINTS, ROOM_MAX_WIDTH, ROOM_NAMES, type RoomChange } from '../core/rooms'
-import { canFinishRoom, excavationLeft, finishRoom, planRoom, roomCapacity, ROOM_SPECS } from '../core/roomConstruction'
-import { HOME_ROOM_TOP, HOME_FLOOR_Y, type Cell, type Room, type RoomKind, type WorldState } from '../core/world'
+import { canFinishRoom, excavationLeft, finishRoom, planRoom, roomCapacity, ROOM_SPECS, roomExpansionCost } from '../core/roomConstruction'
+import { canAfford, changeMaterials, materialText } from '../core/materials'
+import { HOME_ROOM_TOP, HOME_FLOOR_Y, type Cell, type Inventory, type Room, type RoomKind, type WorldState } from '../core/world'
 import type { PreviewRoom } from '../core/sites'
 
 export interface RoomUI {
@@ -26,6 +27,13 @@ export class RoomEditor {
     busy?(): boolean
   }) {}
   private selected(): Room | undefined { return this.ports.world().rooms.find(r => r.id === this.selectedId) }
+  private expansionBase(original: Room | undefined, draft: Room | null): Room | undefined {
+    if (!original || !draft || draft.replaces === undefined) return undefined
+    if (original.status === 'blueprint' && original.replaces !== undefined) {
+      return this.ports.world().rooms.find(room => room.id === original.replaces)
+    }
+    return original.status === 'blueprint' ? undefined : original
+  }
   private draft(): Room | null {
     if (!this.point) return null
     const original = this.selected()
@@ -46,14 +54,23 @@ export class RoomEditor {
     const check = draft ? (construction ? canFinishRoom(w, draft) : completed ? checkRoom(w, draft) : checkRoomPlan(w, draft)) : null
     const left = draft ? excavationLeft(w, draft) : 0
     const dirty = !!draft && (this.editing || construction)
-    const valid = check?.ok === true && !completed && !this.ports.busy?.()
+    const expansionBase = this.expansionBase(original, draft)
+    const expansionCost: Inventory | null = expansionBase && draft ? roomExpansionCost(expansionBase, draft) : null
+    const affordable = !expansionCost || canAfford(w, expansionCost)
+    const missing = expansionCost ? {
+      stone: Math.max(0, expansionCost.stone - w.inventory.stone),
+      wood: Math.max(0, expansionCost.wood - w.inventory.wood),
+    } : { stone: 0, wood: 0 }
+    const valid = check?.ok === true && affordable && !completed && !this.ports.busy?.()
     const message = completed ? '房间已建成。想增加容量，可以向两边扩建。'
+      : expansionCost && !affordable ? `还需要${materialText(missing)}`
       : construction ? left ? `还要挖 ${left} 格。点泥土，阿土会走过去施工；高处用小凳子。` : check?.ok ? '空间挖好并接通啦，可以确认建成！' : check && !check.ok ? ROOM_HINTS[check.reason] : ''
       : !draft ? '先选用途，再点松软泥土或空地放蓝图。' : check && !check.ok ? ROOM_HINTS[check.reason] : '位置可以！放下蓝图后，再一格一格挖。'
     const capacity = draft ? roomCapacity(draft) : roomCapacity(roomFromPoint({ x: 0, y: 11 }, this.width, this.kind))
+    const costHint = expansionCost ? ` · 扩建需要${materialText(expansionCost)}` : ''
     const detail = completed && draft ? `${roomSummary(w, draft)}${draft.kind === 'garden' && !w.farm.waterSupplied ? ' · 等小泉接通水源' : ''}`
-      : `${this.width}格宽 × ${draft?.h ?? 3}格高 · 最多${capacity}${this.kind === 'garden' && !w.farm.waterSupplied ? ' · 建好后等水' : ''}`
-    this.ports.preview(draft ? { room: draft, valid: this.editing ? check?.ok === true : true, hint: message } : null)
+      : `${this.width}格宽 × ${draft?.h ?? 3}格高 · 最多${capacity}${this.kind === 'garden' && !w.farm.waterSupplied ? ' · 建好后等水' : ''}${costHint}`
+    this.ports.preview(draft ? { room: draft, valid: this.editing ? check?.ok === true && affordable : true, hint: message } : null)
     this.ports.emit({ active: this.active, available: w.progress.coreRepaired, kind: this.kind, width: this.width,
       minWidth: original && original.status !== 'blueprint' && this.editing ? original.w + 1 : ROOM_SPECS[this.kind].min,
       selectedId: this.selectedId, placed: !!draft, valid, dirty, message, detail, construction, completed, left,
@@ -76,12 +93,16 @@ export class RoomEditor {
     if (this.ports.busy?.()) return
     const original = this.selected()
     if (original && original.status !== 'blueprint' && original.w >= ROOM_MAX_WIDTH) return
+    if (original && original.status !== 'blueprint' && this.editing) return
     if (original && original.status !== 'blueprint' && !this.editing) this.expansionEdge = original.x < 17 ? 'right' : 'left'
     const min = original && original.status !== 'blueprint' ? original.w + 1 : ROOM_SPECS[this.kind].min
     const next = original && original.status !== 'blueprint' && !this.editing && delta > 0
-      ? this.kind === 'home' ? (Math.floor(original.w / 3) + 1) * 3 : original.w + 2 : this.width + delta
+      ? original.w + 1 : this.width + delta
     this.width = Math.max(min, Math.min(ROOM_MAX_WIDTH, next))
-    if (original && this.expansionEdge) this.point = { x: (this.expansionEdge === 'right' ? original.x + original.w - this.width : original.x) + Math.floor(this.width / 2), y: HOME_FLOOR_Y - 1 }
+    if (original && this.expansionEdge) {
+      const left = this.expansionEdge === 'right' ? original.x : original.x + original.w - this.width
+      this.point = { x: left + Math.floor(this.width / 2), y: HOME_FLOOR_Y - 1 }
+    }
     this.editing = true; this.refresh()
   }
   select(id: number): Room | null {
@@ -110,14 +131,28 @@ export class RoomEditor {
   save(): void {
     const draft = this.draft()
     if (!this.active || !draft || this.ports.busy?.()) return
-    const construction = this.selected()?.status === 'blueprint' && !this.editing
+    const original = this.selected()
+    const construction = original?.status === 'blueprint' && !this.editing
+    const expansionBase = this.expansionBase(original, draft)
+    const expansionCost = expansionBase && draft ? roomExpansionCost(expansionBase, draft) : null
+    if (construction && expansionCost && !canAfford(this.ports.world(), expansionCost)) {
+      this.ports.notify(`还需要${materialText({
+        stone: Math.max(0, expansionCost.stone - this.ports.world().inventory.stone),
+        wood: Math.max(0, expansionCost.wood - this.ports.world().inventory.wood),
+      })}`)
+      return
+    }
     const result = construction ? canFinishRoom(this.ports.world(), draft) : checkRoomPlan(this.ports.world(), draft)
     if (!result.ok) { this.ports.notify(ROOM_HINTS[result.reason]); return }
     const change = construction ? finishRoom(this.ports.world(), draft.id) : planRoom(this.ports.world(), draft)
     if (!change) return
+    if (construction && expansionCost) {
+      changeMaterials(this.ports.world(), expansionCost, -1)
+      change.cost = expansionCost
+    }
     this.selectedId = change.after!.id; this.editing = false
     this.ports.commit(change); this.refresh()
-    this.ports.notify(construction ? `${ROOM_NAMES[draft.kind]}建好啦！${draft.kind === 'garden' && !this.ports.world().farm.waterSupplied ? '等小泉接通水源就能种菜。' : '基础设施已经安排好，前侧可以走过去。'}` : '蓝图放好啦！点泥土让阿土施工，随时可以收起面板去探索。')
+    this.ports.notify(construction ? `${ROOM_NAMES[draft.kind]}建好啦！${draft.kind === 'garden' && !this.ports.world().farm.waterSupplied ? '等小泉接通水源就能种菜。' : '基础设施已经安排好。'}` : '蓝图放好啦！点泥土让阿土施工。')
   }
   remove(): void {
     if (!this.active || this.selectedId === null || this.ports.busy?.() || this.selected()?.status !== 'blueprint') return

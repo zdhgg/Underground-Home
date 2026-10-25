@@ -1,0 +1,58 @@
+[
+  {
+    "file": "basin-v1.png",
+    "size": [
+      1983,
+      793
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 2411078,
+    "sha256": "a181d7c0944bb279cc57ac214834729026cc7818c27651e25e6f082c05cf5f58"
+  },
+  {
+    "file": "intake-v1.png",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 2522021,
+    "sha256": "5a4f82148f37ce541aee4b9ad6042305804587ca43a9ec741ac9ca14444b664a"
+  },
+  {
+    "file": "tuantuan-v1.png",
+    "size": [
+      1305,
+      1205
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 1857976,
+    "sha256": "da8e082d550606a782db1abda209ceb5d40a1d96b8a1496e2e059d8d2925ea7e"
+  },
+  {
+    "file": "wheel-v1.png",
+    "size": [
+      1586,
+      992
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 2452960,
+    "sha256": "eb2f5b264e0308c5c09fa34fa0fbf90b4497a602a45029bbc91feae872cdf264"
+  }
+]

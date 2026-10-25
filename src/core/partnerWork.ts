@@ -5,7 +5,7 @@ import { availablePartners, PARTNERS, partnerById } from './partners'
 import { LANDMARKS, type Cell, type WorkerId, type WorldState } from './world'
 import { canRetrofitLamp } from './lighting'
 
-export type WorkTarget = { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'watering'; x: number; y: number } | { kind: 'lamp' | 'lamp-retrofit'; x: number }
+export type WorkTarget = { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'watering'; x: number; y: number } | { kind: 'lamp' | 'lamp-retrofit'; x: number } | { kind: 'deep-rock'; x: number; y: number }
 export interface WorkPlan { worker: WorkerId; target: WorkTarget; at: Cell; route: Cell[] }
 export const WORKERS: readonly WorkerId[] = PARTNERS.map(p => p.id).filter((id): id is WorkerId => id !== 'atu')
 export const workOwner = (target: WorkTarget): WorkerId => target.kind === 'harvest' || target.kind === 'watering' ? 'xiaoman' : target.kind === 'water' ? 'xiaoquan' : 'adeng'
@@ -37,7 +37,9 @@ export function initializeWorkers(w: WorldState): boolean {
     if (partner.id === 'atu' || w.workers[partner.id]) continue
     const id = partner.id
     // 小满先在泉水层的天然洞穴里等玩家；小泉在泉边。两人都不占第一层的大厅。
-    const near = id === 'xiaoman' ? [{ x: 25, y: 21 }, { x: 24, y: 21 }, { x: 26, y: 21 }]
+    const near = id === 'lingling' ? [{x:36,y:82},{x:35,y:82},{x:37,y:82}] : id === 'tuantuan' ? [{ x:12,y:70 }, { x:13,y:70 }, { x:11,y:70 }] : id === 'taitai' ? [{ x: 36, y: 58 }, { x: 35, y: 58 }, { x: 37, y: 58 }] : id === 'ayan' ? [{ x: 36, y: 21 }]
+      : id === 'amu' ? w.deep.facilities.filter(f => f.kind === 'workshop').flatMap(f => [{ x: f.x + 1, y: 33 }, { x: f.x + 2, y: 33 }, { x: f.x, y: 33 }])
+      : id === 'xiaoman' ? [{ x: 25, y: 21 }, { x: 24, y: 21 }, { x: 26, y: 21 }]
       : id === 'xiaoquan' ? w.farm.waterSupplied ? [{ x: 18, y: 11 }] : [{ x: 19, y: 21 }, { ...LANDMARKS.spring }] : []
     const facility = id === 'xiaoman' ? w.farm.planters.flatMap(p => [{ x: p.x - 1, y: p.y }, { x: p.x + 1, y: p.y }])
       : id === 'adeng' ? w.exploration.lamps.map(p => ({ x: p.x, y: 21 })) : []

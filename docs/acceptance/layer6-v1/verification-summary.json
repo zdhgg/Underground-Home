@@ -1,0 +1,59 @@
+{
+  "date": "2026-10-25",
+  "scope": "第六层蓄水回廊与河狸团团",
+  "worldVersion": 20,
+  "map": [
+    44,
+    76
+  ],
+  "tests": {
+    "command": "npm test -- --maxWorkers=1 --reporter=json --outputFile=docs/acceptance/layer6-v1/test-results.json",
+    "files": 51,
+    "total": 590,
+    "passed": 590,
+    "failed": 0,
+    "previousLayerTests": 557,
+    "added": 33
+  },
+  "build": {
+    "command": "npm run build",
+    "success": true,
+    "typecheck": true,
+    "mainJsKB": 820.94,
+    "mainGzipKB": 273.95,
+    "warning": "主 JS 分块超过 500 kB"
+  },
+  "diffCheck": {
+    "command": "git diff --check",
+    "success": true,
+    "note": "既有 facilityPanel.ts 有 LF/CRLF 转换提示"
+  },
+  "assets": {
+    "pngCount": 4,
+    "bytes": 9244035,
+    "RGBA": true,
+    "alphaRange": [
+      0,
+      255
+    ],
+    "prompts": "../../../src/assets/art/reservoir/ART.md"
+  },
+  "browser": {
+    "performed": true,
+    "base": "http://127.0.0.1:5174",
+    "tested": [
+      "隔离 working 存档从蓄水到双路转闸、两次提水和巡游完成",
+      "水位 0→3→2→1，与路线和花园照料 0→2 同步",
+      "短屏主操作固定可见，说明内部滚动",
+      "398×756 iframe 独立视口导航与面板无横向溢出",
+      "运行期 warn/error 读取为空"
+    ],
+    "limitations": [
+      "未做实体触屏和音量试听",
+      "未基准测试首次加载与低性能设备帧率",
+      "手机检查采用独立 iframe 视口；浏览器尺寸覆盖未实际生效"
+    ]
+  },
+  "verificationRetry": "并行执行测试与构建时出现系统内存提交失败。停止并行、单 worker 全量测试与独立构建最终通过；验收开发服务器重启后复检图片。",
+  "deployment": false
+}

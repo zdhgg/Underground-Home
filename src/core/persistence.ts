@@ -1,3 +1,8 @@
+import { validFinale } from './finale'
+import { validRuins } from './ruins'
+import { validVentilation } from './ventilation'
+import { validReservoir } from './reservoir'
+import { validGarden } from './garden'
 import {
   LANDMARKS,
   MAP_HEIGHT,
@@ -19,6 +24,20 @@ import {
   freshExploration,
   freshFarm,
   freshInventory,
+  freshDeep,
+  freshHall,
+  freshGarden,
+  freshReservoir,
+  freshVentilation,
+  freshRuins,
+  freshFinale,
+  type FinaleState,
+  type RuinsState,
+  type VentilationState,
+  type ReservoirState,
+  type GardenState,
+  type HallState,
+  type DeepState,
   type Inventory,
   type BuiltSite,
   BREAKTHROUGHS,
@@ -36,6 +55,9 @@ import { WORKERS, workerHomeRoute } from './partnerWork'
 import { partnerById } from './partners'
 import { hasWideLampAbility, WIDE_LAMP_ID } from './lighting'
 import { BUILDING_SITES, validBuiltSites } from './sites'
+import { validHall } from './hall'
+import { validDeep } from './deep'
+import { mineralCell } from './deepTopology'
 
 /** 存档在存储介质中的键名（保持稳定；改动需要迁移） */
 export const SAVE_KEY = 'underground-home-save'
@@ -48,6 +70,13 @@ export interface SavePayload {
   version: number
   savedAt: string
   world: {
+    finale:FinaleState
+    ruins:RuinsState
+    ventilation: VentilationState
+    reservoir: ReservoirState
+    garden: GardenState
+    hall: HallState
+    deep: DeepState
     inventory: Inventory
     builtSites: BuiltSite[]
     width: number
@@ -78,6 +107,13 @@ export function serialize(world: WorldState): SavePayload {
     version: WORLD_VERSION,
     savedAt: new Date().toISOString(),
     world: {
+      finale:structuredClone(world.finale),
+      ruins:structuredClone(world.ruins),
+      ventilation: structuredClone(world.ventilation),
+      reservoir: structuredClone(world.reservoir),
+      garden: structuredClone(world.garden),
+      hall: structuredClone(world.hall),
+      deep: structuredClone(world.deep),
       inventory: { ...world.inventory },
       builtSites: world.builtSites.map(site => ({ ...site })),
       width: world.width,
@@ -113,13 +149,15 @@ interface BaseWorldData {
 }
 
 /** 校验共有地图数据；仅接受当前蓝图尺寸，正式旧地图不在原型中迁移。 */
-function validateBaseWorld(world: unknown): { ok: true; data: BaseWorldData } | { ok: false; error: string } {
+function validateBaseWorld(world: unknown, version: number): { ok: true; data: BaseWorldData } | { ok: false; error: string } {
   if (typeof world !== 'object' || world === null) return { ok: false, error: '存档缺少世界数据' }
   const raw = world as { width?: unknown; height?: unknown; dugCount?: unknown; tiles?: unknown }
-  if (raw.width !== MAP_WIDTH || raw.height !== MAP_HEIGHT) {
+  const legacy = version <= 16 && raw.height === 28
+  const height = legacy ? 28 : version === 17 && raw.height === 40 ? 40 : version === 18 && raw.height === 52 ? 52 : version === 19 && raw.height === 64 ? 64 : version === 20 && raw.height === 76 ? 76 : version === 21 && raw.height === 88 ? 88 : version === 22 && raw.height === 100 ? 100 : MAP_HEIGHT
+  if (raw.width !== MAP_WIDTH || raw.height !== height) {
     return { ok: false, error: '存档地图尺寸与当前版本不符' }
   }
-  if (!Array.isArray(raw.tiles) || raw.tiles.length !== MAP_HEIGHT) {
+  if (!Array.isArray(raw.tiles) || raw.tiles.length !== height) {
     return { ok: false, error: '存档地图数据不完整' }
   }
   for (const row of raw.tiles) {
@@ -137,9 +175,9 @@ function validateBaseWorld(world: unknown): { ok: true; data: BaseWorldData } | 
     ok: true,
     data: {
       width: raw.width,
-      height: raw.height,
+      height: MAP_HEIGHT,
       dugCount: raw.dugCount,
-      tiles: (raw.tiles as number[][]).map((row) => row.map((cell) => cell as TileType)),
+      tiles: [...(raw.tiles as number[][]).map((row) => row.map((cell) => cell as TileType)), ...createInitialWorld().tiles.slice(height).map(row => [...row])],
     },
   }
 }
@@ -171,7 +209,7 @@ export function deserialize(raw: unknown): LoadResult {
   const payload = raw as { version?: unknown; savedAt?: unknown; world?: unknown }
   if (typeof payload.version !== 'number') return err('存档缺少版本号')
 
-  const base = validateBaseWorld(payload.world)
+  const base = validateBaseWorld(payload.world, payload.version)
   if (!base.ok) return err(base.error)
   const savedAt = typeof payload.savedAt === 'string' ? payload.savedAt : ''
 
@@ -182,6 +220,7 @@ export function deserialize(raw: unknown): LoadResult {
       savedAt,
       world: {
         ...base.data,
+        finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
         inventory: freshInventory(), builtSites: [],
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
@@ -194,7 +233,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -202,10 +241,26 @@ export function deserialize(raw: unknown): LoadResult {
   if (!progress) return err('存档进度字段无效')
 
   const world: WorldState = {
+    finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
     ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
     exploration: freshExploration(), farm: freshFarm(), powerDown: false,
   }
+  const rawFinale=(payload.world as {finale?:FinaleState}).finale
+  if(version>=23)world.finale={...freshFinale(),braced:rawFinale?.braced===true,entered:rawFinale?.entered===true}
+  const rawRuins=(payload.world as {ruins?:RuinsState}).ruins
+  if(version>=22)world.ruins={...freshRuins(),braced:rawRuins?.braced===true,entered:rawRuins?.entered===true}
+  const rawVentilation=(payload.world as {ventilation?:VentilationState}).ventilation
+  if(version>=21)world.ventilation={...freshVentilation(),braced:rawVentilation?.braced===true,entered:rawVentilation?.entered===true,metLingling:rawVentilation?.metLingling===true}
+  const rawReservoir = (payload.world as { reservoir?: ReservoirState }).reservoir
+  if (version >= 20) world.reservoir = { ...freshReservoir(), shored: rawReservoir?.shored === true, entered: rawReservoir?.entered === true, metTuantuan: rawReservoir?.metTuantuan === true }
+  const rawGarden = (payload.world as { garden?: GardenState }).garden
+  if (version >= 19) world.garden = { ...freshGarden(), drained: rawGarden?.drained === true, entered: rawGarden?.entered === true, metTaitai: rawGarden?.metTaitai === true }
+  const rawHall = (payload.world as { hall?: HallState }).hall
+  if (version >= 18) world.hall = { ...freshHall(), braced: rawHall?.braced === true, entered: rawHall?.entered === true }
+  const rawDeep = (payload.world as { deep?: DeepState }).deep
+  // 只临时读取通行所需的布尔值；完整状态在前两层加载之后严格验证。
+  if (version >= 17) world.deep = { ...freshDeep(), metAyan: rawDeep?.metAyan === true, entered: rawDeep?.entered === true, hardPickaxe: rawDeep?.hardPickaxe === true }
   if (version >= 13) {
     const data = payload.world as { inventory?: Inventory; builtSites?: BuiltSite[] }
     if (!data.inventory || ![data.inventory.stone, data.inventory.wood].every(n => Number.isSafeInteger(n) && n >= 0 && n <= 100000)) return err('存档物品栏材料无效')
@@ -316,8 +371,31 @@ export function deserialize(raw: unknown): LoadResult {
     }
     if (!validNurseries(world)) return err('存档育苗架或新菜种无效')
   }
+  if (version >= 17) {
+    const deep = validDeep(world, rawDeep)
+    if (!deep) return err('存档晶簇层建设、材料或电梯数据无效')
+    world.deep = deep
+  }
+  if (version >= 18) {
+    const hall = validHall(world, rawHall)
+    if (!hall) return err('存档暖光大厅、支撑或暖屋宴数据无效')
+    world.hall = hall
+  }
+  if (version >= 19) {
+    const garden = validGarden(world, rawGarden)
+    if (!garden) return err('存档菌光花园、菌毯或苔苔数据无效')
+    world.garden = garden
+  }
+  if (version >= 20) {
+    const reservoir = validReservoir(world, rawReservoir)
+    if (!reservoir) return err('存档蓄水回廊、水位、分流或团团数据无效')
+    world.reservoir = reservoir
+  }
   // v8将主角位置与发现裂纹解耦。旧档狭窄通道中的站位回退到安全大厅，地形与进度不改。
   const actor = world.exploration.explorer
+  if(version>=21){const v=validVentilation(world,rawVentilation);if(!v)return err('存档听风工区、风路、手作或铃铃数据无效');world.ventilation=v}
+  if(version>=22){const r=validRuins(world,rawRuins);if(!r)return err('存档旧地脉遗迹、岩画拓印或故事壁数据无效');world.ruins=r}
+  if(version>=23){const f=validFinale(world,rawFinale);if(!f)return err('存档地心暖光、暖屋日或终章回忆数据无效');world.finale=f}
   const relocated = version < 8 && actor !== null && !atuCanStand(world, actor, true)
   if (relocated) world.exploration.explorer = initialAtuPosition(world)
   if (version >= 8 && actor) {
@@ -400,7 +478,7 @@ function validateExploration(raw: unknown, world: WorldState, version: number): 
   const blueprint = createInitialWorld()
   for (let y = 12; y < MAP_HEIGHT; y++) for (let x = 0; x < MAP_WIDTH; x++) {
     const tile = world.tiles[y][x], initial = blueprint.tiles[y][x]
-    if (initial === TILE.ROCK && tile !== TILE.ROCK) return null
+    if (initial === TILE.ROCK && tile !== TILE.ROCK && !(version >= 17 && tile === TILE.EMPTY && (x === e.shaftX && y >= 22 && y <= 30 && world.deep.metAyan || mineralCell(x, y) && world.deep.hardPickaxe || version >= 18 && x === e.shaftX && y >= 34 && y <= 42 && world.hall.braced || version >= 19 && x === e.shaftX && y >= 47 && y <= 54 && world.garden.drained || version >= 20 && x === e.shaftX && y >= 59 && y <= 66 && world.reservoir.shored || version >= 21 && x === e.shaftX && y >= 71 && y <= 78 && world.ventilation.braced || version >= 22 && x === e.shaftX && y >= 83 && y <= 90 && world.ruins.braced || version >= 23 && x === e.shaftX && y >= 95 && y <= 102 && world.finale.braced))) return null
     if (initial === TILE.EMPTY && tile !== TILE.EMPTY) return null
     if (tile !== initial && tile !== TILE.EMPTY) return null
     if (initial === TILE.WEAK_ROCK && tile === TILE.EMPTY && (!e.pickaxeUpgraded || x !== e.shaftX || world.tiles[y - 1][x] !== TILE.EMPTY)) return null

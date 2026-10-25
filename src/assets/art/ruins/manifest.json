@@ -1,0 +1,43 @@
+{
+  "generator": "built-in ImageGen",
+  "date": "2026-10-26",
+  "editing": "none; original generated PNGs copied",
+  "assets": [
+    {
+      "file": "desk-v1.png",
+      "bytes": 3057399,
+      "width": 1774,
+      "height": 887,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "sha256": "15666840a7f863fa22cc0c027b034fe26336ca9d7d9291e8dcb7f2d3534eb111"
+    },
+    {
+      "file": "folio-v1.png",
+      "bytes": 2618262,
+      "width": 1536,
+      "height": 1024,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        254
+      ],
+      "sha256": "124dd6fd5ab1338b07f4c58d42ed73fdbeee021776a66753cf82bb08b1c1db09"
+    },
+    {
+      "file": "mosaic-v1.png",
+      "bytes": 2588877,
+      "width": 1983,
+      "height": 793,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "sha256": "2c2c449a25289fb95a4b4f30900a2116fa72e8a3eaaa59055e4d1631efba1784"
+    }
+  ]
+}

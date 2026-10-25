@@ -54,8 +54,21 @@ export class PartnerMotion {
       const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
       // 手边的采收篮 / 接头 / 提灯短动作，效果在动手的时刻才结算。
+      if(a.plan.worker==='lingling'){
+        for(let i=0;i<3;i++)g.arc(x+dir*8,y-13,8+i*6+swing*3,dir>0?-Math.PI/3:Math.PI*2/3,dir>0?Math.PI/3:Math.PI*4/3).stroke({width:1.2,color:0xc6b9d5,alpha:.55-i*.1})
+      } else if (a.plan.worker === 'taitai') {
+        for (let i = 0; i < 4; i++) g.moveTo(x - 12 + i * 7, y + 11).lineTo(x - 9 + i * 7, y + 7 - swing * 3).lineTo(x - 5 + i * 7, y + 11).stroke({ width: 1.5, color: 0xb1dfb5, alpha: .6 })
+      } else if (a.plan.worker === 'tuantuan') {
+        // 河狸用接头与闸轮做水工，区别于凿岩和普通敲打。
+        const cx=x+dir*17,cy=y-8,angle=swing*Math.PI*.65
+        g.moveTo(x+dir*5,y+3).lineTo(cx,cy).stroke({width:3,color:0x849e99})
+        g.circle(cx,cy,8).stroke({width:2,color:0xd0b682})
+        for(let i=0;i<3;i++){const a=angle+i*Math.PI*2/3;g.moveTo(cx,cy).lineTo(cx+Math.cos(a)*8,cy+Math.sin(a)*8).stroke({width:2,color:0xc5aa7c})}
+        g.moveTo(x-8,y+11).lineTo(x+8,y+11).lineTo(x+8,y+5).stroke({width:3,color:0x85b8bc,alpha:.7})
+      } else {
       g.moveTo(x + dir * 7, y - 2).lineTo(x + dir * (15 + swing * 7), y - 9 - swing * 9).stroke({ width: 3, color })
       g.roundRect(x + dir * (15 + swing * 7) - 4, y - 16 - swing * 9, 9, 10, 3).fill(color)
+      }
       if (!a.hit && a.time >= .55) { a.hit = true; a.strike(); if (this.action !== a) return }
       if (a.time >= .95) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
     }

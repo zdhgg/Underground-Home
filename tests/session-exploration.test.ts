@@ -1,3 +1,9 @@
+import { workingFinale } from './fixtures/finaleWorld'
+import { workingRuins } from './fixtures/ruinsWorld'
+import { workingVentilation } from './fixtures/ventilationWorld'
+import { workingReservoir } from './fixtures/reservoirWorld'
+import { workingGarden } from './fixtures/gardenWorld'
+import { furnishedHall } from './fixtures/hallWorld'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LANDMARKS, createInitialWorld, TILE, type Cell, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
@@ -19,6 +25,7 @@ import { playSoilDig, playBuildComplete, playPartnerFound, playUndo, playSpringF
 const harness = vi.hoisted(() => {
   const store = { load: vi.fn(), save: vi.fn(), clear: vi.fn() }
   const renderer = {
+    playHallWork: vi.fn((_at: Cell, done: () => void) => done()), setHallPreview: vi.fn(), setGardenPreview: vi.fn(),
     playOpening: vi.fn((done: () => void, _caption: (text: string) => void) => done()), finishOpening: vi.fn(), enableOpeningSound: vi.fn(),
     canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
@@ -173,6 +180,93 @@ describe('探索会话与存档集成', () => {
     harness.renderer.playPartnerWork.mockReset().mockImplementation((_plan, hit, done) => { hit(); done() })
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+  it('终章与旧层互斥，后台和离页取消搬运不扣料，阿土对话与收藏定位接回九层',async()=>{
+    harness.store.load.mockResolvedValue(serialize(workingFinale()));const finale=vi.fn(),ruins=vi.fn(),progress=vi.fn()
+    const session=await createGameSession({}as HTMLElement,{onMessage:vi.fn(),onProgress:progress,onFinale:finale,onRuins:ruins})
+    const w=harness.renderer.setWorld.mock.calls[0][0]as WorldState;expect(progress.mock.calls.at(-1)![0].action.id).toBe('finale');session.openFinale();expect(finale.mock.calls.at(-1)![0].active).toBe(true);expect(ruins.mock.calls.at(-1)![0].active).toBe(false)
+    const food=w.farm.food;let old=()=>{};harness.renderer.playPartnerTravel.mockImplementationOnce((_id,_r,_step,done)=>{old=done});session.finalePrimary();Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});harness.listeners.document.get('visibilitychange')!();old();expect(w.farm.food).toBe(food);expect(w.finale.foodReady).toBe(false)
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});harness.listeners.document.get('visibilitychange')!();session.finalePrimary();expect(w.finale.foodReady).toBe(true);expect(w.farm.food).toBe(food-1)
+    session.openRuins();expect(finale.mock.calls.at(-1)![0].active).toBe(false);session.talkToPartner('atu');session.partnerAction();expect(finale.mock.calls.at(-1)![0].active).toBe(true)
+    let stale=()=>{};harness.renderer.playPartnerTravel.mockImplementationOnce((_id,_r,_step,done)=>{stale=done});const water=w.reservoir.water;session.finalePrimary();harness.listeners.window.get('pagehide')!();stale();expect(w.reservoir.water).toBe(water);expect(w.finale.waterReady).toBe(false);expect(finale.mock.calls.at(-1)![0].busy).toBe(false);session.focusRelic('earth-warmth');expect(harness.renderer.focusOn).toHaveBeenLastCalledWith(36.5*32,105*32,'building');expect(deserialize(serialize(w))).toMatchObject({ok:true});session.destroy()
+  })
+  it('八层入口和旧层互斥，后台/离页取消不揭画，阿土对话接回遗迹',async()=>{
+    harness.store.load.mockResolvedValue(serialize(workingRuins()));const ruins=vi.fn(),ventilation=vi.fn(),progress=vi.fn()
+    const session=await createGameSession({}as HTMLElement,{onMessage:vi.fn(),onProgress:progress,onRuins:ruins,onVentilation:ventilation})
+    const w=harness.renderer.setWorld.mock.calls[0][0]as WorldState;expect(progress.mock.calls.at(-1)![0].action.id).toBe('ruins');session.openRuins();expect(ruins.mock.calls.at(-1)![0].active).toBe(true);expect(ventilation.mock.calls.at(-1)![0].active).toBe(false)
+    session.ruinsMotif('lamp');session.ruinsPrimary();const old=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void]
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});harness.listeners.document.get('visibilitychange')!();old[1]();expect(w.ruins.revealed).toHaveLength(0)
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});harness.listeners.document.get('visibilitychange')!();session.openRuins();session.ruinsMotif('lamp');session.ruinsPrimary();const retry=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void];retry[1]();expect(w.ruins.revealed).toEqual(['lamp'])
+    session.openVentilation();expect(ruins.mock.calls.at(-1)![0].active).toBe(false);session.talkToPartner('atu');session.partnerAction();expect(ruins.mock.calls.at(-1)![0].active).toBe(true)
+    session.ruinsMotif('spring');session.ruinsPrimary();const stale=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void];harness.listeners.window.get('pagehide')!();stale[1]();expect(w.ruins.revealed).toEqual(['lamp']);expect(ruins.mock.calls.at(-1)![0].busy).toBe(false);session.focusRelic('ruins-tools');expect(harness.renderer.focusOn).toHaveBeenLastCalledWith(38.5*32,93*32,'building');expect(deserialize(serialize(w))).toMatchObject({ok:true});session.destroy()
+  })
+  it('第七层真实会话与旧面板互斥，铃铃对话回工区，后台和离页取消不提前调风机',async()=>{
+    harness.store.load.mockResolvedValue(serialize(workingVentilation()));const ventilation=vi.fn(),reservoir=vi.fn(),progress=vi.fn()
+    const session=await createGameSession({}as HTMLElement,{onMessage:vi.fn(),onProgress:progress,onVentilation:ventilation,onReservoir:reservoir})
+    const w=harness.renderer.setWorld.mock.calls[0][0]as WorldState;expect(progress.mock.calls.at(-1)![0].action.id).toBe('ventilation');session.openVentilation();expect(ventilation.mock.calls.at(-1)![0].active).toBe(true);expect(reservoir.mock.calls.at(-1)![0].active).toBe(false)
+    session.ventilationMode('home');session.ventilationPrimary();const old=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void]
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});harness.listeners.document.get('visibilitychange')!();old[1]();expect(w.ventilation.mode).toBe('off')
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});harness.listeners.document.get('visibilitychange')!();session.openVentilation();session.ventilationMode('home');session.ventilationPrimary();const retry=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void];retry[1]();expect(w.ventilation.mode).toBe('home')
+    session.talkToPartner('lingling');expect(ventilation.mock.calls.at(-1)![0].active).toBe(false);session.partnerAction();expect(ventilation.mock.calls.at(-1)![0].active).toBe(true)
+    session.openReservoir();expect(ventilation.mock.calls.at(-1)![0].active).toBe(false);session.openVentilation();session.ventilationMode('work');session.ventilationPrimary();const stale=harness.renderer.playExplorationTravel.mock.calls.at(-1)as unknown as[Cell[],()=>void];harness.listeners.window.get('pagehide')!();stale[1]();expect(w.ventilation.mode).toBe('home');expect(ventilation.mock.calls.at(-1)![0].busy).toBe(false);session.focusRelic('wind-echo');expect(harness.renderer.focusOn).toHaveBeenLastCalledWith(38.5*32,81*32,'building');expect(deserialize(serialize(w))).toMatchObject({ok:true});session.destroy()
+  })
+  it('六层引导与旧面板交接、团团对话、后台和离页取消蓄水都不触发旧抵达',async()=>{
+    harness.store.load.mockResolvedValue(serialize(workingReservoir()))
+    const reservoir=vi.fn(),garden=vi.fn(),progress=vi.fn()
+    const session=await createGameSession({} as HTMLElement,{onMessage:vi.fn(),onProgress:progress,onReservoir:reservoir,onGarden:garden})
+    const w=harness.renderer.setWorld.mock.calls[0][0] as WorldState;expect(progress.mock.calls.at(-1)![0].action.id).toBe('reservoir')
+    session.openReservoir();expect(reservoir.mock.calls.at(-1)![0].active).toBe(true);expect(garden.mock.calls.at(-1)![0].active).toBe(false)
+    session.reservoirPrimary();const old=harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[],()=>void]
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'});harness.listeners.document.get('visibilitychange')!();old[1]();expect(w.reservoir.water).toBe(0)
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'});harness.listeners.document.get('visibilitychange')!()
+    session.reservoirPrimary();const retry=harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[],()=>void];retry[1]();expect(w.reservoir.water).toBe(3)
+    session.talkToPartner('tuantuan');expect(reservoir.mock.calls.at(-1)![0].active).toBe(false);session.partnerAction();expect(reservoir.mock.calls.at(-1)![0].active).toBe(true)
+    session.openGarden();expect(reservoir.mock.calls.at(-1)![0].active).toBe(false)
+    session.openReservoir();session.reservoirRoute('garden');session.reservoirPrimary();const stale=harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[],()=>void]
+    harness.listeners.window.get('pagehide')!();stale[1]();expect(w.reservoir.valve).toBe('closed');expect(reservoir.mock.calls.at(-1)![0].busy).toBe(false)
+    expect(deserialize(serialize(w))).toMatchObject({ok:true});session.destroy()
+  })
+  it('第五层会话和旧面板互斥，苔苔对话回花园，菌床工作切后台取消可安全重试',async()=>{
+    harness.store.load.mockResolvedValue(serialize(workingGarden()))
+    const garden=vi.fn(), hall=vi.fn(), deep=vi.fn(), progress=vi.fn()
+    const session=await createGameSession({} as HTMLElement,{onMessage:vi.fn(),onProgress:progress,onGarden:garden,onHall:hall,onDeep:deep})
+    const w=harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(progress.mock.calls.at(-1)![0].action.id).toBe('garden')
+    session.openGarden(); expect(garden.mock.calls.at(-1)![0].active).toBe(true)
+    expect(hall.mock.calls.at(-1)![0].active).toBe(false); expect(deep.mock.calls.at(-1)![0].active).toBe(false)
+    session.gardenSelect('bed'); session.gardenPrimary()
+    const arrive=harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[],()=>void]
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'hidden'}); harness.listeners.document.get('visibilitychange')!()
+    arrive[1](); expect(w.garden.facilities.find(f=>f.kind==='bed')?.growth).toBe(0); expect(garden.mock.calls.at(-1)![0].busy).toBe(false)
+    Object.defineProperty(document,'visibilityState',{configurable:true,value:'visible'}); harness.listeners.document.get('visibilitychange')!()
+    session.gardenPrimary(); const retry=harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[],()=>void]; retry[1]()
+    expect(w.garden.facilities.find(f=>f.kind==='bed')?.growth).toBe(1)
+    session.talkToPartner('taitai'); expect(garden.mock.calls.at(-1)![0].active).toBe(false)
+    session.partnerAction(); expect(garden.mock.calls.at(-1)![0].active).toBe(true)
+    session.openHall(); expect(garden.mock.calls.at(-1)![0].active).toBe(false)
+    expect(deserialize(serialize(w))).toMatchObject({ok:true}); session.destroy()
+  })
+
+  it('第四层真实会话打开、庆典结算、退出与切后台取消不留并行面板；保存仍可恢复', async () => {
+    harness.store.load.mockResolvedValue(serialize(furnishedHall()))
+    const hall = vi.fn(), deep = vi.fn(), progress = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onHall: hall, onDeep: deep })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, food = w.farm.food
+    expect(progress.mock.calls.at(-1)![0].action.id).toBe('hall')
+    session.openHall(); expect(hall.mock.calls.at(-1)![0].active).toBe(true); expect(deep.mock.calls.at(-1)![0].active).toBe(false)
+    session.hallPrimary(); expect(w.hall.feasts).toBe(0)
+    const arrived = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    arrived[1](); expect(w.hall.feasts).toBe(1); expect(w.farm.food).toBe(food - 1)
+    session.hallPrimary(); expect(hall.mock.calls.at(-1)![0].active).toBe(false)
+    session.openHall(); session.hallPrimary()
+    Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' })
+    harness.listeners.document.get('visibilitychange')!()
+    const stale = harness.renderer.playExplorationTravel.mock.calls.at(-1) as unknown as [Cell[], () => void]
+    stale[1](); expect(w.hall.feasts).toBe(1)
+    expect(hall.mock.calls.at(-1)![0].busy).toBe(false)
+    expect(deserialize(serialize(w))).toMatchObject({ ok: true })
+    session.destroy()
+  })
 
   it('仅空存档播放开场；演出屏蔽点挖、拖图和缩放，结束保存原任务', async () => {
     harness.store.load.mockResolvedValue(null)
@@ -591,6 +685,22 @@ describe('探索会话与存档集成', () => {
     session.focusCollection(); session.focusRelic('seed-pouch')
     expect(harness.renderer.focusOn).toHaveBeenCalled()
     expect(world).toEqual(before)
+    session.destroy()
+  })
+
+  it('直接点击已建成的住处会打开房间详情，而不是让阿土走动', async () => {
+    harness.store.load.mockResolvedValue(readySave())
+    const onRooms = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onRooms })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    world.rooms.push({ id: 1, kind: 'home', x: 12, y: 9, w: 3, h: 3, managed: true })
+    world.builtSites.push({ id: 'first-nest', kind: 'home' })
+    harness.renderer.playExplorationTravel.mockClear()
+    harness.handlers.onHover({ x: 13, y: 10 })
+    expect(harness.renderer.setCursor).toHaveBeenLastCalledWith('pointer')
+    harness.handlers.onTap({ x: 13, y: 10 })
+    expect(onRooms.mock.calls.at(-1)![0]).toMatchObject({ active: true, selectedId: 1, completed: true })
+    expect(harness.renderer.playExplorationTravel).not.toHaveBeenCalled()
     session.destroy()
   })
 

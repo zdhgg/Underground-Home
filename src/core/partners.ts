@@ -1,8 +1,8 @@
 import { BEDS_PER_POD } from './build'
 import type { SleepPod, WorldState } from './world'
 
-export type PartnerId = 'atu' | 'adeng' | 'xiaoman' | 'xiaoquan'
-export type PartnerAbilityId = 'dig' | 'light' | 'grow' | 'water'
+export type PartnerId = 'atu' | 'adeng' | 'xiaoman' | 'xiaoquan' | 'ayan' | 'amu' | 'taitai' | 'tuantuan' | 'lingling'
+export type PartnerAbilityId = 'dig' | 'light' | 'grow' | 'water' | 'chisel' | 'craft' | 'weave' | 'channel' | 'listen'
 
 /**
  * 四位伙伴：每个人带来一个动词，也各有自己出现的那一层。
@@ -29,7 +29,15 @@ export const PARTNERS: readonly Partner[] = [
   { id: 'adeng', name: '阿灯', species: '萤火虫', verb: '照', abilityId: 'light', bedSlot: 1, joins: () => true },
   { id: 'xiaoman', name: '小满', species: '兔子', verb: '种', abilityId: 'grow', bedSlot: 2, joins: (world) => world.exploration.entered },
   { id: 'xiaoquan', name: '小泉', species: '水獭', verb: '引', abilityId: 'water', bedSlot: 3, joins: (world) => world.exploration.springFound },
+  { id: 'ayan', name: '阿岩', species: '穿山甲', verb: '凿', abilityId: 'chisel', bedSlot: 4, joins: w => w.deep.metAyan },
+  { id: 'amu', name: '阿木', species: '松鼠', verb: '造', abilityId: 'craft', bedSlot: 5, joins: w => w.deep.facilities.some(f => f.kind === 'workshop') },
+  { id: 'taitai', name: '苔苔', species: '蜗牛', verb: '连菌', abilityId: 'weave', bedSlot: 6, joins: w => w.garden.metTaitai },
+  { id: 'tuantuan', name: '团团', species: '河狸', verb: '筑渠', abilityId: 'channel', bedSlot: 7, joins: w => w.reservoir.metTuantuan },
+  { id:'lingling',name:'铃铃',species:'蝙蝠',verb:'听风',abilityId:'listen',bedSlot:8,joins:w=>w.ventilation.metLingling },
 ]
+
+/** 老章节的成员名单固定，新伙伴加入不会改变四层六人宴的席位。 */
+export const HALL_PARTNERS = PARTNERS.filter(p => p.bedSlot < 6)
 
 /** 一开始就在的两位：阿土和阿灯 */
 export const BASE_PARTNERS = 2

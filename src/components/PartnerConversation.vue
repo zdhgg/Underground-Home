@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import lingling from "../assets/art/ventilation/lingling-v1.png"
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { conversationPlacement, type ConversationAnchor } from '../render/conversationAnchor'
 import type { PartnerConversation } from '../core/partnerInteractions'
@@ -7,10 +8,14 @@ import atuUrl from '../assets/art/characters/atu-portrait-v1.png'
 import adengUrl from '../assets/art/characters/adeng-idle-v1.png'
 import xiaomanUrl from '../assets/art/characters/xiaoman-idle-v1.png'
 import xiaoquanUrl from '../assets/art/characters/xiaoquan-idle-v1.png'
+import ayanUrl from '../assets/art/deep/ayan-v1.png'
+import tuantuanUrl from '../assets/art/reservoir/tuantuan-v1.png'
+import taitaiUrl from '../assets/art/garden/taitai-v2.png'
+import amuUrl from '../assets/art/deep/amu-v1.png'
 
 const props = defineProps<{ conversation: PartnerConversation; busy: boolean; anchor: ConversationAnchor | null }>()
 defineEmits<{ close: []; action: [] }>()
-const images: Record<PartnerId, string> = { atu: atuUrl, adeng: adengUrl, xiaoman: xiaomanUrl, xiaoquan: xiaoquanUrl }
+const images: Record<PartnerId, string> = { atu: atuUrl, adeng: adengUrl, xiaoman: xiaomanUrl, xiaoquan: xiaoquanUrl, ayan: ayanUrl, amu: amuUrl, taitai: taitaiUrl, tuantuan: tuantuanUrl, lingling }
 const closeButton = ref<HTMLButtonElement | null>(null)
 const imageFailed = ref(false)
 const panel = ref<HTMLElement | null>(null)

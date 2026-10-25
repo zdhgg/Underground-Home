@@ -23,9 +23,9 @@ describe('初始世界蓝图', () => {
   })
 
   it('瓦片数量锁定蓝图（调整岩层蓝图时同步更新此用例）', () => {
-    expect(countTiles(world, TILE.EMPTY)).toBe(125)
-    expect(countTiles(world, TILE.SOIL)).toBe(141)
-    expect(countTiles(world, TILE.ROCK)).toBe(777)
+    expect(countTiles(world, TILE.EMPTY)).toBe(778)
+    expect(countTiles(world, TILE.SOIL)).toBe(535)
+    expect(countTiles(world, TILE.ROCK)).toBe(3426)
     expect(countTiles(world, TILE.WEAK_ROCK)).toBe(13)
   })
 

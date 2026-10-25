@@ -54,9 +54,19 @@ export class RoomScene {
       const built = world.rooms.some(room => room.status !== 'blueprint' && room.kind === r.kind && room.x === r.x && room.y === r.y && room.w === r.w && room.h === r.h)
       if (!built) {
         g.roundRect(r.x * T + 2, r.y * T + 2, r.w * T - 4, r.h * T - 4, 6).fill({ color, alpha: .12 }).stroke({ width: 2, color, alpha: .9 })
+        if (r.replaces !== undefined) {
+          const old = world.rooms.find(room => room.id === r.replaces)
+          if (old && r.w > old.w) {
+            const extraX = r.x === old.x ? old.x + old.w : r.x
+            g.rect(extraX * T + 4, r.y * T + 4, T - 8, r.h * T - 8).fill({ color, alpha: .22 }).stroke({ width: 2, color, alpha: .95 })
+          }
+        }
         this.overlay.addChild(g)
       } else g.destroy()
-      const label = new Text({ text: preview.valid ? `${SITE_NAMES[r.kind]} · 就在这里` : '这里还没准备好', style: {
+      const labelText = r.replaces !== undefined
+        ? (preview.valid ? `扩建到 ${r.w} 格` : '扩建位置还没准备好')
+        : (preview.valid ? `${SITE_NAMES[r.kind]} · 就在这里` : '这里还没准备好')
+      const label = new Text({ text: labelText, style: {
         fontFamily: '"Microsoft YaHei", sans-serif', fontSize: 11, fill: preview.valid ? 0xe3f3dc : 0xffd6b4,
         fontWeight: '600', stroke: { color: 0x243d39, width: 3 },
       } })

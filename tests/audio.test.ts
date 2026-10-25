@@ -1,4 +1,7 @@
 // @vitest-environment happy-dom
+import { playFinaleSound } from '../src/render/finaleSound'
+import { playRuinsSound } from '../src/render/ruinsSound'
+import { playVentilationSound } from '../src/render/ventilationSound'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { GameAudio, gameAudio, SOUND_SETTINGS_KEY } from '../src/render/gameAudio'
 import { playBuildComplete, playCoreStarted, playSoilDig } from '../src/render/waterSound'
@@ -7,6 +10,10 @@ import { BackgroundSound, soundscapeMix } from '../src/render/backgroundSound'
 import type { ScoreSamples } from '../src/render/scoreLoader'
 import { SCORE_LAYERS, SCORE_SECONDS, synthesizeScore } from '../src/render/backgroundScore'
 import { openingFrame } from '../src/render/openingTimeline'
+import { playReservoirSound } from '../src/render/reservoirSound'
+import { playGardenSound } from '../src/render/gardenSound'
+import { playHallSound } from '../src/render/hallSound'
+import { playDeepSound } from '../src/render/deepSound'
 
 vi.mock('../src/render/scoreLoader', () => ({
   prepareScore: (ready: (samples: Record<string, Float32Array>) => void) => {
@@ -47,6 +54,46 @@ beforeEach(() => {
 afterEach(() => { audio.dispose(); gameAudio.dispose(); localStorage.clear(); vi.unstubAllGlobals() })
 
 describe('统一声音输出与生命周期', () => {
+  it.each(['chisel','build','discovery','light','chime','feast','page','chapter']as const)('终章 %s 经统一音量、静音与后台门禁',kind=>{
+    gameAudio.unlock();const ctx=AudioContextFake.instances.at(-1)!;playFinaleSound(kind);expect(ctx.sources.length).toBeGreaterThan(0);const count=ctx.sources.length;gameAudio.setMuted(true);playFinaleSound(kind);expect(ctx.sources).toHaveLength(count);gameAudio.setMuted(false);gameAudio.setHidden(true);playFinaleSound(kind);expect(ctx.sources).toHaveLength(count)
+  })
+  it.each(['chisel','build','discovery','rubbing','restore','light','chapter']as const)('第八层 %s 经统一音量、静音与后台门禁',kind=>{
+    gameAudio.unlock();const ctx=AudioContextFake.instances.at(-1)!;playRuinsSound(kind);expect(ctx.sources.length).toBeGreaterThan(0);const count=ctx.sources.length;gameAudio.setMuted(true);playRuinsSound(kind);expect(ctx.sources).toHaveLength(count);gameAudio.setMuted(false);gameAudio.setHidden(true);playRuinsSound(kind);expect(ctx.sources).toHaveLength(count)
+  })
+  it.each(['chisel','build','echo','wind','craft','chime','chapter']as const)('听风工区 %s 本地合成、服从静音和后台停止',kind=>{
+    gameAudio.unlock();const ctx=AudioContextFake.instances.at(-1)!;playVentilationSound(kind);expect(ctx.sources.length).toBeGreaterThan(0);const count=ctx.sources.length;gameAudio.setMuted(true);playVentilationSound(kind);expect(ctx.sources).toHaveLength(count);gameAudio.setMuted(false);gameAudio.setHidden(true);playVentilationSound(kind);expect(ctx.sources).toHaveLength(count)
+  })
+
+  it.each(['chisel','build','discovery','valve','fill','pump','chapter'] as const)('蓄水回廊 %s 本地合成、服从静音和后台停止',kind=>{
+    gameAudio.unlock(); const ctx=AudioContextFake.instances.at(-1)!
+    playReservoirSound(kind); expect(ctx.sources.length).toBeGreaterThan(0); const count=ctx.sources.length
+    gameAudio.setMuted(true); playReservoirSound(kind); expect(ctx.sources).toHaveLength(count)
+    gameAudio.setMuted(false); gameAudio.setHidden(true); playReservoirSound(kind); expect(ctx.sources).toHaveLength(count)
+  })
+
+  it.each(['chisel','discovery','build','weave','sprout','harvest','chapter'] as const)('菌光花园 %s 本地合成、服从静音和后台停止',kind=>{
+    gameAudio.unlock(); const ctx=AudioContextFake.instances.at(-1)!
+    playGardenSound(kind); expect(ctx.sources.length).toBeGreaterThan(0); const count=ctx.sources.length
+    gameAudio.setMuted(true); playGardenSound(kind); expect(ctx.sources).toHaveLength(count)
+    gameAudio.setMuted(false); gameAudio.setHidden(true); playGardenSound(kind); expect(ctx.sources).toHaveLength(count)
+  })
+
+  it.each(['creak', 'brace', 'build', 'light', 'memory', 'feast'] as const)('暖光大厅 %s 在本地合成，静音和后台不补播', kind => {
+    gameAudio.unlock(); const ctx = AudioContextFake.instances.at(-1)!
+    playHallSound(kind); expect(ctx.sources.length).toBeGreaterThan(0)
+    const count = ctx.sources.length
+    gameAudio.setMuted(true); playHallSound(kind); expect(ctx.sources).toHaveLength(count)
+    gameAudio.setMuted(false); gameAudio.setHidden(true); playHallSound(kind); expect(ctx.sources).toHaveLength(count)
+  })
+  it.each(['chisel', 'discovery', 'smelt', 'craft', 'build', 'lift', 'chapter'] as const)('晶簇层 %s 在本地合成并服从总静音与后台状态', kind => {
+    gameAudio.unlock()
+    const ctx = AudioContextFake.instances.at(-1)!
+    playDeepSound(kind)
+    expect(ctx.sources.length).toBeGreaterThan(0)
+    const count = ctx.sources.length
+    gameAudio.setMuted(true); playDeepSound(kind); expect(ctx.sources).toHaveLength(count)
+    gameAudio.setMuted(false); gameAudio.setHidden(true); playDeepSound(kind); expect(ctx.sources).toHaveLength(count)
+  })
   it('只有手势解锁才创建上下文；加载/未解锁时不排队播放', () => {
     const cue = vi.fn()
     audio.play('dig', .2, cue)

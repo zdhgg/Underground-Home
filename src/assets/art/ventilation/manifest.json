@@ -1,0 +1,44 @@
+[
+  {
+    "file": "bench-v1.png",
+    "size": [
+      1774,
+      887
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 2642698,
+    "sha256": "97c057e0f70b7d615bd23730a01d3cf78c9e6deb6c65800b022dd5aa72b06661"
+  },
+  {
+    "file": "fan-v1.png",
+    "size": [
+      1536,
+      1024
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      254
+    ],
+    "bytes": 2828861,
+    "sha256": "cc213a58c437c4d7dc0e2c94aa635ecc8cff230a099d27537c8331919bcdc16f"
+  },
+  {
+    "file": "lingling-v1.png",
+    "size": [
+      1219,
+      1290
+    ],
+    "mode": "RGBA",
+    "alpha": [
+      0,
+      255
+    ],
+    "bytes": 1461772,
+    "sha256": "9342887d9ce5383d220549f1f660f06c533de4aef591d861aae9749f61a5fc84"
+  }
+]

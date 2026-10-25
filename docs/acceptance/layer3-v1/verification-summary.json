@@ -1,0 +1,248 @@
+{
+  "date": "2026-10-25",
+  "testCommand": "npm test -- --reporter=json --outputFile=tmp-tests.json",
+  "passed": 499,
+  "failed": 0,
+  "files": 45,
+  "build": {
+    "command": "npm run build",
+    "passed": true,
+    "typecheck": true,
+    "warning": "Main JS chunk exceeds 500 kB; build succeeds."
+  },
+  "suites": [
+    {
+      "file": "ambient-life.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "file": "attention-contract.test.ts",
+      "status": "passed",
+      "tests": 19
+    },
+    {
+      "file": "atu-construction.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "atu-orders.test.ts",
+      "status": "passed",
+      "tests": 13
+    },
+    {
+      "file": "audio.test.ts",
+      "status": "passed",
+      "tests": 22
+    },
+    {
+      "file": "bag.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "build.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "cave-moss.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "file": "crystal-feedback.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "deep-chapter.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "deep.test.ts",
+      "status": "passed",
+      "tests": 17
+    },
+    {
+      "file": "depth.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "dig.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "exploration.test.ts",
+      "status": "passed",
+      "tests": 20
+    },
+    {
+      "file": "facility-art.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "file": "farm.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "focus-ui.test.ts",
+      "status": "passed",
+      "tests": 4
+    },
+    {
+      "file": "friend-routes.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "history.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "input-camera.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "interact.test.ts",
+      "status": "passed",
+      "tests": 13
+    },
+    {
+      "file": "inventory-dialog.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "lighting.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "meal.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "missions.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "mole-dig-visual.test.ts",
+      "status": "passed",
+      "tests": 6
+    },
+    {
+      "file": "nursery.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "opening.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "partner-interactions.test.ts",
+      "status": "passed",
+      "tests": 8
+    },
+    {
+      "file": "partner-work.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "partners.test.ts",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "file": "persistence.test.ts",
+      "status": "passed",
+      "tests": 16
+    },
+    {
+      "file": "power.test.ts",
+      "status": "passed",
+      "tests": 10
+    },
+    {
+      "file": "release-notes.test.ts",
+      "status": "passed",
+      "tests": 3
+    },
+    {
+      "file": "relics.test.ts",
+      "status": "passed",
+      "tests": 5
+    },
+    {
+      "file": "room-construction.test.ts",
+      "status": "passed",
+      "tests": 13
+    },
+    {
+      "file": "rooms.test.ts",
+      "status": "passed",
+      "tests": 20
+    },
+    {
+      "file": "save-summary.test.ts",
+      "status": "passed",
+      "tests": 6
+    },
+    {
+      "file": "session-exploration.test.ts",
+      "status": "passed",
+      "tests": 64
+    },
+    {
+      "file": "sites.test.ts",
+      "status": "passed",
+      "tests": 11
+    },
+    {
+      "file": "storage.test.ts",
+      "status": "passed",
+      "tests": 9
+    },
+    {
+      "file": "surface-scene.test.ts",
+      "status": "passed",
+      "tests": 7
+    },
+    {
+      "file": "terrain-renderer.test.ts",
+      "status": "passed",
+      "tests": 58
+    },
+    {
+      "file": "terrain-textures.test.ts",
+      "status": "passed",
+      "tests": 2
+    },
+    {
+      "file": "world.test.ts",
+      "status": "passed",
+      "tests": 8
+    }
+  ],
+  "visualVerification": {
+    "cssViewports": [
+      "1280x800",
+      "842x526",
+      "412x915"
+    ],
+    "finalRetake": "Blocked by Work setting: local browser use disabled. See README for exact boundaries."
+  }
+}

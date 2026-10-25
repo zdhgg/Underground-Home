@@ -1,7 +1,15 @@
+import { finaleLadderCell,finaleOccupies,WARMTH_SPOT } from './finaleTopology'
+import { ruinsLadderCell,ruinsOccupies,RUINS_MOTIF_SPOTS } from './ruinsTopology'
+import { ventilationLadderCell, ventilationOccupies, VENTILATION_FOOT } from './ventilationTopology'
+import { reservoirLadderCell, reservoirOccupies, RESERVOIR_FOOT } from './reservoirTopology'
+import { gardenLadderCell, gardenOccupies, GARDEN_FOOT } from './gardenTopology'
 import { podBlocksPassage } from './passages'
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type Cell, type Rect, type SleepPod, type WorldState } from './world'
 import { explorationAccessIntact, explorationProtects, hallToShaftRouteIntact, isShaftColumn } from './exploration'
-import { routeBeforePod, workersSafe } from './atu'
+import { routeBeforePod, workersSafe,atuRoute,initialAtuPosition } from './atu'
+import { deepFacilityAt } from './deep'
+import { deepLadderCell } from './deepTopology'
+import { hallLadderCell, hallOccupies, HALL_FOOT } from './hallTopology'
 
 export const POD_SIZE = { w: 3, h: 2 } as const
 /** 双人舱：一间舱睡两位伙伴，床位数量决定还能安几间舱 */
@@ -70,8 +78,8 @@ export function canPlacePod(world: WorldState, x: number, y: number, preferredDo
   const rect = podRect({ x, y })
   if (world.rooms.some(room => room.status !== 'blueprint' && overlaps(rect, room) && !(rect.x >= room.x && rect.y >= room.y && rect.x + rect.w <= room.x + room.w && rect.y + rect.h <= room.y + room.h))) return { ok: false, reason: 'room' }
   if (world.exploration.clueFound && Array.from({ length: 3 }, (_, dx) => x + dx).includes(world.exploration.shaftX ?? -1)) return { ok: false, reason: 'reserved' }
-  if (y >= 15 && (isShaftColumn(x) || isShaftColumn(x + 1) || isShaftColumn(x + 2) || (x <= LANDMARKS.spring.x + 2 && x + 3 > LANDMARKS.spring.x - 2))) return { ok: false, reason: 'reserved' }
-  if (y >= 15) return { ok: false, reason: 'locked-layer' } // 本轮深层自由建设使用不挡路的小壁灯。
+  if (y >= 15 && y < 34 && (isShaftColumn(x) || isShaftColumn(x + 1) || isShaftColumn(x + 2) || (x <= LANDMARKS.spring.x + 2 && x + 3 > LANDMARKS.spring.x - 2))) return { ok: false, reason: 'reserved' }
+  if (y >= 15 && !((world.hall.entered && y + POD_SIZE.h - 1 === HALL_FOOT || world.garden.entered && y + POD_SIZE.h - 1 === GARDEN_FOOT || world.reservoir.entered && y + POD_SIZE.h - 1 === RESERVOIR_FOOT || world.ventilation.entered && y + POD_SIZE.h - 1 === VENTILATION_FOOT) && backWall)) return { ok: false, reason: 'locked-layer' }
   if ([CORE_FOOTPRINT, LANDMARKS.shaft].some((area) => overlaps(rect, area))) return { ok: false, reason: 'reserved' }
   if (world.pods.some((pod) => overlaps(rect, podRect(pod)))) return { ok: false, reason: 'overlap' }
   for (let dy = 0; dy < POD_SIZE.h; dy++) for (let dx = 0; dx < POD_SIZE.w; dx++) {
@@ -99,11 +107,22 @@ export function placePod(world: WorldState, x: number, y: number): SleepPod | nu
 
 /** 撤销挖掘不能埋住能源石、设施，或堵住家园 / 舱门的唯一通路。 */
 export function canRestoreDig(world: WorldState, x: number, y: number): boolean {
+  if(world.finale.foundWarmth&&x===WARMTH_SPOT.x&&y>=103&&y<=106)return false
+  if(world.finale.entered&&finaleLadderCell(world,x,y)||finaleOccupies(world,x,y))return false
+  if(world.ruins.entered&&ruinsLadderCell(world,x,y)||ruinsOccupies(world,x,y))return false
+  if (world.ventilation.entered && ventilationLadderCell(world,x,y) || ventilationOccupies(world,x,y) || world.ventilation.duct.includes(x) && y>=79 && y<=82) return false
+  if (world.reservoir.entered && reservoirLadderCell(world, x, y) || reservoirOccupies(world, x, y) || world.reservoir.canal.includes(x) && y >= 67 && y <= 70) return false
+  if (world.garden.entered && gardenLadderCell(world, x, y) || gardenOccupies(world, x, y) || world.garden.trail.includes(x) && y >= 55 && y <= 58) return false
+  if (world.hall.entered && hallLadderCell(world, x, y) || hallOccupies(world, x, y)) return false
+  if (world.deep.entered && deepLadderCell(world, x, y) || deepFacilityAt(world, { x, y })) return false
   if (world.rooms.some(room => room.status !== 'blueprint' && contains({ ...room, h: room.h + 1 }, x, y))) return false
   if (!isInside(world, x, y) || world.tiles[y][x] !== TILE.EMPTY || isPodStructure(world, x, y)) return false
   if (world.farm.planters.some(p => p.x === x && (p.y === y || p.y + 1 === y))) return false
   if (explorationProtects(world, x, y)) return false
   if (world.progress.crystalFound && x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y) return false
   world.tiles[y][x] = TILE.SOIL
-  try { return accessPreserved(world, reachable(world)) && explorationAccessIntact(world) && workersSafe(world) } finally { world.tiles[y][x] = TILE.EMPTY }
+  try { return accessPreserved(world, reachable(world)) && explorationAccessIntact(world) && workersSafe(world)
+    && (!world.finale.foundWarmth||atuRoute(world,initialAtuPosition(world),WARMTH_SPOT,true)!==null)
+    && world.ruins.revealed.every(m=>atuRoute(world,initialAtuPosition(world),RUINS_MOTIF_SPOTS[m],true)!==null)
+  } finally { world.tiles[y][x] = TILE.EMPTY }
 }

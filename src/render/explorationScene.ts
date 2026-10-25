@@ -19,6 +19,7 @@ interface WorkState {
   elapsed: number
   struck: boolean
   onStrike: () => void
+  onDone?: () => void
 }
 
 /** 阿土的一次情绪反馈：嘴边的短句 + 跳一下，不改变世界。 */
@@ -91,6 +92,8 @@ export class ExplorationScene {
   }
 
   get visible(): boolean { return this.explorer.visible }
+  positionLift(cell: Cell): void { this.positionExplorer(cell) }
+  setRiding(active: boolean): void { this.explorer.scale.set(active ? .7 : 1) }
 
   get speechAnchor(): { x: number; y: number } | null {
     return this.visible ? { x: this.explorer.x, y: this.explorer.y - 40 } : null
@@ -228,11 +231,11 @@ export class ExplorationScene {
   }
 
   /** 施工：阿土站在梯段上挥镐；落镐瞬间回调，收招后归位。 */
-  work(target: Cell, onStrike: () => void): void {
+  work(target: Cell, onStrike: () => void, onDone?: () => void): void {
     this.motion = null
     this.explorer.visible = true
     this.positionExplorer({ x: target.x, y: target.y - 1 })
-    this.workAnim = { target, elapsed: 0, struck: false, onStrike }
+    this.workAnim = { target, elapsed: 0, struck: false, onStrike, onDone }
   }
 
   /**
@@ -306,7 +309,7 @@ export class ExplorationScene {
         this.tool.visible = false
         this.tool.rotation = 0
         this.explorer.scale.y = 1
-        this.positionExplorer({ x: w.target.x, y: w.target.y - 1 })
+        this.positionExplorer({ x: w.target.x, y: w.target.y - 1 }); w.onDone?.()
       }
     }
     const direction = this.construction.update(dt)
@@ -317,7 +320,9 @@ export class ExplorationScene {
       const direction = this.mole?.direction ?? 1
       this.tool.visible = !this.construction.active && (this.world?.exploration.pickaxeUpgraded ?? false)
       this.tool.position.set(7 * direction, 3)
-      this.tool.scale.set(0.75 * direction, 0.75)
+      const toolScale = this.world?.deep.hardPickaxe ? .9 : .75
+      this.tool.scale.set(toolScale * direction, toolScale)
+      this.tool.tint = this.world?.deep.hardPickaxe ? 0xb3e8f0 : 0xffffff
       this.tool.rotation = 0.3 * direction
     }
     const light = this.standAt.y >= HOME_FLOOR_Y * T
