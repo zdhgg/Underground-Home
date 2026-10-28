@@ -43,7 +43,7 @@ export function canPlacePlanter(world: WorldState, x: number, y: number): Plante
   if (world.tiles[y + 1]?.[x] === TILE.EMPTY) return { ok: false, reason: 'support' }
   if (isShaftColumn(x) || (x >= LANDMARKS.shaft.x && x < LANDMARKS.shaft.x + LANDMARKS.shaft.w)) return { ok: false, reason: 'reserved' }
   if (onWater && Math.abs(x - LANDMARKS.spring.x) <= 1) return { ok: false, reason: 'reserved' }
-  // 潮湿洞壁上的发光蘑菇留着：它们是家的一部分，不与作物抢地。
+  // 未拾取的蘑菇需要避让；拾取后空地可自由种植。
   if (onWater && isMushroomSpot(world, x, y)) return { ok: false, reason: 'reserved' }
   const reserved = [LANDMARKS.generatorZone, { ...LANDMARKS.crystal, w: 1, h: 1 }]
   if (reserved.some((rect) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h)) return { ok: false, reason: 'reserved' }

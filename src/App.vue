@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { createGameSession, type BuildState, type ExplorationUI, type FarmUI, type GameSession, type Milestone, type SessionProgress } from './app/session'
+import { createGameSession, type BuildState, type ExplorationUI, type FarmUI, type GameSession, type Milestone, type SessionProgress, type NestWelcome as NestWelcomeState } from './app/session'
+import NestWelcome from './components/NestWelcome.vue'
 import type { DepthView } from './render/camera'
 import GuidePanel from './components/GuidePanel.vue'
 import DepthNavigation from './components/DepthNavigation.vue'
@@ -24,6 +25,7 @@ import InventoryDialog from './components/InventoryDialog.vue'
 import type { BagItem } from './core/bag'
 import { ITEM_ART } from './app/itemArt'
 import { gameAudio } from './render/gameAudio'
+import { HOME_OWNER, HOME_TITLE } from './core/personal'
 import FinalePanel from './components/FinalePanel.vue'
 import { emptyFinaleUI } from './app/finaleChapter'
 import RuinsPanel from './components/RuinsPanel.vue'
@@ -38,6 +40,9 @@ import HallPanel from './components/HallPanel.vue'
 import { emptyHallUI } from './app/hallChapter'
 import DeepPanel from './components/DeepPanel.vue'
 import { emptyDeepUI } from './app/deepChapter'
+import MemoryDialog from './components/MemoryDialog.vue'
+import MemoryDetailDialog from './components/MemoryDetailDialog.vue'
+import type { MemoryEntry } from './core/world'
 const props = defineProps<{ saveStore?: SaveStore }>()
 
 const stageEl = ref<HTMLElement | null>(null)
@@ -60,6 +65,10 @@ function toggleSound(): void {
   }
 }
 const conversation = ref<PartnerConversation | null>(null)
+const nestWelcome = ref<NestWelcomeState | null>(null)
+function dismissNestOnOutside(event: PointerEvent): void {
+  if (nestWelcome.value && event.target instanceof Element && !event.target.closest('[data-attention-panel="nest-welcome"]')) session.value?.closeNestWelcome()
+}
 const conversationAnchor = ref<ConversationAnchor | null>(null)
 const discovering = ref(false)
 const work = ref<WorkUI | null>(null)
@@ -85,6 +94,10 @@ const inventory = ref(freshInventory())
 const bag = ref<BagItem[]>([])
 const bagOpen = ref(false)
 const bagInitialItem = ref('stone')
+const memoryOpen = ref(false)
+const memoryDetailOpen = ref(false)
+const memoryDetail = ref<MemoryEntry | null>(null)
+const memories = ref<MemoryEntry[]>([])
 const rooms = ref<RoomUI>({ active: false, available: false, kind: 'home', width: 3, minWidth: 3, selectedId: null, placed: false, valid: false, dirty: false, message: '', detail: '', items: [], construction: false, completed: false, busy: false, action: '放下蓝图', left: 0 })
 watch(() => rooms.value.active || sites.value.active, active => { if (active) toolsOpen.value = false })
 const message = ref('')
@@ -92,7 +105,7 @@ const messageWarning = ref(false)
 const toastVisible = ref(false)
 const progress = ref<SessionProgress>({
   title: '找到发光的能源石',
-  speech: '外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。',
+  speech: `${HOME_OWNER}，外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。`,
   outcome: '能源石能把家园照亮。',
   done: 0,
   total: 4,
@@ -206,6 +219,34 @@ function openBag(item = 'stone'): void {
 function closeBag(): void {
   bagOpen.value = false; session.value?.setInputBlocked(false)
 }
+function openMemory(): void {
+  if (screen.value !== 'playing' || !session.value) return
+  partnerMenu.value = false; toolsOpen.value = false; bagOpen.value = false
+  memoryOpen.value = true
+  session.value.setInputBlocked(true)
+}
+function closeMemory(): void {
+  memoryOpen.value = false
+  session.value?.setInputBlocked(false)
+}
+function openMemoryDetail(): void {
+  if (screen.value !== 'playing' || !session.value || memories.value.length === 0) return
+  memoryDetail.value = memories.value.at(-1) ?? null
+  memoryDetailOpen.value = memoryDetail.value !== null
+  memoryOpen.value = false
+  session.value.setInputBlocked(true)
+}
+function closeMemoryDetail(): void {
+  memoryDetailOpen.value = false
+  memoryDetail.value = null
+  session.value?.setInputBlocked(false)
+}
+function openAllMemories(): void {
+  memoryDetailOpen.value = false
+  memoryDetail.value = null
+  memoryOpen.value = true
+  session.value?.setInputBlocked(true)
+}
 function showCollection(): void { closeBag(); session.value?.focusCollection() }
 function findRelic(id: string): void { closeBag(); session.value?.focusRelic(id) }
 
@@ -263,7 +304,7 @@ onMounted(async () => {
   }
   try {
     session.value = await createGameSession(host, {
-      onMessage: (text, kind) => showMessage(text, kind === 'warning'),
+      onMessage: (text, kind) => { if (!nestWelcome.value) showMessage(text, kind === 'warning') },
       onOpening: next => {
         opening.value = next
         if (!next.active && screen.value === 'opening') screen.value = 'playing'
@@ -276,6 +317,7 @@ onMounted(async () => {
       onExploration: (next) => { exploration.value = next },
       onFarm: (next) => { farm.value = next },
       onMilestone: showMilestone,
+      onNestWelcome: next => { nestWelcome.value = next; if (next) { toolsOpen.value = false; partnerMenu.value = false; toastVisible.value = false; milestone.value = null } },
       onPartnerConversation: (next) => { conversation.value = next; if (next) { partnerMenu.value = false; toastVisible.value = false; milestone.value = null } },
       onConversationAnchor: next => { conversationAnchor.value = next },
       onDiscovery: active => { discovering.value = active; if (active) { partnerMenu.value = false; toastVisible.value = false; milestone.value = null } },
@@ -297,6 +339,8 @@ onMounted(async () => {
       onDeep: next => { const opened = next.active && !deep.value.active; deep.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
       onInventory: next => { inventory.value = next },
       onBag: next => { bag.value = next },
+      onMemories: next => { memories.value = next },
+      onMemoryRequested: openMemoryDetail,
       onBagRequested: () => openBag(bag.value.find(i => i.kind === 'relic' && i.count)?.id ?? 'seed-pouch'),
       onWork: next => { work.value = next; partnerMenu.value = false },
       onWorkers: next => { workers.value = next },
@@ -327,16 +371,17 @@ onBeforeUnmount(() => {
     @start="startGame('new')"
     @continue="startGame('continue')"
   />
-  <div class="app" :class="{ 'is-opening': opening.active }" :inert="screen === 'title' || bagOpen" :aria-hidden="screen === 'title' || bagOpen">
+  <div class="app" :class="{ 'is-opening': opening.active }" :inert="screen === 'title' || bagOpen || memoryOpen || memoryDetailOpen" :aria-hidden="screen === 'title' || bagOpen || memoryOpen || memoryDetailOpen" @pointerdown.capture="dismissNestOnOutside" @wheel.capture="nestWelcome && session?.closeNestWelcome()">
     <header class="top">
       <div class="brand">
         <span class="logo">🏔️</span>
         <div class="brand-text">
-          <h1>地下小家园</h1>
+          <h1>{{ HOME_TITLE }}</h1>
           <small>从风雪中出发 · 自由建设地下家园</small>
         </div>
       </div>
       <button class="inventory" type="button" aria-label="打开物品栏" aria-haspopup="dialog" :aria-expanded="bagOpen" @click="openBag()"><span class="bag-label"><img :src="ITEM_ART.bag" alt="" /><span>物品栏</span></span><span><img :src="ITEM_ART.stone" alt="" /><b>{{ inventory.stone }}</b><small>石料</small></span><span><img :src="ITEM_ART.wood" alt="" /><b>{{ inventory.wood }}</b><small>旧木料</small></span></button>
+      <button class="memory-toggle" type="button" aria-label="打开记忆匣" aria-haspopup="dialog" :aria-expanded="memoryOpen" @click="openMemory"><span aria-hidden="true">✦</span><span>记忆匣</span><b>{{ memories.length }}</b></button>
       <button class="tools-toggle" type="button" :aria-expanded="toolsOpen" aria-controls="build-tools" @click="toolsOpen = build.mode === 'none' ? !toolsOpen : true">🧰 <span>工具</span></button>
       <button class="sound-toggle" type="button" :aria-pressed="!soundMuted" :aria-label="soundMuted ? '开启声音' : '关闭声音'" @click="toggleSound"><span class="sound-icon" aria-hidden="true">{{ soundMuted ? '🔇' : '🔊' }}</span><span class="sound-label">{{ soundMuted ? '声音已关闭' : '声音已开启' }}</span></button>
       <DepthNavigation :view="view" :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available" :reservoir-available="reservoir.available" :ventilation-available="ventilation.available" :ruins-available="ruins.available" :finale-available="finale.available" @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()" @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()" @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()" @overview="session?.showOverview()" />
@@ -352,8 +397,9 @@ onBeforeUnmount(() => {
         <p class="opening-caption" aria-live="polite">{{ opening.caption }}</p>
       </section>
 
-      <SiteTools v-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
-      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" />
+      <NestWelcome v-if="nestWelcome && !view.overview" :state="nestWelcome" @close="session?.closeNestWelcome()" @confirm="session?.confirmNestMark($event)" />
+      <SiteTools v-else-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
+      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" />
       <section v-else-if="work" class="work-status" data-attention-panel="work" aria-label="伙伴工作" role="status">
         <small>伙伴来帮忙</small>
         <strong>{{ work.name }} · {{ work.title }}</strong>
@@ -473,11 +519,15 @@ onBeforeUnmount(() => {
     </footer>
   </div>
   <InventoryDialog v-if="bagOpen && screen === 'playing'" :items="bag" :initial-item="bagInitialItem" :collection-available="rooms.available" @close="closeBag" @collection="showCollection" @find="findRelic" />
+  <MemoryDialog v-if="memoryOpen && screen === 'playing'" :entries="memories" @close="closeMemory" @save="session?.addMemory($event)" />
+  <MemoryDetailDialog v-if="memoryDetailOpen && memoryDetail && screen === 'playing'" :entry="memoryDetail" @close="closeMemoryDetail" @all="openAllMemories" />
 </template>
 
 <style scoped>
 .sound-toggle { min-height: 44px; padding: 8px 12px; border-radius: 10px; background: #edf2ec; color: #536b5d; font-size: 13px; white-space: nowrap; flex-shrink: 0; pointer-events: auto; }
 .tools-toggle { min-height: 44px; padding: 8px 12px; border-radius: 10px; background: #edf2ec; color: #536b5d; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.memory-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 8px 12px; border-radius: 10px; background: #edf2ec; color: #536b5d; font-size: 13px; white-space: nowrap; flex-shrink: 0; }
+.memory-toggle:hover { background: #e1ebe1; }.memory-toggle b { min-width: 18px; color: #3f7b58; font-size: 12px; }
 .tools-toggle[aria-expanded="true"] { background: #dcebdd; color: #315b46; }
 .tools-toggle:hover { background: #e1ebe1; }
 .sound-icon { display: none; }
@@ -581,6 +631,7 @@ onBeforeUnmount(() => {
 @media (min-width: 721px) and (max-width: 1840px) { .top { flex-wrap: wrap; gap: 6px; }.top :deep(.depth-nav) { width: 100%; justify-content: space-between; }.top :deep(.depth-nav button) { flex: 1; }.brand-text small { display: none; } }
 @media (max-width: 720px) {
   .tools-toggle { width: 44px; padding: 8px; font-size: 0; }.tools-toggle:first-letter { font-size: 18px; }
+  .memory-toggle { width: 44px; padding: 8px; font-size: 0; justify-content: center; }.memory-toggle > span:first-child { font-size: 18px; }.memory-toggle b { font-size: 11px; }
   .sound-toggle { order: 0; width: 44px; padding: 8px; }
   .sound-icon { display: inline; font-size: 18px; }
   .sound-label { display: none; }

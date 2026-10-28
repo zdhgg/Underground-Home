@@ -5,6 +5,7 @@ import woodland from '../assets/art/surface/windwood-snow-v1.png'
 import entrance from '../assets/art/surface/shelter-mouth-snow-v1.png'
 import { savedAtLabel, type SaveStatus } from '../app/saveSummary'
 import { RELEASE_NOTES } from '../app/releaseNotes'
+import { HOME_OWNER, HOME_TITLE } from '../core/personal'
 
 const props = defineProps<{ ready: boolean; error: string; save: SaveStatus; persistent: boolean }>()
 const emit = defineEmits<{ start: []; continue: [] }>()
@@ -56,16 +57,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
 </script>
 
 <template>
-  <main class="start-screen" aria-label="地下小家园进入页">
+  <main class="start-screen" :aria-label="`${HOME_TITLE}进入页`">
     <img class="start-horizon" :src="horizon" alt="" />
     <img class="start-woodland" :src="woodland" alt="" />
     <div class="start-shade" />
     <img class="start-entrance" :src="entrance" alt="雪地里的避难所入口" />
 
     <section class="start-content">
-      <span class="start-kicker">阿土的地下新生活</span>
-      <h1>地下小家园</h1>
-      <p class="start-tagline">在风雪之下，建一个温暖的小家。</p>
+      <span class="start-kicker">{{ HOME_OWNER }}，欢迎回家</span>
+      <h1>{{ HOME_TITLE }}</h1>
+      <p class="start-tagline">风雪外面，暖窝在地下。和阿土一起，把这里变成你的家。</p>
 
       <div class="start-menu">
         <template v-if="saveReady">
@@ -74,7 +75,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
             <span v-if="canStart" aria-hidden="true">→</span>
           </button>
           <div v-if="save.status === 'ready'" class="save-card">
-            <span class="save-eyebrow">上次的家还在</span>
+            <span class="save-eyebrow">{{ HOME_OWNER }}的家还在</span>
             <strong>{{ save.summary.missionTitle }}</strong>
             <small>
               {{ save.summary.phase }} {{ save.summary.done }}/{{ save.summary.total }}
@@ -120,7 +121,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeyDown))
         <header class="notes-head">
           <div>
             <small>游戏更新记录</small>
-            <h2 id="notes-title">地下小家园 <span>v{{ version }}</span></h2>
+            <h2 id="notes-title">{{ HOME_TITLE }} <span>v{{ version }}</span></h2>
           </div>
           <button ref="notesClose" class="notes-close" type="button" @click="closeNotes">看完了</button>
         </header>

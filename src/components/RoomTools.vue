@@ -3,7 +3,7 @@ import type { RoomUI } from '../app/roomEditor'
 import type { RoomKind } from '../core/world'
 import { ROOM_MAX_WIDTH } from '../core/rooms'
 defineProps<{ state: RoomUI }>()
-defineEmits<{ close: []; kind: [kind: RoomKind]; resize: [delta: number]; save: []; remove: [] }>()
+defineEmits<{ close: []; kind: [kind: RoomKind]; resize: [delta: number]; save: []; remove: []; mark: [id: number] }>()
 const kinds: { kind: RoomKind; name: string; icon: string }[] = [
   { kind: 'home', name: '住处', icon: '⌂' }, { kind: 'lounge', name: '客厅', icon: '☕' },
 ]
@@ -22,6 +22,7 @@ const kinds: { kind: RoomKind; name: string; icon: string }[] = [
     <p class="detail">{{ state.detail }}</p>
     <button v-if="!state.completed" class="primary" data-primary-action type="button" :disabled="!state.valid || !state.dirty" @click="$emit('save')">{{ state.busy ? '阿土正在施工…' : state.action }}</button>
     <button v-else class="primary" data-primary-action type="button" :disabled="state.width >= ROOM_MAX_WIDTH" @click="$emit('resize', 1)">{{ state.width >= ROOM_MAX_WIDTH ? '已达本层最大宽度' : '扩建房间，增加容量' }}</button>
+    <div v-if="state.nestMarks?.length" class="nest-marks"><button v-for="nest in state.nestMarks" :key="nest.id" type="button" @click="$emit('mark', nest.id)">✦ {{ nest.label }}</button></div>
     <div v-if="state.construction" class="secondary"><button type="button" :disabled="state.busy" @click="$emit('resize', 0)">调整蓝图</button><button type="button" :disabled="state.busy" @click="$emit('remove')">取消施工蓝图</button></div>
   </section>
 </template>
@@ -44,5 +45,6 @@ button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #4b886c; background: #
 .detail { margin: 0 0 14px; color: #748478; font-size: 12px; line-height: 1.6; }
 .primary { width: 100%; background: #3c8063; color: white; font-weight: 700; }.primary:hover { background: #326f55; }
 .secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }.quiet { display: block; margin-top: 7px; }
+.nest-marks { display:grid; gap:6px; margin-top:8px; }.nest-marks button { background:transparent; border:1px solid #d5e2d5; }
 @media (max-width: 1000px) { .room-tools { width: 254px; padding: 12px; }.kinds { margin-top: 10px; }.instruction { margin-top: 10px; min-height: 0; }.detail { margin-bottom: 10px; } }
 </style>

@@ -3,6 +3,7 @@ import { shaftConnected, springVisible, suggestedBreakthrough, waterSpan } from 
 import { canBuildMorePods, waitingPartnerList, waitingPartners } from './partners'
 import { DINING_SITE_ID, KITCHEN_SITE_ID } from './meal'
 import { siteById } from './sites'
+import { HOME_OWNER, HOME_TITLE } from './personal'
 
 /**
  * 任务（missions）：给"问题和目标"，不规定唯一解。
@@ -28,7 +29,7 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'find-energy-stone',
     title: '找到发光的能源石',
-    speech: '外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。',
+    speech: `${HOME_OWNER}，外面风雪好大！先在地下安家吧。挖开左边泛蓝光的泥土，找能源石把家照亮。`,
     todo: '点一点泛蓝光的泥土，一格一格挖开它。',
     outcome: '能源石能把家照亮。',
     isDone: (world) => world.progress.crystalFound,
@@ -52,7 +53,7 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'build-sleep-pod',
     title: '给伙伴留床',
-    speech: '亮了！阿灯一直守着这座旧避难所，可她和我还没有床。挖出一间暖窝，给我们留两张床吧！',
+    speech: `${HOME_OWNER}，亮了！阿灯一直守着这座旧避难所，可她和我还没有床。挖出一间暖窝，给我们留两张床吧！`,
     todo: '挖出左边的暖窝空间，蓝图出现后点“开工”。',
     outcome: '阿土和阿灯住下来，地下才真正像一个家。',
     isDone: (world) => world.pods.length > 0,
@@ -144,13 +145,13 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   const dined = farm.sharedMeals > 0
   const done = [e.clueFound, e.pickaxeUpgraded, connected, e.entered, e.springFound, farm.waterSupplied, friendsSettled, harvested, powered, kitchenBuilt, diningBuilt, dined].filter(Boolean).length
   const guide = !e.clueFound
-    ? ['楼下有谁在喊饿', '床安好啦。楼下好像有小兔子的声音："我饿了……下面有水吗？" 点一下岩壁上的裂纹——我去听听里面有没有水声。', '有了水，就能种出吃的。']
+    ? ['楼下有谁在喊饿', `${HOME_OWNER}，床安好啦。楼下好像有小兔子的声音："我饿了……下面有水吗？" 点一下岩壁上的裂纹——我去听听里面有没有水声。`, '有了水，就能种出吃的。']
     : !e.pickaxeUpgraded
       ? ['换上小铁镐', '裂缝里有凉凉的水汽！换上小铁镐，就能挖开这种带裂纹的岩石。', '坚硬的大岩石还要留着。']
       : !connected
         ? ['亲手挖出向下的梯道', '点带裂纹的岩石，我会走过去一镐一镐挖开、把梯子接长。练两次以后，点「一路挖到底」，我一口气挖到洞底！', '梯子连到洞底，我们才能下去。']
         : !e.entered
-          ? ['沿梯子去第二层', '通啦！点“沿梯子下去”，我带你到新地方看看！', '顺着真实的梯子，抵达泉水层。']
+          ? ['沿梯子去第二层', `${HOME_OWNER}，通啦！点“沿梯子下去”，我带你到新地方看看！`, '顺着真实的梯子，抵达泉水层。']
           : !e.springFound
             ? ['找到滴答响的泉水', springVisible(world) ? '小满说：泉水露出来啦！点一下泉水，她跑过去看看。' : `小满说：水就在${(world.exploration.shaftX ?? 27) > LANDMARKS.spring.x ? '左' : '右'}边的土壁后面！点着泥土一格一格挖过去，挖到水边就能喝到啦。`, '找到水源，这里也能住人。']
             : !farm.waterSupplied
@@ -166,7 +167,7 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
                       : !diningBuilt
                         ? ['再摆一张餐桌', '灶台冒热气啦！再点「泉边建设」修一张围坐餐桌，大家就能坐在一起吃。', '围着桌子吃饭，家才热闹。']
                         : !dined
-                          ? ['请大家吃第一顿饭', '灶台和餐桌都好啦！点下面的「请大家吃第一顿饭」。没有菜的话，先去菜园收一份。', '第一顿饭吃完，第二层就完整啦。']
-                          : ['家越住越大！', '家里有水、有床、有新鲜菜，第一顿饭也吃上啦。想继续扩建就往左右挖一挖。', '地下小家园，还会一层一层长大。']
+                          ? ['请大家吃第一顿饭', `${HOME_OWNER}，灶台和餐桌都好啦！点下面的「请大家吃第一顿饭」。没有菜的话，先去菜园收一份。`, '第一顿饭吃完，第二层就完整啦。']
+                          : ['家越住越大！', '家里有水、有床、有新鲜菜，第一顿饭也吃上啦。想继续扩建就往左右挖一挖。', `${HOME_TITLE}，还会一层一层长大。`]
   return { title: guide[0], speech: guide[1], outcome: guide[2], done, total: 12, finished: friendsSettled && harvested && powered && kitchenBuilt && diningBuilt && dined }
 }

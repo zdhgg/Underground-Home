@@ -1,9 +1,10 @@
 import { Assets,Container,Graphics,Sprite,Text,type Texture } from 'pixi.js'
-import heart from '../assets/art/finale/heart-v1.png'
+import heart from '../assets/art/finale/warm-heart-v1.png'
 import table from '../assets/art/finale/table-v1.png'
 import memory from '../assets/art/finale/memory-v1.png'
 import { finaleBuildProblem } from '../core/finale'
 import { WARMTH_SPOT,finaleWidth } from '../core/finaleTopology'
+import { HOME_TITLE, WARM_CRYSTAL } from '../core/personal'
 import { TILE,TILE_SIZE as T,type FinaleFacilityKind,type WorldState } from '../core/world'
 export const FINALE_ART_URLS={heart,table,memory}
 type FinaleTextures=Partial<Record<keyof typeof FINALE_ART_URLS,Texture>>
@@ -27,7 +28,7 @@ export class FinaleScene{
    for(const dy of [.25,.65])g.moveTo((shaft+.22)*T,(y+dy)*T).lineTo((shaft+.78)*T,(y+dy)*T).stroke({width:2,color:0xd7c6a0})
   }
   if(!r.entered)return
-  if([103,104,106].every(y=>w.tiles[y][WARMTH_SPOT.x]===TILE.EMPTY)){this.sprite('heart',(WARMTH_SPOT.x+.5)*T,104.7*T,2.5*T,1.7*T);this.label(r.foundWarmth?'天然暖晶 · 留在原处':'暖光从这里来',WARMTH_SPOT.x+.5,103.05)}
+  if([103,104,106].every(y=>w.tiles[y][WARMTH_SPOT.x]===TILE.EMPTY)){this.sprite('heart',(WARMTH_SPOT.x+.5)*T,105*T,2.7*T,1.9*T);this.label(r.foundWarmth?`${WARM_CRYSTAL} · 留在原处`:'暖光从这里来',WARMTH_SPOT.x+.5,103.05)}
   for(const f of r.facilities){const x=f.x*T,width=finaleWidth(f.kind)*T
    if(f.kind==='table'){
     this.sprite('table',x+width/2,106.95*T,width-4,3.3*T)
@@ -50,7 +51,7 @@ export class FinaleScene{
    if(f.kind==='bench'){g.roundRect(x+4,106.1*T,width-8,8,4).fill(0xb6a485).stroke({width:2,color:0x776e5b});g.roundRect(x+8,105.3*T,width-16,20,7).fill(0x9e9078);for(const dx of [14,width-14])g.rect(x+dx,106.3*T,7,.6*T).fill(0x8b806c)}
   }
   // 九层联结只沿已开通的梯道描绘，不把暖光画穿未挖的岩层。
-  if(r.lit){for(let y=11;y<=106;y++)if(w.tiles[y][shaft]===TILE.EMPTY)g.rect((shaft+.06)*T,y*T,2,T+1).fill({color:0xbca073,alpha:.45});for(const y of [11,21,33,46,58,70,82,94,106])g.circle((shaft+.1)*T,(y+.4)*T,3).fill(0xddbd83);this.label(r.completed?'九层家园 · 故事由你继续':'九层相连 · 每个家都在',shaft+.5,108)}
+  if(r.lit){for(let y=11;y<=106;y++)if(w.tiles[y][shaft]===TILE.EMPTY)g.rect((shaft+.06)*T,y*T,2,T+1).fill({color:0xbca073,alpha:.45});for(const y of [11,21,33,46,58,70,82,94,106])g.circle((shaft+.1)*T,(y+.4)*T,3).fill(0xddbd83);this.label(r.completed?`${HOME_TITLE} · 故事继续`:'九层相连 · 每个家都在',shaft+.5,108)}
  }
  private sprite(key:keyof FinaleTextures,x:number,bottom:number,width:number,height:number):void{const t=this.art[key];if(!t){this.view.addChild(new Graphics().roundRect(x-width/2,bottom-height,width,height,9).fill(0x8d8068));return}const s=new Sprite(t);s.label=`finale-${key}`;s.anchor.set(.5,1);s.scale.set(Math.min(width/t.width,height/t.height));s.position.set(x,bottom);this.view.addChild(s)}
  private label(text:string,x:number,y:number):void{const t=new Text({text,style:{fontFamily:'Microsoft YaHei,sans-serif',fontSize:10,fill:0xdbc8a7,stroke:{color:0x343025,width:3}}});t.anchor.set(.5,1);t.position.set(x*T,y*T);this.view.addChild(t)}

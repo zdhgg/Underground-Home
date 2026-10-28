@@ -2,6 +2,7 @@
 import { atuRoute,initialAtuPosition } from './atu'
 import { canAfford,changeMaterials } from './materials'
 import { PARTNERS,partnerBed } from './partners'
+import { HOME_OWNER, WARM_CRYSTAL } from './personal'
 import { WARMTH_SPOT,finaleClear,finaleConnected,finaleSpan,finaleWidth } from './finaleTopology'
 import { TILE,createInitialWorld,type Cell,type Inventory,type FinaleState,type FinaleFacilityKind,type FinaleTheme,type WorldState } from './world'
 export const FINALE_PARTNERS=PARTNERS.map(p=>p.id)
@@ -14,10 +15,10 @@ export const FINALE_MEMORIES=[
  {title:'清水沿回廊回家',speaker:'团团',text:'你决定清水送哪边，我和小泉去转水闸。楼上的花园和大厅，都听见了新的水声。'},
  {title:'听见家园的风',speaker:'铃铃',text:'顺着真实洞壁接好风路，微风让我们做的风铃轻轻响。后来，我也在这个家有了床。'},
  {title:'旧故事，新的小爪印',speaker:'阿土',text:'灯、水和一起建造的旧岩画留在原处。你把我们的家添进去，故事就有了新的这一页。'},
- {title:'九位伙伴，一个家',speaker:'阿土',text:'天然暖晶照着九人长桌。从第一盏灯到地心暖光，每一层都留着你的选择。故事到了这里，家还可以继续建。'},
+ {title:'九位伙伴，一个家',speaker:'阿土',text:`${WARM_CRYSTAL}照着九人长桌。从第一盏灯到地心暖光，每一层都留着你的选择。${HOME_OWNER}，故事到了这里，家还可以继续建。`},
 ]as const
 export const FINALE_SPECS:Record<FinaleFacilityKind,{name:string;cost:Inventory;parts:number;crystals:number;detail:string}>={
- beacon:{name:'地心暖光台',cost:{stone:4,wood:1},parts:2,crystals:1,detail:'四格宽的嵌岩反光台。阿灯和阿木把天然暖晶的柔光引到家园标记，暖晶仍留在原岩壁。'},
+ beacon:{name:'地心暖光台',cost:{stone:4,wood:1},parts:2,crystals:1,detail:`四格宽的嵌岩反光台。阿灯和阿木把${WARM_CRYSTAL}的柔光引到家园标记，暖晶仍留在原岩壁。`},
  table:{name:'九人暖屋长桌',cost:{stone:4,wood:5},parts:1,crystals:0,detail:'自由选择十格宽的洞壁。九个座位各不相同，前面留给每位伙伴真正走过来。'},
  memory:{name:'九层家园纪念壁',cost:{stone:3,wood:2},parts:0,crystals:0,detail:'四格宽的后壁相册，记下九层的灯、水、工坊和朋友。未找到的小收藏可以留白。'},
  bench:{name:'暖晶小憩石凳',cost:{stone:2,wood:2},parts:0,crystals:0,detail:'可选的三格石凳，靠着岩壁听风铃，随时坐一坐。没有时间或食物消耗。'},
@@ -63,9 +64,9 @@ export function finaleActionProblem(w:WorldState,action:FinaleAction):string|nul
  if(action==='excavate')return finaleConnected(w)?'地心暖光的梯道已经通啦。':null
  if(action==='enter')return !finaleConnected(w)?'先沿施工梯逐段凿通暖晶岩盖。':r.entered?'已经来到第九层啦。':null
  if(!r.entered)return '先沿梯子来到地心暖光。'
- if(action==='discover')return r.foundWarmth?'天然暖晶已经记进相册啦。':finaleReach(w,WARMTH_SPOT)?null:'先挖通到暖晶下方的路。'
+ if(action==='discover')return r.foundWarmth?`${WARM_CRYSTAL}已经记进相册啦。`:finaleReach(w,WARMTH_SPOT)?null:'先挖通到暖晶下方的路。'
  if(action==='rest')return !finaleFacility(w,'bench')?'先选一处岩壁摆小憩石凳。':r.rests>=100000?'已经留下好多小憩回忆啦。':null
- if(!r.foundWarmth)return '先走近右侧岩壁，看看天然地心暖光。'
+ if(!r.foundWarmth)return `先走近右侧岩壁，看看${WARM_CRYSTAL}的暖光。`
  if(action==='extend')return r.liftExtended?'第九站电梯已经接好啦。':w.deep.parts<2||w.deep.crystals<1?'延长电梯需要部件 2、晶簇 1。':null
  if(action==='light')return !finaleFacility(w,'beacon')?'先自由摆好地心暖光台。':r.lit?'家园暖光已经接通啦。':null
  if(!r.lit)return '先让阿灯和阿木接好暖光台。'
@@ -102,9 +103,9 @@ export function performFinale(w:WorldState,action:FinaleAction,theme?:FinaleThem
   case'inspect':r.inspected=true;return commit(w,before,'阿岩看清暖晶接缝，铃铃听见下面开阔的回声。先托稳新路，再慢慢向下。')
   case'brace':r.braced=true;return commit(w,before,'暖晶护框装牢啦，旧家保留，新梯道可以继续向下。',{stone:3,wood:2},1)
   case'enter':r.entered=true;return commit(w,before,'第 9 层 · 地心暖光。最深处的岩壁，透出温柔的金色。')
-  case'discover':r.foundWarmth=true;return commit(w,before,'原来暖光来自岩层里的天然暖晶！把它留在原处，我们在旁边建一个大家都能来的家。')
+  case'discover':r.foundWarmth=true;return commit(w,before,'原来暖光来自岩壁里一颗心形暖晶！把它留在原处，我们在旁边建一个大家都能来的家。')
   case'extend':r.liftExtended=true;return commit(w,before,'九站电梯连成一路，每一层的家和朋友都能回来。',undefined,2,1)
-  case'light':r.lit=true;return commit(w,before,'阿灯调好反光片，阿木接牢暖光台。九层家园标记一同亮起，天然暖晶仍留在岩壁里。')
+  case'light':r.lit=true;return commit(w,before,`阿灯调好反光片，阿木接牢暖光台。九层家园标记一同亮起，${WARM_CRYSTAL}仍留在岩壁里。`)
   case'food':r.foodReady=true;r.foodTrips++;return commit(w,before,'小满把楼上收获的一份食物送到长桌，开席前替大家好好留着。',undefined,0,0,1)
   case'water':r.waterReady=true;r.waterTrips++;return commit(w,before,'小泉装好清水，团团沿通道送到九层长桌。存水用去一格，回廊仍能重新蓄满。',undefined,0,0,0,1)
   case'chime':r.chimePlaced=true;return commit(w,before,'铃铃带来工区的新风铃。大厅原来的作品保留，九层也听见家园的风。')
@@ -114,7 +115,7 @@ export function performFinale(w:WorldState,action:FinaleAction,theme?:FinaleThem
   case'feast':r.feasts++;r.foodReady=false;r.waterReady=false;return commit(w,before,'九位伙伴都到自己的位置啦！一份收成、一瓶清水，大家在地心暖光里办起暖屋日。')
   case'review':r.reviewOpened=true;return commit(w,before,'从第一盏灯到地心暖光，我们一层层看回来。每一页都可以慢慢读，随时收起。')
   case'remember':r.memoriesRead++;return commit(w,before,'这一层的回忆记下来啦。')
-  case'finish':r.completed=true;return commit(w,before,'九层家园，终章完成！每一层和九位伙伴都留下来了。接下来，继续把家建成你喜欢的样子。')
+  case'finish':r.completed=true;return commit(w,before,`${HOME_OWNER}，九层家园，终章完成！每一层和九位伙伴都留下来了。接下来，继续把家建成你喜欢的样子。`)
   case'rest':r.rests++;return commit(w,before,'阿土靠着暖晶石凳听风铃。故事已经走了很远，家里还有许多地方可以慢慢布置。')
   default:return{ok:false,message:'请让阿岩在护框旁逐段施工。'}
  }
@@ -132,7 +133,7 @@ export function finaleGoal(w:WorldState):FinaleGoal{
  if(!r.braced)return g(1,'托稳最后一段新路','阿岩','石料 3、旧木料 2、部件 1，给新梯道装护框。老家照常使用。','安装暖晶护框','brace')
  if(!finaleConnected(w))return g(2,'沿暖光向下','阿岩','一段一段凿，施工梯接到哪里，我就走到哪里。','凿通暖晶岩盖','excavate')
  if(!r.entered)return g(3,'最深处的温柔金色','阿土','路已经通啦，沿梯子去看看地心暖光。','下到第九层','enter')
- if(!r.foundWarmth)return g(4,'天然地心暖光','阿土','暖晶藏在右侧洞壁。先走近看看，再决定在哪里建最后一层家。','走近天然暖晶','discover',undefined,WARMTH_SPOT)
+ if(!r.foundWarmth)return g(4,'天然地心暖光','阿土',`${WARM_CRYSTAL}藏在右侧洞壁。先走近看看，再决定在哪里建最后一层家。`,`走近${WARM_CRYSTAL}`,'discover',undefined,WARMTH_SPOT)
  if(!r.liftExtended)return g(5,'电梯接到第九站','阿木','部件 2、晶簇 1。每一层的老家，都和这里连在一起。','接通第九站电梯','extend')
  for(const[k,done]of [['beacon',6],['table',7],['memory',8]]as const)if(!finaleFacility(w,k))return g(done,`建一个${FINALE_SPECS[k].name}`,'阿木',FINALE_SPECS[k].detail,'选地方建造',undefined,k)
  if(!r.lit)return g(9,'把暖光连进家园','阿灯','我调好反光片，阿木接牢暖光台。暖晶留在原处，家园标记会一层层亮起来。','和阿灯接好暖光','light',undefined,finaleFacility(w,'beacon'))
@@ -142,11 +143,11 @@ export function finaleGoal(w:WorldState):FinaleGoal{
  if(!r.woven)return g(13,'给九个座位留菌叶花边','苔苔','沿长桌后侧铺一圈小菌叶，前面的路还留给伙伴走。','请苔苔铺菌叶','weave',undefined,finaleFacility(w,'table'))
  if(!r.storyReady)return g(14,'九层故事留在这里','阿土','不需要收齐小收藏，亲手建家的经历都值得记住。','放好九层家园故事','story',undefined,finaleFacility(w,'memory'))
  if(!r.decorations)return g(15,'为暖屋日选个布置','铃铃','灯光暖屋或菌叶花园，你来选。确认后我再去布置。','选择暖屋日布置','decorate',undefined,finaleFacility(w,'table'))
- if(!r.feasts)return g(16,'九位伙伴的暖屋日','小满','九位伙伴会沿真实通路走到不同座位，到齐再开席。食物和清水已备好。','邀请九位伙伴来暖屋','feast',undefined,finaleFacility(w,'table'))
- if(!r.reviewOpened)return g(17,'一起回望九层家园','阿土','把镜头拉远，看看亲手建成的九层家。每页回忆都等你读完再翻。','一起回望九层家园','review',undefined,finaleFacility(w,'memory'))
+ if(!r.feasts)return g(16,'九位伙伴的暖屋日','小满',`${HOME_OWNER}，九位伙伴会沿真实通路走到不同座位，到齐再开席。食物和清水已备好。`,'邀请九位伙伴来暖屋','feast',undefined,finaleFacility(w,'table'))
+ if(!r.reviewOpened)return g(17,'一起回望九层家园','阿土',`${HOME_OWNER}，把镜头拉远，看看亲手建成的九层家。每页回忆都等你读完再翻。`,'一起回望九层家园','review',undefined,finaleFacility(w,'memory'))
  if(r.memoriesRead<9){const m=FINALE_MEMORIES[r.memoriesRead];return g(18,m.title,m.speaker,m.text,r.memoriesRead===8?'把这页留进相册':'看看下一层回忆','remember',undefined,finaleFacility(w,'memory'))}
- if(!r.completed)return g(19,'九层家园，一个温暖的家','阿土','从第一盏灯到地心暖光，每位伙伴都有自己的本领，每一层都有你的选择。把这天留进相册吧。','完成终章，继续建设','finish',undefined,finaleFacility(w,'memory'))
- return g(20,'家园的故事，由你继续','阿土','九层终章已经完成。继续挖土、布置设施、翻相册，也可以再办一场暖屋日。','继续自由建设')
+ if(!r.completed)return g(19,'九层家园，一个温暖的家','阿土',`${HOME_OWNER}，从第一盏灯到地心暖光，每位伙伴都有自己的本领，每一层都有你的选择。把这天留进相册吧。`,'完成终章，继续建设','finish',undefined,finaleFacility(w,'memory'))
+ return g(20,'家园的故事，由你继续','阿土',`${HOME_OWNER}，九层终章已经完成。继续挖土、布置设施、翻相册，也可以再办一场暖屋日。`,'继续自由建设')
 }
 export function validFinale(w:WorldState,raw:unknown):FinaleState|null{
  if(!raw||typeof raw!=='object'||Array.isArray(raw))return null

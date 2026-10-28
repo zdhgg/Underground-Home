@@ -1,7 +1,8 @@
 import { shaftConnected, springVisible } from './exploration'
 import { ripePlanters } from './farm'
 import { pickaxeUpgrade, wideLampUpgrade, type PartnerUpgrade } from './partnerAbilities'
-import { partnerById, type PartnerId } from './partners'
+import { partnerBed, partnerById, type PartnerId } from './partners'
+import { HOME_OWNER } from './personal'
 import type { WorldState } from './world'
 
 export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale'
@@ -22,6 +23,11 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
   const result: PartnerConversation = {
     partnerId: partner.id, name: partner.name, species: partner.species, verb: partner.verb,
     lines: [], upgrade: null, action: null,
+  }
+  const finish = (): PartnerConversation => {
+    const mark = partnerBed(world, partner.id)?.pod.mark
+    if (mark) result.lines.push(`${HOME_OWNER}，我的小窝上有你选的${{ star: '星星', leaf: '叶子', drop: '水滴' }[mark]}。看见它，就想起这是我们的家。`)
+    return result
   }
   if (partner.id === 'atu') {
     const e = world.exploration
@@ -49,12 +55,12 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
     if (result.upgrade?.state === 'ready') {
       result.lines = ['壁灯旁的新地方还偏暗。', '加个灯罩，能照得更远！']
       result.action = { id: 'learn-wide-lamp', label: '学会做聚光灯罩' }
-      return result
+      return finish()
     }
     if (result.upgrade?.state === 'equipped') {
       result.lines = ['聚光灯罩准备好啦！', '你选灯位，我来加装。']
       result.action = { id: 'place-wide-lamp', label: '去布置聚光灯' }
-      return result
+      return finish()
     }
     result.lines = !world.progress.coreRepaired
       ? ['……这里好黑。', '我在角落等你。']
@@ -86,5 +92,5 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
   }
   if(world.ventilation.completed&&id==='atu'){result.lines=['旧地脉岩壁上留着灯、水和一起建造的故事。','我们可以把九位伙伴现在的家，也添进旧故事里。'];result.action={id:'open-ruins',label:'去看看旧地脉遗迹'}}
   if(world.ruins.completed&&id==='atu'){result.upgrade=null;result.lines=world.finale.completed?['九层终章已经留进家园相册。','每位伙伴和每一层都还在，继续把家建成你喜欢的样子吧。']:['最深的岩缝里透出温柔的金色。','把大家请到一起，办一次九位伙伴的暖屋日吧。'];result.action={id:'open-finale',label:world.finale.completed?'去看看九层家园':'去迎接地心暖光'}}
-  return result
+  return finish()
 }

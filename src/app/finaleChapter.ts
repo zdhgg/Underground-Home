@@ -4,6 +4,7 @@ import { WARMTH_SPOT,finaleFrontier,finaleShaftCell } from '../core/finaleTopolo
 import { TILE,TILE_SIZE as T,type Cell,type FinaleFacilityKind,type FinaleTheme,type WorkerId,type WorldState } from '../core/world'
 import type { PixiWorldRenderer } from '../render/PixiRenderer'
 import { playFinaleSound } from '../render/finaleSound'
+import { HOME_OWNER, HOME_TITLE, WARM_CRYSTAL } from '../core/personal'
 export interface FinaleUI{
  available:boolean;active:boolean;entered:boolean;busy:boolean;completed:boolean;celebrating:boolean;foundWarmth:boolean
  title:string;speaker:string;speech:string;label:string;hint:string;done:number
@@ -36,10 +37,10 @@ export class FinaleChapter{
    if(this.selected==='memory'&&r.storyReady){const m=FINALE_MEMORIES[this.page??0];title=m.title;speaker=m.speaker;speech=m.text;label=(this.page??0)<8?'看看下一页':'收起家园相册';memoryIndex=this.page??0;hint='这是重读，不改变已完成的终章进度。'}
    if(this.selected==='bench'){label='坐一坐听风铃';hint=finaleActionProblem(w,'rest')??'不消耗时间或食物，随时离开。'}
   }
-  if(this.warmthIntro){title='原来是天然暖晶';speaker='阿土';speech='这束温柔的金色来自岩层里的天然暖晶。把它留在原处，我们在旁边建一个九位伙伴都能来的家。';label='把暖晶留在原处，继续建家';hint='原晶体不挖走，发现已记进家园相册。';memoryIndex=null}
+  if(this.warmthIntro){title=`原来是${WARM_CRYSTAL}`;speaker='阿土';speech=`${HOME_OWNER}，这束温柔的金色，来自岩壁里一颗心形暖晶。把它留在原处，我们在旁边建一个九位伙伴都能来的家。`;label='把暖晶留在原处，继续建家';hint='原晶体不挖走，发现已记进家园相册。';memoryIndex=null}
   if(this.themeChoice){title='为暖屋日选个布置';speaker='铃铃';speech=this.themeChoice==='lantern'?'小暖灯围着长桌，风铃在石拱下轻轻响。':'菌叶花边围着长桌，小暖灯藏在叶子旁。';label='确认布置暖屋日';hint='选项只表示打算，铃铃到场完成后才改变。'}
   if(this.placing){title=`摆放${FINALE_SPECS[this.placing].name}`;speaker='阿土';speech='点喜欢的洞壁选位置。绿框能建，红框告诉你原因；拖动只移动地图。';label='就在这里建造';hint=this.candidate===null?finaleCostText(this.placing):finaleBuildProblem(w,this.placing,this.candidate)??finaleCostText(this.placing)}
-  if(this.celebrating){title='九层家园，终章完成';speaker='阿土';speech='从第一盏灯到地心暖光，每一层都留下了你的选择。九位伙伴和所有设施都还在，接着把家建成你喜欢的样子吧。';label='继续自由建设';hint='相册记住这一天，还能重读故事、再办暖屋日。';memoryIndex=null}
+  if(this.celebrating){title=`${HOME_TITLE}，终章完成`;speaker='阿土';speech=`${HOME_OWNER}，从第一盏灯到地心暖光，每一层都留下了你的选择。九位伙伴和所有设施都还在，接着把家建成你喜欢的样子吧。`;label='继续自由建设';hint='相册记住这一天，还能重读故事、再办暖屋日。';memoryIndex=null}
   if(this.busy){label='';speech=this.phase||'伙伴正沿真实通道走到现场，完成后才改变家园。';hint='随时停下来，食物和清水在送到长桌后才扣除。';memoryIndex=null}
   this.p.emit({available:finaleReady(w),active:this.opened,entered:r.entered,busy:this.busy,completed:r.completed,celebrating:this.celebrating,foundWarmth:r.foundWarmth,warmthIntro:this.warmthIntro,title,speaker,speech,label,hint,done:g.done,placing:this.placing,selected:this.selected,candidate:this.candidate,valid:this.placing!==null&&this.candidate!==null&&!finaleBuildProblem(w,this.placing,this.candidate),theme:r.theme,themeChoice:this.themeChoice,foodReady:r.foodReady,waterReady:r.waterReady,chimePlaced:r.chimePlaced,woven:r.woven,lit:r.lit,lift:r.liftExtended,guests:this.guests,memoryIndex,replay:this.selected==='memory'&&r.storyReady,feasts:r.feasts,buildings:(Object.keys(FINALE_SPECS)as FinaleFacilityKind[]).map(kind=>({kind,name:FINALE_SPECS[kind].name,built:!!finaleFacility(w,kind)}))})
  }

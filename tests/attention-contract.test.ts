@@ -17,7 +17,7 @@ import { emptyHallUI } from '../src/app/hallChapter'
 import { emptyDeepUI } from '../src/app/deepChapter'
 
 // 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
-const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, feed: vi.fn(), facilityPrimary: vi.fn(), facilityUpgrade: vi.fn(), gardenPrimary: vi.fn(), gardenVariety: vi.fn(), reservoirPrimary: vi.fn(), reservoirRoute: vi.fn(), finalePrimary:vi.fn(),finaleTheme:vi.fn(),finalePanorama:vi.fn(),ruinsPrimary:vi.fn(),ruinsMotif:vi.fn(),ruinsEdition:vi.fn(),ventilationPrimary:vi.fn(),ventilationMode:vi.fn(),ventilationVariety:vi.fn() }))
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, nestConfirm: vi.fn(), nestClose: vi.fn(), addMemory: vi.fn(), feed: vi.fn(), facilityPrimary: vi.fn(), facilityUpgrade: vi.fn(), gardenPrimary: vi.fn(), gardenVariety: vi.fn(), reservoirPrimary: vi.fn(), reservoirRoute: vi.fn(), finalePrimary:vi.fn(),finaleTheme:vi.fn(),finalePanorama:vi.fn(),ruinsPrimary:vi.fn(),ruinsMotif:vi.fn(),ruinsEdition:vi.fn(),ventilationPrimary:vi.fn(),ventilationMode:vi.fn(),ventilationVariety:vi.fn() }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
     harness.hooks = hooks
@@ -25,6 +25,8 @@ vi.mock('../src/app/session', () => ({
       titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
       startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
+      confirmNestMark: harness.nestConfirm, closeNestWelcome: harness.nestClose,
+      addMemory: harness.addMemory,
       finalePrimary:harness.finalePrimary,finaleTheme:harness.finaleTheme,finalePanorama:harness.finalePanorama,
       ruinsPrimary:harness.ruinsPrimary,ruinsMotif:harness.ruinsMotif,ruinsEdition:harness.ruinsEdition,
       ventilationPrimary:harness.ventilationPrimary,ventilationMode:harness.ventilationMode,ventilationVariety:harness.ventilationVariety,
@@ -70,6 +72,61 @@ const facilityState = (over: Partial<FacilityUI> = {}): FacilityUI => ({
 })
 
 describe('后续内容必须遵守的单一主要关注对象契约', () => {
+  it('记忆匣打开后让位给唯一的记录面板和保存动作，关闭后恢复舞台', async () => {
+    const { host, stage, hooks } = await mountGame()
+    host.querySelector<HTMLButtonElement>('.memory-toggle')!.click(); await nextTick()
+    expect(host.querySelector('.app')?.hasAttribute('inert')).toBe(true)
+    const dialog = host.querySelector<HTMLElement>('[data-attention-panel="memory"]')!
+    expect(dialog).not.toBeNull()
+    expect(dialog.querySelectorAll('[data-primary-action]')).toHaveLength(1)
+    expect(stage.closest('[inert]')).not.toBeNull()
+    dialog.querySelector<HTMLInputElement>('input[placeholder="例如：和爸爸一起种薄荷"]')!.value = '一起种薄荷'
+    dialog.querySelector<HTMLInputElement>('input[placeholder="例如：和爸爸一起种薄荷"]')!.dispatchEvent(new Event('input'))
+    dialog.querySelector<HTMLTextAreaElement>('textarea')!.value = '今天和爸爸一起给花盆浇水。'
+    dialog.querySelector<HTMLTextAreaElement>('textarea')!.dispatchEvent(new Event('input'))
+    dialog.querySelector<HTMLButtonElement>('[data-primary-action]')!.click()
+    expect(harness.addMemory).toHaveBeenCalledWith(expect.objectContaining({ kind: 'note', title: '一起种薄荷', body: '今天和爸爸一起给花盆浇水。' }))
+    dialog.querySelector<HTMLButtonElement>('.close')!.click(); await nextTick()
+    expect(host.querySelector('[data-attention-panel="memory"]')).toBeNull()
+    expect(host.querySelector('.app')?.hasAttribute('inert')).toBe(false)
+    assertAttention(stage, 'guide')
+    hooks.onMemories?.([{ id: 1, kind: 'note', title: '一起种薄荷', body: '今天一起浇水。', createdAt: '2026-10-27T03:00:00.000Z' }])
+    hooks.onMemoryRequested?.(); await nextTick()
+    expect(host.querySelector('[data-attention-panel="memory-detail"]')).not.toBeNull()
+    expect(host.querySelectorAll('[data-attention-panel="memory-detail"] [data-primary-action]')).toHaveLength(1)
+    host.querySelector<HTMLButtonElement>('[aria-label="关闭这段记忆"]')!.click(); await nextTick()
+  })
+  it('小窝入住后从建造面板交接到标记选择，确认或离开后回到当前目标', async () => {
+    const { stage, hooks } = await mountGame()
+    hooks.onSites?.(nest()); await nextTick(); assertAttention(stage, 'site')
+    hooks.onSites?.(emptySiteUI())
+    hooks.onNestWelcome?.({ podId: 1, anchor: { x: 300, y: 400, width: 800, height: 600 }, speech: '心心，你帮我们安好了小窝！' })
+    await nextTick(); assertAttention(stage, 'nest-welcome')
+    expect(stage.querySelectorAll('.choices button')).toHaveLength(3)
+    stage.querySelector<HTMLButtonElement>('.choices button:nth-child(2)')!.click()
+    await nextTick()
+    expect(stage.querySelector('.choices button:nth-child(2)')?.getAttribute('aria-pressed')).toBe('true')
+    stage.querySelector<HTMLButtonElement>('[data-primary-action]')!.click()
+    expect(harness.nestConfirm).toHaveBeenCalledWith('leaf')
+    hooks.onNestWelcome?.(null); await nextTick(); assertAttention(stage, 'guide')
+    hooks.onNestWelcome?.({ podId: 1, anchor: { x: 300, y: 400, width: 800, height: 600 }, speech: '选个标记' })
+    await nextTick(); stage.querySelector<HTMLButtonElement>('.later')!.click(); expect(harness.nestClose).toHaveBeenCalled()
+    hooks.onNestWelcome?.(null); await nextTick(); assertAttention(stage, 'guide')
+  })
+  it('拾取蘑菇只给短暂反馈，随后继续当前目标，进入建设时只突出建设面板', async () => {
+    const { stage, hooks } = await mountGame()
+    hooks.onView?.({ layer: 'water', overview: false })
+    await nextTick(); assertAttention(stage, 'guide')
+    const action = stage.querySelector('[data-primary-action]')!.textContent
+    hooks.onMilestone?.({ emoji: '🍄', title: '发现发光蘑菇！', detail: '已经采好 · 泉水边又空出来啦' })
+    hooks.onMessage('🍄 采好发光蘑菇啦！空出的地方可以继续布置。')
+    await nextTick(); assertAttention(stage, 'guide')
+    expect(stage.querySelector('[data-primary-action]')!.textContent).toBe(action)
+    expect(stage.querySelector('.milestone')?.getAttribute('role')).toBe('status')
+    hooks.onSites?.(nest()); await nextTick(); assertAttention(stage, 'site')
+    hooks.onSites?.({ ...emptySiteUI(), active: false })
+    await nextTick(); assertAttention(stage, 'guide')
+  })
   it('终章检查、建设、备餐、布置确认、九人赴席、九页回望和庆典只有一个当前面板',async()=>{
     const {stage,host,hooks}=await mountGame(),f={...emptyFinaleUI(),available:true,active:true,title:'岩缝里的暖光',speaker:'阿岩',label:'看看暖晶接缝'}
     hooks.onFinale?.(f);await nextTick();assertAttention(stage,'finale');hooks.onMilestone?.({emoji:'☼',title:'天然暖晶',detail:'温柔的金色'});await nextTick();expect(stage.querySelector('.milestone')).toBeNull()
@@ -223,10 +280,12 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
 
   it('晶簇层引导、选址、施工、设施与升级逐个交接，前两层面板和对话能接管', async () => {
     const { stage, hooks } = await mountGame()
-    const deep = { ...emptyDeepUI(), active: true, available: true, entered: true, title: '搭起岩壁工坊', speaker: '阿岩', speech: '在岩壁里搭一个工坊。', label: '选地方搭工坊', done: 7 }
+    const deep = { ...emptyDeepUI(), active: true, available: true, entered: true, title: '让晶簇有个采集台', speaker: '阿岩', speech: '先搭一个晶簇采集台，位置由你决定。', label: '选择位置放置晶簇采集台', done: 4 }
     hooks.onDeep?.(deep); await nextTick(); assertAttention(stage, 'deep')
-    expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('选地方搭工坊')
-    hooks.onDeep?.({ ...deep, placing: 'workshop', title: '摆放岩壁工坊', label: '就在这里建造', candidate: 31, valid: false }); await nextTick()
+    expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('选择位置放置晶簇采集台')
+    expect(stage.querySelector('.facilities')).toBeNull()
+    expect(stage.querySelectorAll('[data-primary-action]')).toHaveLength(1)
+    hooks.onDeep?.({ ...deep, placing: 'collector', title: '摆放晶簇采集台', speech: '采集台建 1 台就够了。', hint: '石料 2 · 旧木料 2 · 本章只需 1 台', label: '就在这里建造', candidate: 31, valid: false }); await nextTick()
     assertAttention(stage, 'deep'); expect(stage.querySelector<HTMLButtonElement>('[data-primary-action]')?.disabled).toBe(true)
     hooks.onDeep?.({ ...deep, placing: 'workshop', candidate: 31, valid: true, label: '就在这里建造' }); await nextTick(); assertAttention(stage, 'deep')
     hooks.onDeep?.({ ...deep, busy: true }); await nextTick(); assertAttention(stage, 'deep-construction')
@@ -320,10 +379,12 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
 
   it('直接点建筑打开房间详情时，只保留扩建这一项主要推进操作', async () => {
     const { stage, hooks } = await mountGame()
-    hooks.onRooms?.({ ...room(false), active: true, completed: true, selectedId: 1, dirty: false, valid: false })
+    hooks.onRooms?.({ ...room(false), active: true, completed: true, selectedId: 1, dirty: false, valid: false, nestMarks: [{ id: 1, label: '小窝 · 叶子' }] })
     await nextTick()
     assertAttention(stage, 'room')
     expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('扩建房间')
+    expect(stage.querySelector('.nest-marks')?.textContent).toContain('叶子')
+    expect(stage.querySelectorAll('.nest-marks [data-primary-action]')).toHaveLength(0)
     expect(stage.querySelector('.room-tools .saved')).toBeNull()
     expect(stage.querySelector('.room-tools .finish')).toBeNull()
     hooks.onRooms?.({ ...room(false), active: true, completed: false, selectedId: 1, width: 4, dirty: true, valid: true, action: '放下扩建蓝图' })

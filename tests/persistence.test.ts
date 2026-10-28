@@ -36,6 +36,17 @@ function farmWorld(): WorldState {
 }
 
 describe('存档序列化与校验', () => {
+  it('小窝标记能存取，旧版小窝无标记正常迁移，损坏标记给出反馈', () => {
+    const world = farmWorld()
+    world.pods[0].mark = 'leaf'
+    const raw = serialize(world)
+    expect(deserialize(raw)).toMatchObject({ ok: true, world: { pods: [{ mark: 'leaf' }] } })
+    const old = structuredClone(raw); old.version = 23; delete old.world.pods[0].mark
+    const loaded = deserialize(old)
+    expect(loaded.ok && loaded.world.pods[0].mark).toBeUndefined()
+    const bad = structuredClone(raw); (bad.world.pods[0] as { mark: string }).mark = 'unknown'
+    expect(deserialize(bad)).toMatchObject({ ok: false, error: '存档小窝标记数据无效' })
+  })
   it('序列化-反序列化往返一致（含进度位）', () => {
     const world = createInitialWorld()
     dig(world, 13, 9)

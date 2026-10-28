@@ -34,7 +34,7 @@ const harness = vi.hoisted(() => {
     playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
     playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
     finishMealGather: vi.fn(), cancelMealGather: vi.fn(), playChapterGlance: vi.fn(),
-    playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(),
+    playPodEntrance: vi.fn((_pod: unknown, done: () => void) => done()), playPodCelebration: vi.fn(), nestAnchor: vi.fn(() => ({ x: 200, y: 200, width: 800, height: 600 })),
     playBurst: vi.fn(), playRepairCelebration: vi.fn(), playExplorationTravel: vi.fn(), destroy: vi.fn(), tileAtScreen: (cell: Cell) => cell,
     cancelExplorationAnimation: vi.fn(), playMoleReaction: vi.fn(), playBreakthrough: vi.fn(), playSpringDiscovery: vi.fn(),
     partnerAtScreen: vi.fn().mockReturnValue(null), playPartnerReaction: vi.fn(),
@@ -446,16 +446,34 @@ describe('探索会话与存档集成', () => {
 
   it('第一层建首床不再提前出现小满；撤销后站位与存档仍然合法', async () => {
     harness.store.load.mockResolvedValue(null)
-    const onMilestone = vi.fn()
-    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onMilestone })
+    const onNestWelcome = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
     for (const x of [12, 13, 14]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
     session.setBuildMode('pod'); harness.handlers.onTap({ x: 13, y: 11 }); session.confirmBuild()
     expect(w.workers.xiaoman).toBeUndefined(); expect(w.pods).toHaveLength(1)
-    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '第一夜的家' }))
+    expect(onNestWelcome).toHaveBeenCalledWith(expect.objectContaining({ podId: w.pods[0].id, speech: expect.stringContaining('心心') }))
     session.undo(); expect(w.pods).toHaveLength(0); expect(w.workers.xiaoman).toBeUndefined()
     expect(w.workers.adeng).toBeDefined(); expect(deserialize(serialize(w)).ok).toBe(true)
+    session.destroy()
+  })
+
+  it('入住演出期间玩家转去别处不抢回焦点；旧式独立小窝仍可点击选择标记', async () => {
+    harness.store.load.mockResolvedValue(null)
+    const onNestWelcome = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
+    for (const x of [12, 13, 14]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
+    let settled = () => {}
+    harness.renderer.playPodEntrance.mockImplementationOnce((_pod, done) => { settled = done })
+    session.setBuildMode('pod'); harness.handlers.onTap({ x: 13, y: 11 }); session.confirmBuild()
+    harness.listeners.window.get('pointerdown')!(); settled()
+    expect(onNestWelcome).not.toHaveBeenCalled()
+    harness.handlers.onTap({ x: 13, y: 10 })
+    expect(onNestWelcome).toHaveBeenLastCalledWith(expect.objectContaining({ podId: w.pods[0].id }))
+    session.confirmNestMark('drop'); expect(w.pods[0].mark).toBe('drop')
     session.destroy()
   })
 
@@ -551,10 +569,10 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
-  it('第二间预设住宿建成后播放“新伙伴住下啦”里程碑', async () => {
+  it('第二间预设住宿建成后邀请心心给新伙伴的小窝选标记', async () => {
     harness.store.load.mockResolvedValue(farmedSave())
-    const onMilestone = vi.fn()
-    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onMilestone })
+    const onNestWelcome = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     // 阿土回到暖窝层，施工走真实可达通道；第一间住处是嵌在房间后侧的成品，前侧仍可通行。
     w.exploration.explorer = { x: 18, y: 11 }
@@ -572,7 +590,7 @@ describe('探索会话与存档集成', () => {
     session.buildSite()
     finishSiteWork()
     expect(w.pods).toHaveLength(2)
-    expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '新伙伴住下啦！' }))
+    expect(onNestWelcome).toHaveBeenCalledWith(expect.objectContaining({ podId: w.pods[1].id, speech: expect.stringContaining('小满') }))
     session.destroy()
   })
 
@@ -719,8 +737,8 @@ describe('探索会话与存档集成', () => {
   it('空间挖空后蓝图才可开工，建成后撤销退回材料并保留洞室空间', async () => {
     const raw = readySave(); raw.world.pods = []
     harness.store.load.mockResolvedValue(raw)
-    const onSites = vi.fn()
-    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites })
+    const onSites = vi.fn(), onNestWelcome = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onSites, onNestWelcome })
     const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
     const site = siteById('first-nest')!
     for (let y = site.y; y < site.y + site.h; y++) for (let x = site.x; x < site.x + site.w; x++) world.tiles[y][x] = TILE.EMPTY
@@ -745,8 +763,16 @@ describe('探索会话与存档集成', () => {
     expect(seen).toBeGreaterThan(0); expect(seen).toBeLessThan(20)
     expect(harness.renderer.playSoilWork).not.toHaveBeenCalled()
     expect(world.pods).toHaveLength(1); expect(world.pods[0].backWall).toBe(true)
+    expect(onNestWelcome.mock.calls.at(-1)?.[0]).toMatchObject({ podId: world.pods[0].id })
+    session.confirmNestMark('leaf'); expect(world.pods[0].mark).toBe('leaf')
+    expect(onNestWelcome.mock.calls.at(-1)?.[0]).toBeNull()
     expect(world.rooms[0].status).toBeUndefined(); expect(world.builtSites).toEqual([{ id: 'first-nest', kind: 'home' }])
     expect(deserialize(serialize(world)).ok).toBe(true)
+    harness.handlers.onTap({ x: 13, y: 10 })
+    expect(onSites.mock.calls.at(-1)?.[0].active).toBe(false)
+    session.openNestMark(world.pods[0].id)
+    expect(onNestWelcome.mock.calls.at(-1)?.[0]).toMatchObject({ podId: world.pods[0].id, mark: 'leaf' })
+    session.closeNestWelcome()
     expect(playBuildComplete).toHaveBeenCalledTimes(1)
     const materials = { ...world.inventory }
     session.undo(); expect(playUndo).toHaveBeenCalledTimes(1); expect(world.pods).toHaveLength(0); expect(world.rooms).toEqual([])
@@ -1430,7 +1456,11 @@ describe('探索会话与存档集成', () => {
     harness.handlers.onTap({ x: 20, y: 21 })
     expect(w.exploration.foundMushroom).toBe(true)
     expect(onMilestone).toHaveBeenCalledWith(expect.objectContaining({ title: '发现发光蘑菇！' }))
+    expect(onMessage.mock.calls.at(-1)![0]).toContain('空出的地方')
+    const bursts = harness.renderer.playBurst.mock.calls.length
     harness.handlers.onTap({ x: 20, y: 21 })
+    harness.handlers.onTap({ x: 26, y: 21 })
+    expect(harness.renderer.playBurst).toHaveBeenCalledTimes(bursts)
     expect(onMilestone.mock.calls.filter(call => (call[0] as { title?: string }).title === '发现发光蘑菇！')).toHaveLength(1)
     session.destroy()
   })

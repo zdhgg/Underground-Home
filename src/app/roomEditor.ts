@@ -1,4 +1,4 @@
-import { checkRoom, checkRoomPlan, removeRoom, roomAt, roomFromPoint, roomSummary, ROOM_HINTS, ROOM_MAX_WIDTH, ROOM_NAMES, type RoomChange } from '../core/rooms'
+import { checkRoom, checkRoomPlan, removeRoom, roomAt, roomContains, roomFromPoint, roomSummary, ROOM_HINTS, ROOM_MAX_WIDTH, ROOM_NAMES, type RoomChange } from '../core/rooms'
 import { canFinishRoom, excavationLeft, finishRoom, planRoom, roomCapacity, ROOM_SPECS, roomExpansionCost } from '../core/roomConstruction'
 import { canAfford, changeMaterials, materialText } from '../core/materials'
 import { HOME_ROOM_TOP, HOME_FLOOR_Y, type Cell, type Inventory, type Room, type RoomKind, type WorldState } from '../core/world'
@@ -9,6 +9,7 @@ export interface RoomUI {
   placed: boolean; valid: boolean; dirty: boolean; message: string; detail: string
   construction: boolean; completed: boolean; action: string; left: number; busy: boolean
   items: { id: number; kind: RoomKind; width: number; name: string; built: boolean }[]
+  nestMarks?: { id: number; label: string }[]
 }
 export interface RoomPreview { room: PreviewRoom; valid: boolean; hint: string }
 
@@ -75,6 +76,7 @@ export class RoomEditor {
       minWidth: original && original.status !== 'blueprint' && this.editing ? original.w + 1 : ROOM_SPECS[this.kind].min,
       selectedId: this.selectedId, placed: !!draft, valid, dirty, message, detail, construction, completed, left,
       busy: this.ports.busy?.() === true, action: construction ? '确认建成' : original?.status === 'blueprint' ? '保存蓝图调整' : original ? '放下扩建蓝图' : '放下蓝图',
+      nestMarks: completed && original?.kind === 'home' ? w.pods.filter(p => roomContains(original, p)).map((p, i, all) => ({ id: p.id, label: `${all.length > 1 ? `第${i + 1}间小窝` : '小窝'}${p.mark ? ` · ${{ star: '星星', leaf: '叶子', drop: '水滴' }[p.mark]}` : ' · 选标记'}` })) : [],
       items: w.rooms.map(r => ({ id: r.id, kind: r.kind, width: r.w, name: `${ROOM_NAMES[r.kind]}${r.status === 'blueprint' ? r.replaces ? ' · 扩建中' : ' · 施工中' : ''}`, built: r.status !== 'blueprint' })),
     })
   }

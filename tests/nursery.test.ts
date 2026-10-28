@@ -111,6 +111,21 @@ describe('红黏土（发现物与材料）', () => {
 })
 
 describe('发光蘑菇（发现物）', () => {
+  it('拾取后释放原地：两簇不再可点击，也不再阻止摆种植槽；读档后保持一致', () => {
+    const world = wateredWorld()
+    const spots = mushroomSpots(world)
+    expect(spots).toHaveLength(2)
+    world.exploration.foundMushroom = true
+    const loaded = deserialize(serialize(world))
+    if (!loaded.ok) throw new Error(loaded.error)
+    for (const state of [world, loaded.world]) {
+      expect(mushroomSpots(state)).toEqual([])
+      for (const spot of spots) {
+        expect(isMushroomSpot(state, spot.x, spot.y)).toBe(false)
+        expect(canPlacePlanter(state, spot.x, spot.y)).toEqual({ ok: true })
+      }
+    }
+  })
   it('蘑菇长在菜槽不能占的保留格上；没到过泉水层就没有', () => {
     const world = wateredWorld()
     const spots = mushroomSpots(world)

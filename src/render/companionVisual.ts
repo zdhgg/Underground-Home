@@ -21,6 +21,7 @@ export interface CharacterVisual {
   readonly view: Container
   readonly nameY?: number
   face(deltaX: number): void
+  harvestLean?(amount: number, direction: number): void
   update(time: number, pose: MolePose, light?: number, hidden?: boolean): void
 }
 
@@ -86,6 +87,7 @@ export class CompanionVisual implements CharacterVisual {
     this.nameY = 13 - STYLES[id].height - 11
     this.sprite = new Sprite(textures.idle)
     this.sprite.label = `${id}-sprite`
+    this.figure.label = `${id}-figure`
     this.quilt.label = `${id}-quilt`
     this.tailLight.label = `${id}-tail-light`
     this.figure.addChild(this.sprite)
@@ -100,6 +102,13 @@ export class CompanionVisual implements CharacterVisual {
     if (Math.abs(deltaX) > 0.01) this.facing = deltaX < 0 ? -1 : 1
   }
 
+  /** 以脚边为支点轻轻俯身；每帧基础姿势先由 update 重置。 */
+  harvestLean(amount: number, direction: number): void {
+    if (this.id !== 'xiaoman') return
+    this.figure.position.x = direction * amount * 2
+    this.figure.rotation = direction * amount * .16
+  }
+
   update(time: number, pose: MolePose, light = 1, hidden = false): void {
     const resting = pose === 'rest'
     const moving = pose === 'walk' || pose === 'climb'
@@ -112,11 +121,19 @@ export class CompanionVisual implements CharacterVisual {
     // 触角和兔耳占据头图上半部，睡眠时分别抬高，避免眼睛被被子遮住。
     this.sprite.position.set(0, resting ? STYLES[this.id].restY : 13)
     this.figure.pivot.y = 13
-    const hop = moving && this.id === 'xiaoman' ? Math.abs(Math.sin(time * 10)) * 2.5 : 0
+    // 阿木只有一张站姿图，单纯移动外层容器会看起来像“平移”。
+    // 给他一个更明确的左右换步、抬脚和身体起伏，让路径移动能被看成行走。
+    const gait = moving && this.id === 'amu' ? Math.sin(time * 10.5) : 0
+    const hop = moving && this.id === 'xiaoman' ? Math.abs(Math.sin(time * 10)) * 2.5
+      : moving && this.id === 'amu' ? Math.abs(gait) * 2.2
+      : 0
     const float = flying ? 2 + Math.sin(time * 2.5) * 1.5 : 0
-    this.figure.position.set(0, 13 - hop - float)
-    this.figure.scale.set(this.facing, 1 + Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.02 : 0.012))
-    this.figure.rotation = resting || hidden || this.id === 'taitai' ? 0 : Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.035 : flying ? 0.02 : 0.006)
+    this.figure.position.set(gait * 1.35, 13 - hop - float)
+    // 阿木素材本身朝左，和其他伙伴的默认朝右素材相反；这里把逻辑朝向映射到实际贴图。
+    const visualFacing = this.id === 'amu' ? -this.facing : this.facing
+    this.figure.scale.set(visualFacing, 1 + (moving && this.id === 'amu' ? Math.abs(gait) * 0.04 : Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.02 : 0.012)))
+    this.figure.rotation = resting || hidden || this.id === 'taitai' ? 0 : moving && this.id === 'amu' ? gait * 0.09 : Math.sin(time * (moving ? 10 : 2)) * (moving ? 0.035 : flying ? 0.02 : 0.006)
+    this.shadow.scale.set(moving && this.id === 'amu' ? 1 - Math.abs(gait) * 0.16 : 1, moving && this.id === 'amu' ? 1 + Math.abs(gait) * 0.08 : 1)
     this.shadow.visible = !resting && !hidden && !flying && pose !== 'climb'
     this.quilt.visible = resting
     this.drawTail(time, light, resting, hidden, float)

@@ -18,6 +18,7 @@ export class OpeningScene {
   })
   private readonly warmth = new Graphics()
   private readonly clue = new Graphics()
+  private readonly home = new Graphics({ label: 'opening-home-marker' })
   private readonly steps = new Graphics()
   private readonly reactions = new Graphics({ label: 'opening-reactions' })
   private readonly mole: MoleVisual | null
@@ -30,7 +31,7 @@ export class OpeningScene {
     if (this.mole) fallback.destroy()
     this.bubble.addChild(this.bubbleBox, this.speech)
     this.bubble.visible = false
-    this.view.addChild(this.warmth, this.clue, this.steps, this.actor, this.reactions, this.bubble)
+    this.view.addChild(this.warmth, this.clue, this.home, this.steps, this.actor, this.reactions, this.bubble)
     this.view.visible = false
   }
   update(frame: OpeningFrame): void {
@@ -80,7 +81,9 @@ export class OpeningScene {
     const speech = frame.speech
     this.bubble.visible = speech.length > 0
     if (speech) {
-      if (this.speech.text !== speech) this.speech.text = speech
+      // 家园交接句较长：窄屏也要完整读到，不让气泡跑出画布。
+      const bubbleSpeech = frame.phase === 'welcome' ? speech.replace('我们的地下小家园', '我们的\n地下小家园') : speech
+      if (this.speech.text !== bubbleSpeech) this.speech.text = bubbleSpeech
       const width = Math.max(76, this.speech.width + 24)
       const height = Math.max(31, this.speech.height + 14)
       const leftOfActor = frame.x > entranceX - 70
@@ -114,6 +117,36 @@ export class OpeningScene {
     const x = (LANDMARKS.crystal.x + .5) * T, y = (LANDMARKS.crystal.y + .5) * T
     for (const [radius, alpha] of [[34, .04], [22, .07], [10, .13]]) {
       this.clue.circle(x, y, radius).fill({ color: 0x8dedfd, alpha: alpha! * frame.clue * (.85 + Math.sin(frame.t * 5) * .15) })
+    }
+
+    // 最后不是“任务结束”，而是把避难所交给心心：用一个轻量的家形标记
+    // 把入口、核心和玩家要建设的空间连成一个明确的归属点。
+    this.home.clear()
+    const reveal = frame.homeReveal
+    if (reveal > .001) {
+      const pulse = .88 + Math.sin(frame.t * 4.2) * .12
+      this.home.ellipse(frame.x, frame.footY - 12, 72, 31)
+        .fill({ color: 0xffcb72, alpha: .04 * reveal * pulse })
+      // 小屋标记靠在阿土左侧，给对话气泡留出完整的阅读空间；归属文字
+      // 由底部字幕承担，画面只保留一个轻量的“家”形状。
+      const houseX = frame.x - 48
+      const houseY = frame.footY - 51
+      this.home.roundRect(houseX - 22, houseY - 5, 44, 35, 8)
+        .fill({ color: 0x3d8063, alpha: .8 * reveal })
+        .stroke({ color: 0xffe0a0, alpha: .8 * reveal, width: 1.3 })
+      this.home.moveTo(houseX - 25, houseY + 2)
+        .lineTo(houseX, houseY - 20)
+        .lineTo(houseX + 25, houseY + 2)
+        .closePath()
+        .fill({ color: 0x4d9a76, alpha: .9 * reveal })
+        .stroke({ color: 0xffe0a0, alpha: .8 * reveal, width: 1.3 })
+      this.home.roundRect(houseX - 5, houseY + 12, 10, 18, 4)
+        .fill({ color: 0xffd886, alpha: .9 * reveal })
+      this.home.moveTo(frame.x - 57, frame.footY + 2)
+        .lineTo(frame.x - 45, frame.footY - 28)
+        .quadraticCurveTo(frame.x, frame.footY - 53, frame.x + 45, frame.footY - 28)
+        .lineTo(frame.x + 57, frame.footY + 2)
+        .stroke({ color: 0xffd58a, alpha: .24 * reveal, width: 3 })
     }
   }
 }

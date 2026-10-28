@@ -6,7 +6,7 @@ import { AtuConstruction } from './atuConstruction'
 import type { SoilPlan } from '../core/atu'
 import type { EnvironmentTextures } from './environmentArt'
 import { drawCaveMoss } from './caveMoss'
-import { mushroomSpots } from '../core/nursery'
+import { drawGlowMushrooms } from './glowMushrooms'
 
 /** 破岩演出：抬手到落镐的时间；落镐那一刻世界才改变，孩子看到的是"挖开"。 */
 const SWING_TIME = 0.42
@@ -89,6 +89,11 @@ export class ExplorationScene {
   /** 是否有正在播出的施工演出：会话层用它决定要不要锁输入。 */
   get animating(): boolean {
     return this.motion !== null || this.workAnim !== null || this.construction.active
+  }
+
+  /** 是否正在走路（不是原地挥镐 / 施工）：镜头用它区分"跨层带路"和"原地轻推"。 */
+  get moving(): boolean {
+    return this.motion !== null
   }
 
   get visible(): boolean { return this.explorer.visible }
@@ -397,20 +402,8 @@ export class ExplorationScene {
         g.circle(cx, cy + 1, 5 + 9 * pulse).stroke({ width: 2, color: 0x9fdfe6, alpha: 0.55 * (1 - pulse) })
       }
     }
-    // 泉水边潮湿洞壁上的发光蘑菇：成簇呼吸的柔光（发现物之一，点击即发现）。
-    for (const spot of mushroomSpots(world)) {
-      const mx = (spot.x + 0.5) * T
-      const my = (spot.y + 0.42) * T
-      const breathe = 0.5 + 0.5 * Math.sin(this.elapsed * 1.7 + spot.x)
-      g.ellipse(mx, my - 4, 15, 11).fill({ color: 0x9fe8c8, alpha: 0.07 + 0.07 * breathe })
-      for (let i = 0; i < 3; i++) {
-        const cx = mx - 6 + i * 6
-        const cy = my - (i % 2 === 0 ? 1 : 4)
-        g.circle(cx, cy, 3.4).fill({ color: 0xcdf4de, alpha: 0.95 })
-        g.circle(cx - 1, cy - 1.2, 1.4).fill({ color: 0xffffff, alpha: 0.5 })
-        g.circle(cx, cy, 6 + 2 * breathe).fill({ color: 0x9fe8c8, alpha: 0.12 + 0.10 * breathe })
-      }
-    }
+    // 只有未拾取的蘑菇发光；采集后让原地回归洞穴背景。
+    drawGlowMushrooms(g, world, this.elapsed)
     // 找到泉水后水面一直轻轻闪动：新家园是活的。
     if (e.springFound && waterSpan(world)) {
       const sx = (LANDMARKS.spring.x + 0.5) * T

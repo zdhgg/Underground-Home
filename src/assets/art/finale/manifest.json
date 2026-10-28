@@ -1,7 +1,7 @@
 {
   "generator": "built-in ImageGen",
   "date": "2026-10-26",
-  "editing": "none; generated original PNGs copied",
+  "editing": "heart-v1.png / table-v1.png / memory-v1.png: none, generated originals copied. warm-heart-v1.png: generated with heart-v1.png as style reference, then background removed and cropped with a local script.",
   "assets": [
     {
       "file": "heart-v1.png",
@@ -38,6 +38,18 @@
         255
       ],
       "sha256": "39acef394a70cf651e0cca2f278dbbdfe2fa049a0a75395e1ee9363c0ca215ce"
+    },
+    {
+      "file": "warm-heart-v1.png",
+      "bytes": 1127863,
+      "width": 838,
+      "height": 790,
+      "mode": "RGBA",
+      "alpha": [
+        0,
+        255
+      ],
+      "sha256": "9b75247291619734d2fedec53c1c4ecdf2af42e43a2fa7475cb227b9c70cff0b"
     }
   ]
 }

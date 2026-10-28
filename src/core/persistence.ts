@@ -40,6 +40,9 @@ import {
   type DeepState,
   type Inventory,
   type BuiltSite,
+  type MemoryEntry,
+  type MemoryState,
+  freshMemories,
   BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
@@ -99,6 +102,8 @@ export interface SavePayload {
     farm: FarmState
     /** 电是否已送到第二层（v7 起） */
     powerDown: boolean
+    /** 父女共同保存的生活记录（v25 起） */
+    memories: MemoryState
   }
 }
 
@@ -131,6 +136,7 @@ export function serialize(world: WorldState): SavePayload {
       exploration: structuredClone(world.exploration),
       farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
       powerDown: world.powerDown,
+      memories: { entries: world.memories.entries.map(entry => ({ ...entry })), nextId: world.memories.nextId },
     },
   }
 }
@@ -229,11 +235,12 @@ export function deserialize(raw: unknown): LoadResult {
         exploration: freshExploration(),
         farm: freshFarm(),
         powerDown: false,
+        memories: freshMemories(),
       },
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -244,7 +251,7 @@ export function deserialize(raw: unknown): LoadResult {
     finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
     ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
-    exploration: freshExploration(), farm: freshFarm(), powerDown: false,
+    exploration: freshExploration(), farm: freshFarm(), powerDown: false, memories: freshMemories(),
   }
   const rawFinale=(payload.world as {finale?:FinaleState}).finale
   if(version>=23)world.finale={...freshFinale(),braced:rawFinale?.braced===true,entered:rawFinale?.entered===true}
@@ -294,8 +301,9 @@ export function deserialize(raw: unknown): LoadResult {
       const pod = item as SleepPod
       if (!Number.isInteger(pod.id) || pod.id < 1 || ids.has(pod.id) || !Number.isInteger(pod.x) || !Number.isInteger(pod.y) || (pod.door !== 'left' && pod.door !== 'right')) return err('存档睡眠舱数据无效')
       if (version >= 12 && pod.backWall !== undefined && pod.backWall !== true) return err('存档睡眠舱通行数据无效')
+      if (version >= 24 && pod.mark !== undefined && !['star', 'leaf', 'drop'].includes(pod.mark)) return err('存档小窝标记数据无效')
       ids.add(pod.id)
-      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door, ...(version >= 12 && pod.backWall ? { backWall: true as const } : {}) })
+      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door, ...(version >= 12 && pod.backWall ? { backWall: true as const } : {}), ...(version >= 24 && pod.mark ? { mark: pod.mark } : {}) })
     }
     const pods = world.pods
     for (const pod of pods) {
@@ -317,6 +325,11 @@ export function deserialize(raw: unknown): LoadResult {
     // 核心没修、或者人还没下到第二层，就不可能有"电送到下面"。
     if (powerDown && !(world.progress.coreRepaired && world.exploration.entered)) return err('存档供电状态无效')
     world.powerDown = powerDown
+  }
+  if (version >= 25) {
+    const memories = validateMemories((payload.world as { memories?: unknown }).memories)
+    if (!memories) return err('存档生活记录数据无效')
+    world.memories = memories
   }
   if (hasWideLampAbility(world) && !(world.progress.coreRepaired && world.exploration.springFound && world.powerDown)) return err('存档照明升级前置成果无效')
 
@@ -464,6 +477,37 @@ function validateFarm(raw: unknown, world: WorldState, version: number): FarmSta
   } finally {
     world.farm = restored
   }
+}
+
+/** v25 起：家庭生活记录。限制条目和媒体大小，避免损坏或超大文件拖垮存档。 */
+function validateMemories(raw: unknown): MemoryState | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const data = raw as { entries?: unknown; nextId?: unknown }
+  if (!Array.isArray(data.entries) || data.entries.length > 100 || !Number.isSafeInteger(data.nextId) || Number(data.nextId) < 1) return null
+  const ids = new Set<number>()
+  const entries: MemoryEntry[] = []
+  for (const item of data.entries) {
+    if (typeof item !== 'object' || item === null) return null
+    const entry = item as Partial<MemoryEntry>
+    if (!Number.isSafeInteger(entry.id) || Number(entry.id) < 1 || ids.has(Number(entry.id))) return null
+    if (entry.kind !== 'note' && entry.kind !== 'photo' && entry.kind !== 'voice') return null
+    if (typeof entry.title !== 'string' || entry.title.trim().length === 0 || entry.title.length > 80) return null
+    if (typeof entry.body !== 'string' || entry.body.length > 2000) return null
+    if (typeof entry.createdAt !== 'string' || Number.isNaN(Date.parse(entry.createdAt))) return null
+    if (entry.photoDataUrl !== undefined && (typeof entry.photoDataUrl !== 'string' || !entry.photoDataUrl.startsWith('data:image/') || entry.photoDataUrl.length > 2_500_000)) return null
+    if (entry.voiceDataUrl !== undefined && (typeof entry.voiceDataUrl !== 'string' || !entry.voiceDataUrl.startsWith('data:audio/') || entry.voiceDataUrl.length > 3_000_000)) return null
+    if (entry.kind === 'photo' && !entry.photoDataUrl) return null
+    if (entry.kind === 'voice' && !entry.voiceDataUrl) return null
+    if (entry.kind === 'note' && (entry.photoDataUrl || entry.voiceDataUrl)) return null
+    ids.add(Number(entry.id))
+    entries.push({
+      id: Number(entry.id), kind: entry.kind, title: entry.title, body: entry.body, createdAt: entry.createdAt,
+      ...(entry.photoDataUrl ? { photoDataUrl: entry.photoDataUrl } : {}),
+      ...(entry.voiceDataUrl ? { voiceDataUrl: entry.voiceDataUrl } : {}),
+    })
+  }
+  if (Number(data.nextId) <= Math.max(0, ...ids)) return null
+  return { entries, nextId: Number(data.nextId) }
 }
 
 function validateExploration(raw: unknown, world: WorldState, version: number): ExplorationState | null {

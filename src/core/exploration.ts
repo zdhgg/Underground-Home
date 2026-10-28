@@ -137,10 +137,11 @@ export function waterSpan(world: WorldState): { left: number; right: number } | 
 }
 
 /**
- * 发光蘑菇（发现物）：泉水边潮湿洞壁上的固定几簇，兼作柔和光源。
- * 定义放这里是因为菜槽规则也要保留这些格子（不放作物、不和蘑菇抢地）。
+ * 发光蘑菇（一次性发现物）：拾取后整簇消失，原地恢复为可建设的空地。
+ * 渲染、点击与菜槽避让共用当前仍存在的点位，避免留下隐形交互区。
  */
 export function mushroomSpots(world: WorldState): Cell[] {
+  if (world.exploration.foundMushroom) return []
   const span = waterSpan(world)
   if (!span) return []
   return [20, 26]

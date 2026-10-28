@@ -6,6 +6,16 @@ import { deserialize, serialize } from '../src/core/persistence'
 import { hitPartner } from '../src/render/partnerHitTest'
 
 describe('伙伴能力与对话：不增加任务门槛', () => {
+  it('伙伴只回忆自己床位上真实选过的标记，不改变世界', () => {
+    const world = createInitialWorld()
+    world.progress.coreRepaired = true
+    world.pods.push({ id: 1, x: 12, y: 10, door: 'right', mark: 'leaf' })
+    const before = structuredClone(world)
+    expect(partnerConversation(world, 'adeng')?.lines.join(' ')).toContain('心心，我的小窝上有你选的叶子')
+    expect(world).toEqual(before)
+    delete world.pods[0].mark
+    expect(partnerConversation(world, 'adeng')?.lines.join(' ')).not.toContain('你选的叶子')
+  })
   it('聊天、查看工具和关闭前的读取都不改变世界', () => {
     const world = createInitialWorld()
     const before = serialize(world).world

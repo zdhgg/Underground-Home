@@ -10,6 +10,8 @@ export class DeepScene {
   readonly view = new Container({ label: 'crystal-chapter' })
   readonly foreground = new Container({ label: 'crystal-chapter-front' })
   readonly preview = new Graphics()
+  /** 选址时叠在岩壁前的半透明设施影子与说明，和它一起被清空。 */
+  private readonly previewGhost = new Container()
   private readonly scenery = new Container()
   private readonly light = new Graphics()
   private readonly shimmer = new Graphics()
@@ -17,7 +19,7 @@ export class DeepScene {
   private trip: { from: number; to: number; time: number; done(): void; position(y: number): void } | null = null
   constructor(private art: DeepTextures = {}) {
     this.view.addChild(this.light, this.scenery)
-    this.foreground.addChild(this.shimmer, this.cabin, this.preview)
+    this.foreground.addChild(this.shimmer, this.cabin, this.previewGhost, this.preview)
   }
   setArt(art: DeepTextures): void { this.art = art }
   private label(text: string, x: number, y: number, size = 11, color = 0xc8ddd9): void {
@@ -91,16 +93,16 @@ export class DeepScene {
     }
     this.drawCabin(w)
   }
-  private sprite(key: keyof DeepTextures, x: number, bottom: number, width: number, maxHeight: number, alpha = 1): void {
+  private sprite(key: keyof DeepTextures, x: number, bottom: number, width: number, maxHeight: number, alpha = 1, target: Container = this.scenery): void {
     const texture = this.art[key]
     if (!texture) {
       const g = new Graphics().roundRect(x - width / 2, bottom - 35, width, 35, 4).fill(0x8d9ca5).stroke({ width: 2, color: 0xb9d5db })
-      this.scenery.addChild(g); return
+      g.alpha = alpha; target.addChild(g); return
     }
     const sprite = new Sprite(texture)
     const scale = Math.min(width / texture.width, maxHeight / texture.height)
     sprite.scale.set(scale); sprite.anchor.set(.5, 1); sprite.position.set(x, bottom); sprite.alpha = alpha
-    this.scenery.addChild(sprite)
+    target.addChild(sprite)
   }
   private drawCabin(w: WorldState): void {
     if (this.trip) return
@@ -134,10 +136,38 @@ export class DeepScene {
       if (t === 1) { this.trip = null; trip.done() }
     }
   }
+  /**
+   * 选址预览：先在岩壁上放出这间设施的半透明影子，再在旁边写清能不能建。
+   * 前两层放蓝图时也是这样"看到东西、看到一句话"，孩子不用低头读面板。
+   */
   placePreview(w: WorldState, kind: DeepFacilityKind | null, x: number | null): void {
-    const g = this.preview.clear()
+    this.preview.clear()
+    for (const child of this.previewGhost.removeChildren()) child.destroy({ children: true })
     if (!kind || x === null) return
-    const valid = !deepBuildProblem(w, kind, x)
-    g.roundRect(x * T + 2, 31 * T + 2, DEEP_SPECS[kind].width * T - 4, 3 * T - 4, 9).fill({ color: valid ? 0xa5d9cc : 0xe2b798, alpha: .15 }).stroke({ width: 2, color: valid ? 0xa5d9cc : 0xe2b798 })
+    const spec = DEEP_SPECS[kind], left = x * T, width = spec.width * T
+    const problem = deepBuildProblem(w, kind, x), valid = problem === null
+    const color = valid ? 0xa5d9cc : 0xe2b798
+    this.preview.roundRect(left + 2, 31 * T + 2, width - 4, 3 * T - 4, 9).fill({ color, alpha: .2 }).stroke({ width: 3, color })
+    if (kind === 'lamp') {
+      const g = new Graphics()
+      g.roundRect(left + 8, 31.45 * T, 16, 22, 5).fill({ color: 0x819fae, alpha: valid ? .75 : .45 }).stroke({ width: 2, color: 0x42596a })
+      g.poly([left + 16, 31.5 * T, left + 21, 31.75 * T, left + 16, 32 * T, left + 11, 31.75 * T]).fill({ color: 0xd0f1ee, alpha: .8 })
+      this.previewGhost.addChild(g)
+    } else this.sprite(kind, left + width / 2, 33.92 * T, width - 12, 70, valid ? .62 : .34, this.previewGhost)
+    this.previewHint(problem ?? '可以搭在这里', valid, left + width / 2)
+  }
+  private previewHint(text: string, valid: boolean, centerX: number): void {
+    const label = new Text({
+      text,
+      style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 12, fontWeight: '700', fill: valid ? 0xc8f7d2 : 0xffd0c4, align: 'center', wordWrap: true, wordWrapWidth: 210 },
+    })
+    label.anchor.set(.5, 1)
+    const bg = new Graphics()
+    bg.roundRect(-label.width / 2 - 9, -label.height - 12, label.width + 18, label.height + 12, 8).fill({ color: 0x16252b, alpha: .86 })
+    label.position.set(0, -5)
+    const tag = new Container()
+    tag.addChild(bg, label)
+    tag.position.set(centerX, 30.72 * T)
+    this.previewGhost.addChild(tag)
   }
 }

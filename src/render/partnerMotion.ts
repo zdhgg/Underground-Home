@@ -2,7 +2,7 @@ import { Container, Graphics } from 'pixi.js'
 import { TILE_SIZE as T, type Cell } from '../core/world'
 import type { WorkPlan } from '../core/partnerWork'
 
-export interface MovingPartner { view: Container; baseY: number; pose: 'idle' | 'walk' | 'climb' | 'rest'; inEntrance: boolean; visual: { face(dx: number): void } | null }
+export interface MovingPartner { view: Container; baseY: number; pose: 'idle' | 'walk' | 'climb' | 'rest'; inEntrance: boolean; visual: { face(dx: number): void; harvestLean?(amount: number, direction: number): void } | null }
 
 /** 只负责一位伙伴的路径与短动作；规则和结算由会话回调决定。 */
 export class PartnerMotion {
@@ -21,7 +21,7 @@ export class PartnerMotion {
   }
   cancel(): void {
     const f = this.motion?.friend ?? this.action?.friend
-    if (this.action) this.action.friend.view.y = this.action.friend.baseY
+    if (this.action) { this.action.friend.view.y = this.action.friend.baseY; this.action.friend.visual?.harvestLean?.(0, 1) }
     if (f) { f.inEntrance = false; f.pose = 'idle' }
     this.motion = null; this.action = null; this.effects.clear()
   }
@@ -53,8 +53,11 @@ export class PartnerMotion {
       const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' || a.plan.target.kind === 'watering' ? 0xa2dce0 : 0xffdf9d
       const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
-      // 手边的采收篮 / 接头 / 提灯短动作，效果在动手的时刻才结算。
-      if(a.plan.worker==='lingling'){
+      // 收菜用角色自身的俯身和回身，避免凭空长出一根绿色手臂。
+      if (a.plan.target.kind === 'harvest' && a.plan.worker === 'xiaoman') {
+        const lean = a.time < .55 ? Math.sin(Math.min(1, a.time / .55) * Math.PI / 2) : Math.max(0, 1 - (a.time - .55) / .4)
+        a.friend.visual?.harvestLean?.(lean, dir)
+      } else if(a.plan.worker==='lingling'){
         for(let i=0;i<3;i++)g.arc(x+dir*8,y-13,8+i*6+swing*3,dir>0?-Math.PI/3:Math.PI*2/3,dir>0?Math.PI/3:Math.PI*4/3).stroke({width:1.2,color:0xc6b9d5,alpha:.55-i*.1})
       } else if (a.plan.worker === 'taitai') {
         for (let i = 0; i < 4; i++) g.moveTo(x - 12 + i * 7, y + 11).lineTo(x - 9 + i * 7, y + 7 - swing * 3).lineTo(x - 5 + i * 7, y + 11).stroke({ width: 1.5, color: 0xb1dfb5, alpha: .6 })
@@ -70,7 +73,7 @@ export class PartnerMotion {
       g.roundRect(x + dir * (15 + swing * 7) - 4, y - 16 - swing * 9, 9, 10, 3).fill(color)
       }
       if (!a.hit && a.time >= .55) { a.hit = true; a.strike(); if (this.action !== a) return }
-      if (a.time >= .95) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
+      if (a.time >= .95) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.visual?.harvestLean?.(0, dir); a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
     }
   }
 }

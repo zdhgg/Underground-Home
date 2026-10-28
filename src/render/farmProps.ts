@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite } from 'pixi.js'
 import { LANDMARKS, STRATA, TILE_SIZE, type Planter, type WorldState } from '../core/world'
 import { RIPE_STAGE } from '../core/farm'
 import type { EnvironmentTextures } from './environmentArt'
+import { siteAt } from '../core/sites'
 
 /**
  * 第二层菜园的生产道具：种植槽（四档外观）与泉水边的水管 / 水缸。
@@ -22,10 +23,22 @@ const HOME_BARREL_Y = 11
 const TOMATO = 0xe35d4f
 const TOMATO_DARK = 0xb03a30
 
+/** 设施内的两个菜槽向中间收拢，提示与收获反馈也要使用同一个位置。 */
+export function planterOffset(world: WorldState, planter: { x: number; y: number }): number | undefined {
+  const site = siteAt(planter)
+  return site && world.builtSites.some(b => b.id === site.id && b.kind === 'garden')
+    ? planter.x === site.x ? .25 : -.25 : undefined
+}
+
+export function planterPosition(planter: { x: number; y: number }, offset = 0): { x: number; y: number } {
+  return { x: (planter.x + .5 + offset) * TILE_SIZE, y: (planter.y + .9) * TILE_SIZE }
+}
+
 export function drawPlanter(planter: Planter, textures: EnvironmentTextures | null = null, compactOffset?: number): Container {
   const view = new Container()
   const g = new Graphics()
-  view.position.set((planter.x + 0.5 + (compactOffset ?? 0)) * TILE_SIZE, (planter.y + 0.9) * TILE_SIZE)
+  const position = planterPosition(planter, compactOffset)
+  view.position.set(position.x, position.y)
   view.label = `planter-stage-${planter.growth}`
   const tomato = planter.crop === 'tomato'
   if (tomato) view.label += '-tomato'
@@ -190,8 +203,9 @@ export function drawWaterLine(world: WorldState, textures: EnvironmentTextures |
 export function drawRipeGlow(g: Graphics, world: WorldState, elapsed: number): void {
   for (const planter of world.farm.planters) {
     if (planter.growth < RIPE_STAGE) continue
-    const cx = (planter.x + 0.5) * TILE_SIZE
-    const cy = (planter.y + 0.5) * TILE_SIZE
+    const position = planterPosition(planter, planterOffset(world, planter))
+    const cx = position.x
+    const cy = position.y - .4 * TILE_SIZE
     const pulse = 0.6 + 0.4 * Math.sin(elapsed * 3)
     g.circle(cx, cy, 15 + 3 * pulse).stroke({ width: 2, color: 0xffe6ad, alpha: 0.35 + 0.35 * pulse })
     g.circle(cx, cy - 6, 3 + 1.5 * pulse).fill({ color: 0xffeccb, alpha: 0.5 + 0.4 * pulse })

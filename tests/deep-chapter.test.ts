@@ -13,7 +13,8 @@ import type { PixiWorldRenderer } from '../src/render/PixiRenderer'
 import { completedReservoir } from './fixtures/reservoirWorld'
 import { completedGarden } from './fixtures/gardenWorld'
 import { furnishedHall } from './fixtures/hallWorld'
-import { expandDeep, liftReady, secondLayerComplete, workingDeep } from './fixtures/deepWorld'
+import { enterDeep, expandDeep, liftReady, secondLayerComplete, workingDeep } from './fixtures/deepWorld'
+import { buildDeep, performDeep } from '../src/core/deep'
 
 function setup(w = secondLayerComplete()) {
   let state: DeepUI | undefined
@@ -71,6 +72,44 @@ describe('晶簇层真实会话切换和施工', () => {
     expect(deserialize(serialize(h.w))).toMatchObject({ ok: true })
     const old = setup(liftReady()); old.chapter.show(); old.chapter.perform('ride-hall')
     expect(old.view.playDeepLift).not.toHaveBeenCalled(); expect(old.w.deep.rides).toBe(0)
+  })
+
+  it('任务一次只告诉玩家下一件设施，再由玩家选择位置', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const h = setup(w)
+    h.chapter.show()
+    expect(h.state()).toMatchObject({ placing: null, label: '选择位置放置晶簇采集台', choicesOpen: false })
+    // 先按当前任务，再进入这件设施的选址；空洞点击仍留给自由挖掘/探索。
+    expect(h.chapter.tap({ x: 24, y: 32 })).toBe(false)
+    expect(h.state().placing).toBeNull()
+    h.chapter.primary()
+    expect(h.state().placing).toBe('collector')
+    expect(h.state()).toMatchObject({ placing: 'collector', candidate: null, label: '就在这里建造' })
+    expect(h.state().speech).toContain('采集台建 1 台就够了')
+    expect(h.state().hint).toContain('本章只需 1 台')
+    h.chapter.tap({ x: 24, y: 32 })
+    expect(h.state()).toMatchObject({ placing: 'collector', candidate: 24, valid: true, label: '就在这里建造' })
+    expect(h.view.setDeepPreview).toHaveBeenLastCalledWith('collector', 24)
+  })
+
+  it('面板开着时点泥土照旧交给挖掘，不会被选址吞掉', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    w.tiles[32][38] = TILE.SOIL; w.tiles[31][38] = TILE.SOIL
+    const h = setup(w)
+    h.chapter.show()
+    expect(h.chapter.tap({ x: 38, y: 32 })).toBe(false)
+    expect(h.state().placing).toBeNull()
+  })
+
+  it('点已经建好的设施仍是看用法，不会被下一件设施的选址抢走', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    expect(buildDeep(w, 'collector', 24).ok).toBe(true)
+    expect(buildDeep(w, 'distributor', 28).ok).toBe(true)
+    const h = setup(w)
+    h.chapter.show()
+    expect(h.state().label).toBe('选择位置放置晶光壁灯')
+    expect(h.chapter.tap({ x: 25, y: 32 })).toBe(true)
+    expect(h.state()).toMatchObject({ selected: 'collector', placing: null })
   })
 
   it('完成前章后主动打开、到侧洞相遇、逐段凿岩、沿梯到场，再按自由选址完成五类设施', () => {

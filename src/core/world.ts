@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 23
+export const WORLD_VERSION = 25
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -64,6 +64,8 @@ export interface SleepPod extends Cell {
   door: 'left' | 'right'
   /** 房间后侧设施；前侧保留真实的两格高通道。 */
   backWall?: true
+  /** 小主人为这间小窝选的装饰，不影响床位和通路。 */
+  mark?: 'star' | 'leaf' | 'drop'
 }
 
 export interface Rect {
@@ -101,6 +103,23 @@ export interface Inventory { stone: number; wood: number; clay?: number }
 export interface BuiltSite { id: string; kind: SiteKind }
 /** 避难所留下的少量材料，保证第一间住处可以直接开工。 */
 export const freshInventory = (): Inventory => ({ stone: 4, wood: 3 })
+
+/** 一条来自现实生活的家庭记忆；媒体内容以小型 data URL 随存档保存，不上传。 */
+export type MemoryKind = 'note' | 'photo' | 'voice'
+export interface MemoryEntry {
+  id: number
+  kind: MemoryKind
+  title: string
+  body: string
+  createdAt: string
+  photoDataUrl?: string
+  voiceDataUrl?: string
+}
+export interface MemoryState {
+  entries: MemoryEntry[]
+  nextId: number
+}
+export const freshMemories = (): MemoryState => ({ entries: [], nextId: 1 })
 /** 蓝图不改变地形；扩建蓝图完成前，原房间继续使用。 */
 export interface Room extends Rect {
   id: number; kind: RoomKind
@@ -292,6 +311,8 @@ export interface WorldState {
    * 核心修好只是"家里有电"，把电送下去之后，第二层才亮得起来。
    */
   powerDown: boolean
+  /** 父女共同保存的生活记录（v25 起）。 */
+  memories: MemoryState
 }
 
 export interface ExplorationState {
@@ -400,6 +421,7 @@ export function createInitialWorld(): WorldState {
     exploration: freshExploration(),
     farm: freshFarm(),
     powerDown: false,
+    memories: freshMemories(),
   }
 }
 

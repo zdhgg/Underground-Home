@@ -125,4 +125,16 @@ describe('开场发现入口演出', () => {
     expect(openingFrame(B.clue + .7, shaftX).clue).toBe(1)
     expect(openingFrame(OPENING_DURATION, shaftX).pullback).toBe(1)
   })
+
+  it('蓝光之后把地下空间交给心心，家形标记先出现再交接第一项行动', () => {
+    const beforeHome = openingFrame(B.home - .05, shaftX)
+    const welcome = openingFrame(B.home + .4, shaftX)
+    expect(beforeHome.homeReveal).toBe(0)
+    expect(welcome.homeReveal).toBeGreaterThan(.5)
+    expect(welcome.speech).toContain('心心')
+    expect(welcome.caption).toContain('地下小家园')
+    expect(welcome.phase).toBe('welcome')
+    expect(openingFrame(B.pullback - .05, shaftX).x).toBe(shaftX)
+    expect(openingFrame(OPENING_DURATION, shaftX).phase).toBe('handoff')
+  })
 })

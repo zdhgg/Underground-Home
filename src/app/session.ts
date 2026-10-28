@@ -20,7 +20,7 @@ import { MURAL_SPOT, WARM_LIGHT_SPOT } from '../core/hallTopology'
 import type { HallFacilityKind } from '../core/world'
 import { gameAudio } from '../render/gameAudio'
 import { DeepChapter, type DeepUI } from './deepChapter'
-import { deepGoal, deepReady, type DeepAction } from '../core/deep'
+import { deepFacilityAt, deepGoal, deepReady, type DeepAction } from '../core/deep'
 import type { DeepFacilityKind } from '../core/world'
 import { CRYSTAL_SPOT, MOSS_SPOT, DRILL_SPOT } from '../core/deepTopology'
 import { playSoilDig, playBuildComplete, playPartnerFound, playCrystalCollected, playPowerConnected, playUndo, playUnavailable } from '../render/waterSound'
@@ -43,11 +43,13 @@ import { PartnerOrders, type WorkUI } from './partnerOrders'
 import { initializeWorkers, type WorkPlan, type WorkTarget } from '../core/partnerWork'
 import { atuRoute, initialAtuPosition, routeBeforePod } from '../core/atu'
 import { createWorldHistory } from '../core/history'
-import { canPlacePod, placePod, podAnchorFromPointer, type BuildFailure } from '../core/build'
+import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
+import { HOME_OWNER } from '../core/personal'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible } from '../core/exploration'
-import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect, type RoomKind, type SiteKind, type WorkerId } from '../core/world'
+import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect, type RoomKind, type SiteKind, type WorkerId, type MemoryEntry } from '../core/world'
+import { MEMORY_CORNER } from '../core/memories'
 import { availablePartners, canBuildMorePods, partnerBed, waitingPartnerList, waitingPartners, type PartnerId } from '../core/partners'
 import { SMALL_PICKAXE_ID, upgradePartner } from '../core/partnerAbilities'
 import { wideLampUpgrade } from '../core/partnerAbilities'
@@ -80,6 +82,7 @@ import { PixiWorldRenderer } from '../render/PixiRenderer'
 import { playBreakthrough, playHarvest, playLayerArrival, playMealTime, playRockHit, playSpringFound, playWaterClue, playWaterSupplied } from '../render/waterSound'
 
 export interface SessionHooks {
+  onNestWelcome?(state: NestWelcome | null): void
   onFinale?(state:FinaleUI):void
   onRuins?(state:RuinsUI):void
   onVentilation?(state:VentilationUI):void
@@ -110,9 +113,14 @@ export interface SessionHooks {
   onInventory?(inventory: Inventory): void
   onBag?(items: BagItem[]): void
   onBagRequested?(): void
+  onMemories?(entries: MemoryEntry[]): void
+  onMemoryRequested?(): void
   onWork?(state: WorkUI | null): void
   onWorkers?(items: { id: WorkerId; name: string; verb: string }[]): void
 }
+
+export type NestMark = 'star' | 'leaf' | 'drop'
+export interface NestWelcome { podId: number; anchor: ConversationAnchor & { targetHalfWidth?: number; targetHeight?: number }; speech: string; mark?: NestMark }
 
 export interface ExplorationUI {
   wideLighting: boolean; lightUpgradeReady: boolean
@@ -238,6 +246,9 @@ export interface SessionProgress {
 
 /** 组合根：把 world / rules / missions / persistence / render / input 装配成一次游戏会话 */
 export interface GameSession {
+  closeNestWelcome(): void
+  openNestMark(podId: number): void
+  confirmNestMark(mark: NestMark): void
   openFinale():void
   closeFinale():void
   finalePrimary():void
@@ -334,6 +345,7 @@ export interface GameSession {
   startPlanting(): void
   /** 请伙伴吃饭：消耗一份收成，播一段吃饭演出 */
   feed(): void
+  addMemory(entry: Omit<MemoryEntry, 'id' | 'createdAt'>): void
   /** 把第一层的电顺着梯道送到第二层 */
   sendPower(): void
   /** 进入页读取：没有存档 / 可继续 / 读不出来 */
@@ -454,6 +466,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   /** 一次共餐演出：结算已完成，演出期间不再重复扣食物。 */
   let mealing = false
   let mealTimer: number | undefined
+  let nestWelcome: NestWelcome | null = null
+  let nestInteraction = 0
+  const dismissNestWelcome = (): void => { if (nestWelcome) { nestWelcome = null; hooks.onNestWelcome?.(null); pushHighlight() } }
+  const noteNestInteraction = (): void => { nestInteraction++ }
 
   const pushConversation = (): void => {
     const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId) : null
@@ -466,7 +482,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     const action = primaryGuideAction(world)
     const site = action.siteId ? siteById(action.siteId) : undefined
     const rect = site ?? (guide.kind !== 'none' ? guide.rect : null)
-    renderer.setHighlight(finaleChapter?.active || finaleChapter?.busy || ruinsChapter?.active || ruinsChapter?.busy || ventilationChapter?.active || ventilationChapter?.busy || reservoirChapter?.active || reservoirChapter?.busy || gardenChapter?.active || gardenChapter?.busy || hallChapter?.active || hallChapter?.busy || deepChapter?.active || deepChapter?.busy || talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || facilityPanel?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
+    renderer.setHighlight(nestWelcome || finaleChapter?.active || finaleChapter?.busy || ruinsChapter?.active || ruinsChapter?.busy || ventilationChapter?.active || ventilationChapter?.busy || reservoirChapter?.active || reservoirChapter?.busy || gardenChapter?.active || gardenChapter?.busy || hallChapter?.active || hallChapter?.busy || deepChapter?.active || deepChapter?.busy || talkingPartnerId || discovering || siteEditor?.active || roomEditor?.active || facilityPanel?.active || currentWork || buildMode !== 'none' || lampMode || !rect ? null : {
       x: rect.x * TILE_SIZE, y: rect.y * TILE_SIZE,
       width: rect.w * TILE_SIZE, height: rect.h * TILE_SIZE,
       tone: guide.kind === 'dig' || guide.kind === 'collect' ? 'cyan' : 'amber',
@@ -481,19 +497,24 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     pushHighlight()
   }
 
-  /**
-   * 一间住处建成后的庆祝卡片。
-   * 第一间是“第一夜的家”；之后的住处只有在所有等床的伙伴都安顿好时才报“新伙伴住下啦”，
-   * 避免随口建一间空床就重复庆祝。预设洞室、睡眠舱和房间扩建共用这一套判定。
-   */
-  const lodgingMilestone = (podId: number, first: Milestone): Milestone | null => {
-    if (world.pods.length === 1) return first
-    const movedIn = availablePartners(world)
-      .filter((partner) => partner.id !== 'atu' && partnerBed(world, partner.id)?.pod.id === podId)
-      .map((partner) => partner.name)
-      .join('和')
-    if (!movedIn || waitingPartnerList(world).length > 0) return null
-    return { emoji: '🏠', title: '新伙伴住下啦！', detail: `${movedIn}有自己的床了 · 家里又热闹了一点` }
+  const showNestWelcome = (pod: import('../core/world').SleepPod): void => {
+    const anchor = renderer.nestAnchor(pod)
+    if (anchor.x < 0 || anchor.x > anchor.width || anchor.y < 0 || anchor.y > anchor.height || renderer.isOverview) return
+    const residents = availablePartners(world).filter(p => partnerBed(world, p.id)?.pod.id === pod.id).map(p => p.name).join('和')
+    siteEditor?.close(); roomEditor?.close()
+    nestWelcome = { podId: pod.id, anchor, mark: pod.mark, speech: residents
+      ? `${HOME_OWNER}，你帮${residents}安好了小窝！选一个喜欢的标记，留在小窝上吧。`
+      : `${HOME_OWNER}，这是我们的小窝。选一个喜欢的标记，留在小窝上吧。` }
+    hooks.onNestWelcome?.(nestWelcome); pushHighlight()
+  }
+
+  const welcomeAfterEntrance = (pod: import('../core/world').SleepPod, settled: () => void): void => {
+    const stamp = nestInteraction
+    renderer.playPodEntrance(pod, () => {
+      settled()
+      if (stamp !== nestInteraction || !world.pods.some(p => p.id === pod.id) || !availablePartners(world).some(p => partnerBed(world, p.id)?.pod.id === pod.id)) return
+      showNestWelcome(pod)
+    })
   }
 
   const pushBuild = (): void => {
@@ -754,7 +775,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     }
     if(ventilationReady(world)){const g=ventilationGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'连起风路，把手作送回九位伙伴的家。',done:world.ventilation.completed?19:g.done,total:19,finished:world.ventilation.completed,action:{id:'ventilation',label:'看看听风工区'},relics:relicSummary(world)})}
     if(ruinsReady(world)){const g=ruinsGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'修复三段旧故事，添上九位伙伴今天的家。',done:world.ruins.completed?19:g.done,total:19,finished:world.ruins.completed,action:{id:'ruins',label:'看看旧地脉遗迹'},relics:relicSummary(world)})}
-    if(finaleReady(world)){const g=finaleGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:world.finale.completed?'九层终章已完成，家园由你继续建设。':'把九位伙伴和九层成果聚成一次暖屋日。',done:g.done,total:20,finished:world.finale.completed,action:{id:'finale',label:world.finale.completed?'看看九层家园':'看看地心暖光'},relics:relicSummary(world)})}
+    if(finaleReady(world)){const g=finaleGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:world.finale.completed?`${HOME_OWNER}，九层终章已完成，家园由你继续建设。`:'把九位伙伴和九层成果聚成一次暖屋日。',done:g.done,total:20,finished:world.finale.completed,action:{id:'finale',label:world.finale.completed?'看看九层家园':'看看地心暖光'},relics:relicSummary(world)})}
     finaleChapter?.refresh()
     ruinsChapter?.refresh()
     ventilationChapter?.refresh()
@@ -791,6 +812,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     facilityPanel?.refresh()
     hooks.onInventory?.({ ...world.inventory })
     hooks.onBag?.(bagItems(world))
+    hooks.onMemories?.(world.memories.entries.map(entry => ({ ...entry })))
     if (!lampMode) renderer.setLampPreview(null)
 
     pushConversation()
@@ -888,6 +910,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   /** 悬停时的指针形状：可互动区域用 pointer，可挖泥土用 crosshair */
   const pickCursor = (cell: Cell | null): string => {
     if (!cell) return 'default'
+    if (world.progress.coreRepaired && buildMode === 'none' && !lampMode && world.memories.entries.length > 0 && inRect(MEMORY_CORNER, cell)) return 'pointer'
     if (world.progress.coreRepaired && buildMode === 'none' && !lampMode && inRect(COLLECTION_SHELF, cell)) return 'pointer'
     const tile = world.tiles[cell.y][cell.x]
     // 裂纹岩（和它下面已经挖开的梯段）= 阿土的施工目标
@@ -1085,7 +1108,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         // 找到水：小泉从水里冒出来；小满如果还在等床，也在这一刻被看见。
         renderer.refreshFriends()
         talkingPartnerId = 'xiaoquan'
-        notify('🎉 小泉从水里冒出来啦！他说：这水真甜，我帮你引上去。')
+        notify(`🎉 ${HOME_OWNER}，小泉从水里冒出来啦！他说：这水真甜，我帮你引上去。`)
         // 第二间住处若是提前建好，小泉一出现就有床：把“入住”并进这一刻，
         // 在他的舱边放庆祝，而不是等下一间空床建成才有反馈。
         const xiaoquanBed = partnerBed(world, 'xiaoquan')
@@ -1105,18 +1128,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return
     }
 
-    // 2.5) 泉水边潮湿洞壁上的发光蘑菇：第一次点到就是一次发现。
+    // 2.5) 一次性拾取：整簇消失，只保留短暂反馈；之后原地按普通空地处理。
     if (isMushroomSpot(world, cell.x, cell.y) && world.tiles[cell.y][cell.x] === TILE.EMPTY) {
-      if (!world.exploration.foundMushroom) {
-        world.exploration.foundMushroom = true
-        renderer.refreshExploration()
-        scheduleSave()
-        pushProgress()
-        hooks.onMilestone?.({ emoji: '🍄', title: '发现发光蘑菇！', detail: '潮湿的洞壁上 · 泉水边多了一点柔光' })
-        notify('🍄 发现发光蘑菇！它们给泉水边添了一点柔柔的光。')
-      } else {
-        renderer.playBurst((cell.x + 0.5) * TILE_SIZE, (cell.y + 0.3) * TILE_SIZE, { color: 0xbff0d8, count: 6, speed: 40 })
-      }
+      world.exploration.foundMushroom = true
+      renderer.refreshExploration()
+      renderer.playBurst((cell.x + 0.5) * TILE_SIZE, (cell.y + 0.3) * TILE_SIZE, { color: 0xbff0d8, count: 10, speed: 42, ring: true, ringRadius: 18 })
+      scheduleSave()
+      pushProgress()
+      hooks.onMilestone?.({ emoji: '🍄', title: '发现发光蘑菇！', detail: '已经采好 · 泉水边又空出来啦' })
+      notify('🍄 采好发光蘑菇啦！空出的地方可以继续布置。')
       return
     }
 
@@ -1271,9 +1291,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (pod) {
         // 扩建住处新增床位时，和预设洞室、睡眠舱走同一套入住演出与里程碑。
         resting = false
-        renderer.playPodEntrance(pod, () => { resting = true; renderer.playPodCelebration(pod); pushProgress() })
-        const card = lodgingMilestone(pod.id, { emoji: '🛏️', title: '第一夜的家', detail: '灯亮着，床也铺好了 · 楼下好像有声音' })
-        if (card) hooks.onMilestone?.(card)
+        welcomeAfterEntrance(pod, () => { resting = true; renderer.playPodCelebration(pod); pushProgress() })
       }
       scheduleSave(); pushProgress()
     },
@@ -1294,9 +1312,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       const pod = change.room?.addedPods?.[0]
       if (pod) {
         resting = false
-        renderer.playPodEntrance(pod, () => { resting = true; renderer.playPodCelebration(pod); pushProgress() })
-        const card = lodgingMilestone(pod.id, { emoji: '🛏', title: '我们的小窝建好啦！', detail: '灯亮了，伙伴有床睡了' })
-        if (card) hooks.onMilestone?.(card)
+        welcomeAfterEntrance(pod, () => { resting = true; renderer.playPodCelebration(pod); pushProgress() })
       }
       const built = siteById(change.site.id)
       if (built) renderer.playBurst((built.x + built.w / 2) * TILE_SIZE, (built.y + built.h - 1) * TILE_SIZE, { color: 0xffdc95, count: 10 })
@@ -1326,7 +1342,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.refreshFarm(); playHarvest(); renderer.playHarvest(target)
       renderer.playPartnerReaction('xiaoman', tomato ? '收好啦！红红的番茄！' : '收好啦！新苗也种下了。')
       notify(tomato ? `🍅 小满收了一份番茄！家里有 ${world.farm.food} 份吃的。` : `🥕 小满收了一份菜！家里有 ${world.farm.food} 份吃的。`)
-      if (world.farm.harvests === 1) hooks.onMilestone?.({ emoji: '🥕', title: '第一份收成！', detail: '小满收好菜啦 · 可以请大家吃饭' })
+      if (world.farm.harvests === 1) hooks.onMilestone?.({ emoji: '🥕', title: '第一份收成！', detail: `${HOME_OWNER}，小满收好菜啦 · 可以请大家吃饭` })
     } else if (target.kind === 'watering') {
       // 浇水是一次照料：所有未熟的菜各长一档；与"干活长大"共用同一推进函数，不叠加。
       const grown = advancePlanters(world)
@@ -1602,6 +1618,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (cell && world.progress.coreRepaired && !traveling && buildMode === 'none' && !lampMode && inRect(COLLECTION_SHELF, cell)) {
         hooks.onBagRequested?.(); return
       }
+      if (cell && world.progress.coreRepaired && !traveling && buildMode === 'none' && !lampMode && world.memories.entries.length > 0 && inRect(MEMORY_CORNER, cell)) {
+        hooks.onMemoryRequested?.(); return
+      }
       if (cell && !traveling && buildMode === 'none' && !lampMode) {
         const site = siteAt(cell)
         if (site && siteBlueprintVisible(world, site) && !siteBuilt(world, site) && !planterAt(world, cell.x, cell.y)) {
@@ -1632,6 +1651,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
           pushBuild(); pushHighlight()
           return
         }
+        // 旧存档里可能有独立睡眠舱而没有房间，点舱体也能重新选择标记。
+        const pod = !room && world.pods.find(p => inRect(podRect(p), cell))
+        if (pod) { closeConversation(); siteEditor?.close(); roomEditor?.close(); facilityPanel?.close(); showNestWelcome(pod); return }
       }
       if (roomEditor?.active && (!cell || roomEditor.tap(cell))) return
       // 实心地形始终保留挖掘/施工命中，不让角色的触屏容错抢走旁边岩块。
@@ -1654,6 +1676,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       }
       const cell = screen ? renderer.tileAtScreen(screen) : null
       if (lampMode) { renderer.setLampPreview(cell); renderer.setHoverCell(null); renderer.hoverPartner(null); renderer.setCursor('copy'); return }
+      // 晶簇层选址：指针换成"可放置"，点一下就把设施影子放到那处岩壁上。
+      const deepBuild = deepChapter?.placingKind ?? deepChapter?.nextBuild
+      if (cell && deepBuild && cell.y >= 30 && cell.y <= 34 && world.tiles[cell.y][cell.x] === TILE.EMPTY && !deepFacilityAt(world, cell)) {
+        renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('copy'); return
+      }
       if (roomEditor?.active) { renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('copy'); return }
       const site = cell && siteAt(cell)
       if (!traveling && buildMode === 'none' && site && siteBlueprintVisible(world, site) && !siteBuilt(world, site) && !planterAt(world, cell!.x, cell!.y)) {
@@ -1691,6 +1718,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const onVisibilityChange = (): void => {
     gameAudio.setHidden(document.visibilityState === 'hidden')
     if (document.visibilityState === 'hidden') {
+      noteNestInteraction(); dismissNestWelcome()
       if(finaleChapter?.busy)finaleChapter.cancel(); if(ruinsChapter?.busy)ruinsChapter.cancel(); if(ventilationChapter?.busy)ventilationChapter.cancel(); if(reservoirChapter?.busy)reservoirChapter.cancel()
       if (gardenChapter?.busy) gardenChapter.cancel()
       if (hallChapter?.busy) hallChapter.cancel()
@@ -1721,6 +1749,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   /** 窗口失焦不会停帧，只把指针手势复位，避免拖到一半的拖动卡住下一次点击。 */
   const onWindowBlur = (): void => { pointer.reset() }
   const undoLast = (): void => {
+    dismissNestWelcome()
     const restored = history.undo(world)
     if (!restored) { playUnavailable(); notify('这里有伙伴、设施或回家的路，先留着这片空地。'); return }
     playUndo()
@@ -1801,12 +1830,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         .join('和')
       // 第一层只住阿土和阿灯；小满要等到第一次下到泉水层才遇见，她在下面的洞穴里等床。
       const stillWaiting = waitingPartnerList(world).map((partner) => partner.name).join('和')
-      hooks.onMessage(`🛏️ ${movedIn}的小床安好啦！伙伴有住处，也能来帮忙。`)
-      renderer.playPodEntrance(pod, () => {
+      hooks.onMessage(`🛏️ ${HOME_OWNER}，${movedIn}的小床安好啦！伙伴有住处，也能来帮忙。`)
+      welcomeAfterEntrance(pod, () => {
         resting = true
         renderer.playPodCelebration(pod)
-        const card = lodgingMilestone(pod.id, { emoji: '🛏️', title: '第一夜的家', detail: '灯亮着，床也铺好了 · 楼下好像有声音' })
-        if (card) hooks.onMilestone?.(card)
         pushProgress()
         renderer.refreshExploration()
         hooks.onMessage(stillWaiting ? `🛏️ 床位安好啦！${stillWaiting}也想住下。伙伴随时能来帮忙。` : '🛏️ 床位安好啦！伙伴睡下啦，楼下好像有声音……')
@@ -1815,10 +1842,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   const onKeyDown = (event: KeyboardEvent): void => {
     if (inputBlocked) return
+    noteNestInteraction()
     if (openingActive) { if (event.key === 'Escape') { event.preventDefault(); renderer.finishOpening() }; return }
-    if (event.key === 'Escape') { event.preventDefault(); cancelAction() }
+    if (event.key === 'Escape') { event.preventDefault(); if (nestWelcome) dismissNestWelcome(); else cancelAction() }
   }
   document.addEventListener('visibilitychange', onVisibilityChange)
+  window.addEventListener('pointerdown', noteNestInteraction, true)
+  window.addEventListener('wheel', noteNestInteraction, true)
   window.addEventListener('pagehide', onPageHide)
   window.addEventListener('blur', onWindowBlur)
   window.addEventListener('keydown', onKeyDown)
@@ -1941,7 +1971,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     renderer.focusOn((dining.x + dining.w / 2) * TILE_SIZE, (dining.y + dining.h / 2) * TILE_SIZE)
     playMealTime()
     renderer.playKitchenCooking(facilities.kitchen)
-    notify('🍲 灶台热起来啦！大家去餐桌坐好。')
+    notify(`🍲 ${HOME_OWNER}，灶台热起来啦！大家去餐桌坐好。`)
     pushProgress()
     // 保底收尾：即使画面被冻住，也不会把输入锁在演出里。
     mealTimer = window.setTimeout(() => finishMeal(), 9000)
@@ -1951,7 +1981,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (!mealing) return
       renderer.playMealCelebration()
       renderer.playPartnerReaction('xiaoman', '一起吃，饭更香！')
-      notify(`🍲 大家坐下来吃饭啦！还剩 ${world.farm.food} 份。`)
+      notify(`🍲 ${HOME_OWNER}，大家坐下来吃饭啦！还剩 ${world.farm.food} 份。`)
       if (firstShared) {
         hooks.onMilestone?.({ emoji: '🏡', title: '第 2 层 · 完成啦！', detail: '第一顿饭大家一起吃 · 有水、有菜、有饭，两层都亮了' })
         // 回望：拉出整个家的剖面看一眼，再回到餐桌这边；拖动/缩放随时打断。
@@ -2054,7 +2084,28 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     })
   }
 
+  /** 把现实中的一小段生活放进家园；记录只保存在当前存档，不上传。 */
+  const addMemory = (entry: Omit<MemoryEntry, 'id' | 'createdAt'>): void => {
+    if (!entry.title.trim() || world.memories.entries.length >= 100) return
+    const createdAt = new Date().toISOString()
+    const saved: MemoryEntry = { ...entry, id: world.memories.nextId, createdAt }
+    world.memories.entries.push(saved)
+    world.memories.nextId += 1
+    scheduleSave()
+    renderer.refreshMemories()
+    hooks.onMemories?.(world.memories.entries.map(item => ({ ...item })))
+    notify('✦ 这段记忆放进家里啦，随时可以回来看看。')
+  }
+
   return {
+    closeNestWelcome: dismissNestWelcome,
+    openNestMark: id => { const pod = world.pods.find(p => p.id === id); if (pod && roomEditor?.active) showNestWelcome(pod) },
+    confirmNestMark: mark => {
+      const pod = world.pods.find(p => p.id === nestWelcome?.podId)
+      if (!pod || !['star', 'leaf', 'drop'].includes(mark)) { dismissNestWelcome(); return }
+      pod.mark = mark; dismissNestWelcome(); renderer.refreshPods(); scheduleSave()
+      hooks.onMessage(`${HOME_OWNER}选的${{ star: '星星', leaf: '叶子', drop: '水滴' }[mark]}挂到小窝上啦！`)
+    },
     openFinale:()=>finaleChapter?.show(true),
     closeFinale:()=>finaleChapter?.close(),
     finalePrimary:()=>{if(!traveling)finaleChapter?.primary()},
@@ -2113,11 +2164,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         ? { status: 'broken', error: loadError }
         : { status: 'none' },
     startNewGame,
+    addMemory,
     skipOpening: () => renderer.finishOpening(),
     enableOpeningSound: () => renderer.enableOpeningSound(),
     findPartner: id => {
       const p = world.workers[id]
       if (!p) return
+      renderer.stopAtuFollow()
       renderer.focusOn((p.x + .5) * TILE_SIZE, (p.y + .3) * TILE_SIZE)
       renderer.playPartnerReaction(id, currentWork?.worker === id ? '我在这里忙着呢！' : '我在这里！点设施，我来帮忙。')
     },
@@ -2422,6 +2475,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       endOrder()
       void persist()
       document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pointerdown', noteNestInteraction, true)
+      window.removeEventListener('wheel', noteNestInteraction, true)
       window.removeEventListener('pagehide', onPageHide)
       window.removeEventListener('blur', onWindowBlur)
       window.removeEventListener('keydown', onKeyDown)

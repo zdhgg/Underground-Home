@@ -1,4 +1,4 @@
-import heart from '../assets/art/finale/heart-v1.png'
+import heart from '../assets/art/finale/warm-heart-v1.png'
 import folio from '../assets/art/ruins/folio-v1.png'
 import gardenBell from '../assets/art/garden/bell-v1.png'
 import bag from '../assets/art/items/bag-v1.png'

@@ -1,5 +1,6 @@
 import { RUINS_MOTIFS,RUINS_STORIES,ruinsStory } from './ruins'
 import { foundRelics, RELICS } from './relics'
+import { WARM_CRYSTAL } from './personal'
 import type { WorldState } from './world'
 
 export interface BagItem {
@@ -22,7 +23,7 @@ export function bagItems(w: WorldState): BagItem[] {
     { id: 'wood', kind: 'material', name: '旧木料', count: w.inventory.wood, description: '可以修床、做座椅和菜槽。挖土时能找到，建造时会自动从物品栏取用。' },
     ...RELICS.map(r => ({ id: r.id, kind: 'relic' as const, name: r.name, count: found.has(r.id) ? 1 : 0,
       description: found.has(r.id) ? STORIES[r.id]! : '还藏在第一层的泥土里。挖一挖，也许会有小发现！' })),
-    ...(w.finale.entered?[{id:'earth-warmth',origin:'finale' as const,kind:'relic' as const,name:'地心暖光',count:w.finale.foundWarmth?1:0,description:'最深处天然暖晶散发的温柔金色。晶体留在原岩层，我们在旁边建九位伙伴的家。终章之后也可以回来看看。'}]:[]),
+    ...(w.finale.entered?[{id:'earth-warmth',origin:'finale' as const,kind:'relic' as const,name:WARM_CRYSTAL,count:w.finale.foundWarmth?1:0,description:'最深处的心形暖晶散发的温柔金色。晶体留在原岩层，我们在旁边建九位伙伴的家。终章之后也可以回来看看。'}]:[]),
     ...(w.ruins.entered?[
       {id:'ruins-seal',origin:'ruins' as const,kind:'relic' as const,name:'旧石印',count:w.ruins.foundSeal?1:0,description:'岩层里的小小印纹，像以前住户留下的记号。原物留在原处。'},
       {id:'ruins-footprint',origin:'ruins' as const,kind:'relic' as const,name:'旧小爪印',count:w.ruins.foundFootprint?1:0,description:'一排小印子朝着旧故事壁，原来从前也有伙伴一起走过。'},

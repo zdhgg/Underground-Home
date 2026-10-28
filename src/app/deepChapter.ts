@@ -12,6 +12,7 @@ export interface DeepUI {
   available: boolean; active: boolean; entered: boolean; completed: boolean; busy: boolean
   title: string; speaker: string; speech: string; label: string; hint: string; done: number
   placing: DeepFacilityKind | null; selected: DeepFacilityKind | null; candidate: number | null; valid: boolean
+  choicesOpen: boolean
   resources: { crystals: number; ore: number; ingots: number; parts: number }
   buildings: { kind: DeepFacilityKind; built: boolean; name: string; icon: string }[]
   upgrades: { action: DeepAction; label: string; done: boolean }[]
@@ -20,6 +21,7 @@ export interface DeepUI {
 export const emptyDeepUI = (): DeepUI => ({ available: false, active: false, entered: false, completed: false, busy: false,
   title: '', speaker: '', speech: '', label: '', hint: '', done: 0, placing: null, selected: null, candidate: null, valid: false,
   resources: { crystals: 0, ore: 0, ingots: 0, parts: 0 }, buildings: [], upgrades: [], lift: false,
+  choicesOpen: false,
 })
 type Choice = { action: DeepAction; label: string } | null
 
@@ -29,12 +31,19 @@ export class DeepChapter {
   private placing: DeepFacilityKind | null = null
   private selected: DeepFacilityKind | null = null
   private candidate: number | null = null
+  private choicesOpen = false
   private choice: Choice = null
   private running = false
   private serial = 0
   private timeout: ReturnType<typeof setTimeout> | undefined
   get busy(): boolean { return this.running }
   get active(): boolean { return this.opened }
+  /** 正在选址的设施；指针据此变成"可放置"，和前两层的蓝图手感一致。 */
+  get placingKind(): DeepFacilityKind | null { return this.placing }
+  /** 地图悬停提示只在当前任务设施进入选址后出现。 */
+  get nextBuild(): DeepFacilityKind | null {
+    return this.placing
+  }
   constructor(private ports: {
     world(): WorldState; view: PixiWorldRenderer; emit(state: DeepUI): void
     changed(): void; prepare(): void; notify(text: string): void; record(change: DeepChange): void
@@ -47,18 +56,31 @@ export class DeepChapter {
       const spec = DEEP_SPECS[this.selected]
       title = spec.name; speech = spec.detail; speaker = this.selected === 'workshop' || this.selected === 'furnace' ? '阿木' : this.selected === 'collector' ? '阿岩' : '阿灯'
       label = this.selected === 'collector' ? '采集晶簇与矿石' : this.selected === 'furnace' ? '矿石 2 → 金属锭 2' : this.selected === 'workshop' ? `金属锭 2 + 晶簇 1 → 部件 ${d.precision ? 2 : 1}` : '看看下一件事'
-      hint = this.selected === 'workshop' ? '部件用来组装电梯和改进工具。' : '设施留在后侧，前面仍然可以走路。'
+      hint = this.selected === 'collector'
+        ? '本章只需要 1 台；每次可取晶簇 3、矿石 2，还能重复采集。'
+        : this.selected === 'workshop' ? '部件用来组装电梯和改进工具。' : '设施留在后侧，前面仍然可以走路。'
     }
     if (this.choice) { title = this.choice.label; label = '确认这次改进'; speech = this.upgradeDescription(this.choice.action); speaker = this.choice.action === 'pickaxe' ? '阿土' : this.choice.action === 'far-light' ? '阿灯' : this.choice.action === 'support' ? '阿岩' : '阿木' }
     if (this.placing) {
       title = `摆放${DEEP_SPECS[this.placing].name}`; speaker = '阿土'; label = '就在这里建造'
-      speech = '点一处喜欢的岩壁。绿框表示放得下，红框会说明还差什么。'
-      hint = this.candidate === null ? `${deepCostText(this.placing)} · 拖动只看地图，点一下才选位置。` : deepBuildProblem(w, this.placing, this.candidate) ?? `${deepCostText(this.placing)} · 可以建在这里。`
+      speech = this.placing === 'collector'
+        ? '采集台建 1 台就够了。建好后点它取晶簇和矿石；先选一处你喜欢的岩壁。'
+        : '点一处喜欢的岩壁。绿框表示放得下，红框会说明还差什么。'
+      hint = this.candidate === null
+        ? `${deepCostText(this.placing)} · ${this.placing === 'collector' ? '本章只需 1 台；' : ''}拖动只看地图，点一下才选位置。`
+        : deepBuildProblem(w, this.placing, this.candidate) ?? `${deepCostText(this.placing)} · 可以建在这里。`
     }
     if (this.running) { label = ''; hint = '可以拖图看看，或点“停下来”。'; speech = '伙伴正沿真实通道走过去，动手之后才改变家园。' }
+    else if (!this.placing && !this.selected && !this.choice && goal.build) {
+      label = `选择位置放置${DEEP_SPECS[goal.build].name}`
+      hint = goal.build === 'collector'
+        ? '这一步只需要 1 台采集台；按按钮后，在地图上选一处喜欢的岩壁。'
+        : `这一步先放${DEEP_SPECS[goal.build].name}，位置由你决定。`
+    }
     this.ports.emit({finaleLift:w.finale.liftExtended, ruinsLift:w.ruins.liftExtended, available: deepReady(w), active: this.opened, entered: d.entered, completed: d.completed, busy: this.running,
       title, speaker, speech, label, hint, done: goal.done, placing: this.placing, selected: this.selected,
       candidate: this.candidate, valid: !!this.placing && this.candidate !== null && !deepBuildProblem(w, this.placing, this.candidate),
+      choicesOpen: this.choicesOpen,
       resources: { crystals: d.crystals, ore: d.ore, ingots: d.ingots, parts: d.parts },
       buildings: (Object.keys(DEEP_SPECS) as DeepFacilityKind[]).map(kind => ({ kind, built: hasDeep(w, kind), name: DEEP_SPECS[kind].name, icon: DEEP_SPECS[kind].icon })),
       upgrades: [
@@ -73,19 +95,19 @@ export class DeepChapter {
     if (this.running) return
     const w = this.ports.world()
     if (!deepReady(w)) { this.ports.notify('先和大家吃完第一顿饭，再来探索晶簇层。'); return }
-    this.ports.prepare(); this.opened = true; this.selected = null; this.choice = null; this.placing = null; this.candidate = null
+    this.ports.prepare(); this.opened = true; this.selected = null; this.choice = null; this.placing = null; this.candidate = null; this.choicesOpen = false
     this.ports.view.setDeepPreview?.(null, null)
     if (focus) this.focus(deepGoal(w))
     this.refresh()
   }
   close(): void {
     if (this.opened || this.running) this.ports.view.releaseDeepCamera?.()
-    this.opened = false; this.placing = null; this.candidate = null; this.choice = null
+    this.opened = false; this.placing = null; this.candidate = null; this.choice = null; this.choicesOpen = false
     this.ports.view.setDeepPreview?.(null, null); this.refresh()
   }
   select(kind: DeepFacilityKind, newPlacement = false): void {
     if (this.running) return
-    this.ports.prepare(); this.opened = true; this.choice = null; this.candidate = null
+    this.ports.prepare(); this.opened = true; this.choice = null; this.candidate = null; this.choicesOpen = false
     const w = this.ports.world(), facility = newPlacement && kind === 'lamp' ? undefined : w.deep.facilities.find(f => f.kind === kind)
     this.selected = facility ? kind : null; this.placing = facility ? null : kind
     this.ports.view.setDeepPreview?.(null, null)
@@ -95,7 +117,7 @@ export class DeepChapter {
   }
   selectUpgrade(action: DeepAction, label: string): void {
     if (this.running) return
-    this.choice = { action, label }; this.placing = null; this.selected = null
+    this.choice = { action, label }; this.placing = null; this.selected = null; this.choicesOpen = true
     this.ports.view.setDeepPreview?.(null, null); this.opened = true; this.refresh()
   }
   tap(p: Cell): boolean {
@@ -119,6 +141,7 @@ export class DeepChapter {
         this.ports.notify(moss ? '发现晶苔：它贴着潮湿岩壁，把一点点晶光留成了紫色的小星星。' : '发现旧钻头：螺纹已经磨圆。以前的伙伴也曾在这里修工具、把家往下建。')
         return true
       }
+      // 尚未进入当前设施的选址时，空洞点击继续交给自由挖掘。
     }
     return false
   }
@@ -131,7 +154,7 @@ export class DeepChapter {
       if (problem) { this.ports.notify(problem); return }
       this.walk({ x, y: DEEP_FOOT }, () => this.workAt('atu', { x, y: DEEP_FOOT }, () => {
         const result = buildDeep(w, kind, x)
-        if (result.ok) { this.ports.record(result.change); this.placing = null; this.selected = null; this.candidate = null; this.ports.view.setDeepPreview?.(null, null); playDeepSound('build'); if (kind === 'workshop') this.ports.milestone('阿木来帮忙啦！', '松鼠工匠 · 金属锭与晶光能变成部件') }
+        if (result.ok) { this.ports.record(result.change); this.placing = null; this.selected = null; this.candidate = null; this.choicesOpen = false; this.ports.view.setDeepPreview?.(null, null); playDeepSound('build'); if (kind === 'workshop') this.ports.milestone('阿木来帮忙啦！', '松鼠工匠 · 金属锭与晶光能变成部件') }
         this.ports.notify(result.message); this.finish()
       })); return
     }

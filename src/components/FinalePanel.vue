@@ -2,7 +2,7 @@
 import type { FinaleUI } from '../app/finaleChapter'
 import type { FinaleFacilityKind,FinaleTheme } from '../core/world'
 import type { DeepAction } from '../core/deep'
-import heart from '../assets/art/finale/heart-v1.png'
+import heart from '../assets/art/finale/warm-heart-v1.png'
 import table from '../assets/art/finale/table-v1.png'
 import memory from '../assets/art/finale/memory-v1.png'
 import atu from '../assets/art/characters/atu-portrait-v1.png'
@@ -23,7 +23,7 @@ const portraits:Record<string,string>={阿土:atu,阿灯:adeng,小满:xiaoman,�
   <header><span>第 9 章 · 地心暖光 · 终章</span><button type="button" aria-label="收起地心暖光面板" @click="$emit('close')">✕</button></header>
   <div class="chapter-line"><span :style="{width:`${state.done/20*100}%`}" /></div>
   <div class="panel-content">
-   <div class="heading"><h2>{{state.title}}</h2><small>{{state.completed?'终章已完成':`${state.done} / 20`}}</small></div>
+   <div class="heading"><h2>{{state.title}}</h2><small v-if="!state.celebrating">{{state.completed?'终章已完成':`${state.done} / 20`}}</small></div>
    <div v-if="!['beacon','bench'].includes(state.selected??state.placing??'')" class="illustration" aria-hidden="true"><img :src="state.memoryIndex!==null||state.selected==='memory'||state.placing==='memory'?memory:state.foundWarmth&&!state.warmthIntro?table:heart" alt="" /></div>
    <p v-if="state.memoryIndex!==null" class="memory-count">九层家园相册 · {{state.memoryIndex+1}} / 9 <span>{{state.replay?'重读':'回望'}}</span></p>
    <div class="speech"><img :src="portraits[state.speaker]??atu" alt="" /><div><b>{{state.speaker}}</b><p>{{state.speech}}</p></div></div>

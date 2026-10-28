@@ -89,7 +89,7 @@ export function undoRoom(w: WorldState, change: RoomChange): boolean {
     for (const p of w.farm.planters) if (p.roomId === change.after.id && (!change.alsoBefore || !roomContains(change.alsoBefore, p)) && !addedPlanters.some(a => a.id === p.id)) addedPlanters.push(p)
   }
   if (addedPods.length && w.exploration.clueFound && w.pods.every(p => addedPods.some(a => a.id === p.id))) return false
-  if (addedPods.some(p => JSON.stringify(w.pods.find(a => a.id === p.id)) !== JSON.stringify(p))) return false
+  if (addedPods.some(p => { const current = w.pods.find(a => a.id === p.id); if (!current) return true; const { mark: _currentMark, ...currentShape } = current; const { mark: _savedMark, ...savedShape } = p; return JSON.stringify(currentShape) !== JSON.stringify(savedShape) })) return false
   // 有收成的房间也能撤回施工；食物、水和升级均不回滚。
   if (addedPlanters.some(p => !w.farm.planters.some(a => a.id === p.id && a.x === p.x && a.y === p.y))) return false
   const candidate = { ...w, rooms: w.rooms.filter(r => r.id !== id), pods: w.pods.filter(p => !addedPods.some(a => a.id === p.id)), farm: { ...w.farm, planters: w.farm.planters.filter(p => !addedPlanters.some(a => a.id === p.id)) } }

@@ -187,6 +187,17 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('第七层设施与风机反馈均在人物后侧，铃铃独立造型、真实移动和窄屏目标不沉底',()=>{
     const w=completedVentilation();renderer.setWorld(w);const layer=view.worldLayer.getChildByLabel('ventilation-chapter')as Container;expect(view.worldLayer.getChildIndex(layer)).toBeLessThan(view.worldLayer.getChildIndex(view.friendsLayer));expect(layer.getChildByLabel('ventilation-fan')).not.toBeNull();expect(layer.getChildByLabel('ventilation-bench')).not.toBeNull();expect(layer.getChildByLabel('ventilation-motion')).not.toBeNull();const f=view.friends.find(f=>f.partnerId==='lingling')!;expect(f.view.getChildByLabel('lingling-sprite',true)).not.toBeNull();expect(view.friends.filter(f=>f.view.visible)).toHaveLength(8);let done=0;renderer.playPartnerTravel('lingling',[{x:36,y:82},{x:35,y:82}],()=>{},()=>done++);for(let i=0;i<4;i++)view.tick({deltaMS:100}as Ticker);expect(done).toBe(1);view.viewport={width:398,height:756};renderer.focusOn(30*TILE_SIZE,81*TILE_SIZE,'building');expect((83*TILE_SIZE-view.camera.y)*view.camera.zoom).toBeLessThan(view.viewport.height*.45);renderer.setVentilationPreview('bench',34);renderer.setVentilationPreview(null,null)
   })
+  it('阿木沿路径移动时按行进方向翻面，不把左行和右行都画成同一朝向',()=>{
+    renderer.setWorld(completedVentilation())
+    const amu = view.friends.find(f => f.partnerId === 'amu')!
+    const figure = amu.view.getChildByLabel('amu-figure', true) as Container
+    renderer.playPartnerTravel('amu', [{ x: 30, y: 82 }, { x: 31, y: 82 }], () => {}, () => {})
+    view.tick({ deltaMS: 100 } as Ticker); view.tick({ deltaMS: 20 } as Ticker)
+    expect(figure.scale.x).toBe(-1)
+    renderer.playPartnerTravel('amu', [{ x: 31, y: 82 }, { x: 30, y: 82 }], () => {}, () => {})
+    view.tick({ deltaMS: 100 } as Ticker); view.tick({ deltaMS: 20 } as Ticker)
+    expect(figure.scale.x).toBe(1)
+  })
   it('第六层插画在伙伴后侧、水位在石池插画前侧，团团独立造型可走动且小屏目标不沉底',()=>{
     const w=completedReservoir();renderer.setWorld(w)
     const layer=view.worldLayer.getChildByLabel('reservoir-chapter') as Container
@@ -289,7 +300,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     }
     vi.mocked(loadMoleTextures).mockResolvedValue(moleArt)
     const companion = () => ({ idle: texture(512), blink: texture(512), rest: texture(256) })
-    companionArt = { adeng: companion(), xiaoman: companion(), xiaoquan: companion(), taitai: companion(), tuantuan: companion(),lingling:companion() }
+    companionArt = { adeng: companion(), xiaoman: companion(), xiaoquan: companion(), ayan: companion(), amu: companion(), taitai: companion(), tuantuan: companion(),lingling:companion() }
     vi.mocked(loadCompanionTextures).mockResolvedValue(companionArt)
     vi.mocked(loadTerrainTextures).mockResolvedValue(art)
     vi.mocked(loadEnergyCoreTexture).mockResolvedValue(new Texture({
@@ -736,6 +747,82 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     renderer.focusWater()
     renderer.panBy(0, 20)
     expect(view.cameraTween).toBeNull()
+  })
+
+  describe('阿土行动跟随', () => {
+    it('长路 / 跨层走位时镜头中心跟着阿土，楼层随镜头换', () => {
+      const onView = vi.fn()
+      renderer.onViewChanged = onView
+      renderer.focusHome()
+      const startY = view.camera.y
+      const route = Array.from({ length: 11 }, (_, i) => ({ x: 27, y: 11 + i }))
+      const arrived = vi.fn()
+      renderer.playExplorationTravel(route, arrived)
+      for (let i = 0; i < 12; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera.y).toBeGreaterThan(startY + 100)
+      const anchor = view.explorationScene.speechAnchor!
+      const centerY = view.camera.y + view.viewport.height / view.camera.zoom / 2
+      expect(Math.abs(centerY - anchor.y)).toBeLessThan(TILE_SIZE * 2)
+      for (let i = 0; i < 14; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(arrived).toHaveBeenCalledTimes(1)
+      expect(onView).toHaveBeenLastCalledWith({ layer: 'water', overview: false })
+    })
+
+    it('跨层跟随按 60 帧平滑推进，不会一帧跳出很远', () => {
+      renderer.focusHome()
+      const route = Array.from({ length: 21 }, (_, i) => ({ x: 27, y: 11 + i }))
+      renderer.playExplorationTravel(route, () => {})
+      let last = { ...view.camera }
+      let maxStep = 0
+      for (let i = 0; i < 240; i++) {
+        view.tick({ deltaMS: 1000 / 60 } as Ticker)
+        maxStep = Math.max(maxStep, Math.abs(view.camera.y - last.y))
+        last = { ...view.camera }
+      }
+      expect(maxStep).toBeLessThan(40)
+      expect(maxStep).toBeGreaterThan(0.5)
+    })
+
+    it('同一趟行动里玩家拖图，镜头立刻让位；下一趟行动开始再恢复跟随', () => {
+      renderer.playExplorationTravel(Array.from({ length: 21 }, (_, i) => ({ x: 27, y: 11 + i })), () => {})
+      for (let i = 0; i < 6; i++) view.tick({ deltaMS: 100 } as Ticker)
+      renderer.panBy(0, -120)
+      const held = { ...view.camera }
+      for (let i = 0; i < 5; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera).toEqual(held)
+      // 这一趟走完，玩家保持自己拖到的位置
+      for (let i = 0; i < 30; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera).toEqual(held)
+      // 阿土开始新一趟：跟随权回来
+      const before = view.camera.y
+      renderer.playExplorationTravel([{ x: 27, y: 31 }, { x: 27, y: 32 }, { x: 27, y: 33 }, { x: 27, y: 34 }, { x: 27, y: 35 }, { x: 27, y: 36 }], () => {})
+      for (let i = 0; i < 8; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera.y - before).toBeGreaterThan(80)
+    })
+
+    it('全景观察时阿土照走，镜头不被拽回', () => {
+      renderer.focusOverview()
+      const held = { ...view.camera }
+      renderer.playExplorationTravel(Array.from({ length: 9 }, (_, i) => ({ x: 30, y: 8 + i })), () => {})
+      for (let i = 0; i < 6; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera).toEqual(held)
+      expect(renderer.isOverview).toBe(true)
+    })
+
+    it('两三格的短走位不硬拉镜头，角色仍留在画面里', () => {
+      renderer.focusOn(20 * TILE_SIZE, 11 * TILE_SIZE)
+      const held = { ...view.camera }
+      renderer.playExplorationTravel([{ x: 19, y: 11 }, { x: 20, y: 11 }, { x: 21, y: 11 }], () => {})
+      for (let i = 0; i < 6; i++) view.tick({ deltaMS: 100 } as Ticker)
+      expect(view.camera).toEqual(held)
+      const anchor = view.explorationScene.speechAnchor!
+      const sx = (anchor.x - view.camera.x) * view.camera.zoom
+      const sy = (anchor.y - view.camera.y) * view.camera.zoom
+      expect(sx).toBeGreaterThan(0)
+      expect(sx).toBeLessThan(view.viewport.width)
+      expect(sy).toBeGreaterThan(0)
+      expect(sy).toBeLessThan(view.viewport.height)
+    })
   })
 
   describe('点亮与阿灯', () => {

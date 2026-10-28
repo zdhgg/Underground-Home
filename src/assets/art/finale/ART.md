@@ -4,15 +4,28 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| heart-v1.png | 右侧天然暖晶，晶体留在原岩壁；柔光不代表可挖走的消耗材料 |
+| warm-heart-v1.png | 终章实际使用的心形暖晶；透明背景，晶体留在原岩壁，柔光不代表可挖走的消耗材料 |
+| heart-v1.png | 早期水晶洞参考图，保留在本目录，不再接入游戏 |
 | table-v1.png | 嵌岩九人长桌与九个后侧小凳，前侧为真实人物保留；食物、清水、风铃和主题装饰由 Pixi 随状态叠加 |
 | memory-v1.png | 三行三列九个空格的家园纪念壁，九层回忆标记由 Pixi 绘制 |
 
-图片均查看过原图；桌后共有九个小凳，纪念壁为九个空格。天然暖晶带生成的柔光 alpha 边缘，不做脚本抠图。具体尺寸、alpha、字节数和 SHA-256 见 manifest.json。人物使用已有九位伙伴，不新增替代造型；图案和准备物件在人物后侧，选址框单独在前侧。插画审查与对象测试不能替代实景色彩、遮挡和缩放检查。
+图片均查看过原图；桌后共有九个小凳，纪念壁为九个空格。早期三张图片保留生成的 alpha 边缘，不做脚本抠图；`warm-heart-v1.png` 以 `heart-v1.png` 为风格参考生成后，用本地脚本从四角泛洪去除白底并裁切，保留透明 alpha。具体尺寸、alpha、字节数和 SHA-256 见 manifest.json。人物使用已有九位伙伴，不新增替代造型；图案和准备物件在人物后侧，选址框单独在前侧。插画审查与对象测试不能替代实景色彩、遮挡和缩放检查。
 
 暖光台、梯道护框、石凳、九层光路、食物瓶碗、风铃与菌叶用项目原生绘制。八类音效由 finaleSound.ts 在本地 WebAudio 合成：凿岩、建造、发现、接暖光、风铃、开席、翻页、终章；共享音量、静音与后台门禁，没有外部音频下载。
 
 ## 实际提示词
+
+### warm-heart-v1.png
+
+Use case: children's game asset, storybook watercolor
+Input images: Image 1: style reference only (warm amber crystal cave, hand-painted watercolor, mossy stone frame). Do not copy its composition or exact shapes; borrow only the palette, brushwork, soft edges and paper texture.
+Primary request: a single large heart-shaped warm amber crystal formation, clearly readable as a heart, embedded in a small natural stone frame with a little green moss at the base.
+Scene/backdrop: fully transparent background, no environment behind the object.
+Subject: faceted translucent golden-amber crystal cluster forming a clear heart silhouette, with a soft warm inner glow.
+Style/medium: hand-painted watercolor illustration, same warm earthy palette as the reference, gentle paper grain, soft hand-painted edges.
+Composition/framing: centered, whole object visible, generous transparent padding, no cropping, no extra objects.
+Lighting/mood: warm golden light from inside the crystal, cozy and magical, suitable for a 7-year-old's game finale.
+Constraints: heart silhouette must stay clear and readable when scaled down to about 80x54 pixels; no text, no watermark, no characters, no background scenery; transparent alpha background.
 
 ### heart-v1.png
 

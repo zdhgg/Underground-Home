@@ -8,6 +8,7 @@ import { canPlacePod, canRestoreDig, placePod } from '../src/core/build'
 import { atuRoute } from '../src/core/atu'
 import { deserialize, serialize } from '../src/core/persistence'
 import { createWorldHistory } from '../src/core/history'
+import { drawPlanter, planterOffset, planterPosition } from '../src/render/farmProps'
 
 function ready() {
   const w = createInitialWorld()
@@ -153,6 +154,32 @@ describe('伙伴工作：从真实站位到设施', () => {
 })
 
 describe('伙伴动作与效果同步', () => {
+  it('收菜时朝目标俯身，落手后收回；取消也恢复姿势', () => {
+    const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), harvestLean: lean } }
+    const motion = new PartnerMotion()
+    const plan: WorkPlan = { worker: 'xiaoman', target: { kind: 'harvest', x: 31, y: 21 }, at: { x: 32, y: 21 }, route: [] }
+    motion.work(friend, plan, hit, done)
+    motion.update(.3); expect(lean).toHaveBeenLastCalledWith(expect.any(Number), -1); expect(lean.mock.lastCall![0]).toBeGreaterThan(0)
+    expect(hit).not.toHaveBeenCalled()
+    motion.update(.25); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    motion.work(friend, plan, hit, done); motion.update(.3); motion.cancel()
+    expect(lean).toHaveBeenLastCalledWith(0, 1); expect(hit).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('设施菜槽的绘制与反馈使用同一偏移，独立菜槽保持原位', () => {
+    const w = createInitialWorld()
+    w.builtSites.push({ id: 'spring-garden', kind: 'garden' })
+    for (const [x, offset] of [[28, .25], [30, -.25], [35, undefined]] as const) {
+      const planter = { id: x, x, y: 21, growth: 3 }
+      expect(planterOffset(w, planter)).toBe(offset)
+      const view = drawPlanter(planter, null, planterOffset(w, planter))
+      expect({ x: view.x, y: view.y }).toEqual(planterPosition(planter, offset))
+      view.destroy({ children: true })
+    }
+  })
   it('逐格回调，取消中途不调用抵达；短动作只落手一次且取消不补结算', () => {
     const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn() } }
     friend.view.addChild(new Graphics())

@@ -12,6 +12,7 @@ export class OpeningSound {
   private beat = -1
   private chimed = false
   private warmed = false
+  private welcomed = false
   enable(): void {
     this.enabled = true
     if (this.audio) { void this.audio.resume().catch(() => {}); return }
@@ -38,6 +39,7 @@ export class OpeningSound {
     if (!ctx || gameAudio.ready !== ctx) {
       this.warmed ||= frame.warmBurst > .55
       this.chimed ||= frame.clue > .2
+      this.welcomed ||= frame.homeReveal > .2
       return
     }
     this.volume!.gain.setTargetAtTime(frame.t < OPENING_BEATS.climb ? .06 * (1 - frame.warmth * .85) : .008, ctx.currentTime, .18)
@@ -51,6 +53,11 @@ export class OpeningSound {
       this.tone(523.25, .5, .012)
     }
     if (frame.clue > .2 && !this.chimed) { this.chimed = true; this.tone(880, .35, .025) }
+    if (frame.homeReveal > .2 && !this.welcomed) {
+      this.welcomed = true
+      this.tone(523.25, .65, .018)
+      this.tone(659.25, .55, .012)
+    }
   }
   private tone(frequency: number, duration: number, gain: number): void {
     const ctx = this.audio!, note = ctx.createOscillator(), volume = ctx.createGain()
@@ -66,6 +73,6 @@ export class OpeningSound {
     this.filter?.disconnect(); this.filter = null
     this.volume?.disconnect()
     gameAudio.stopEffects()
-    this.audio = null; this.volume = null; this.beat = -1; this.chimed = false; this.warmed = false
+    this.audio = null; this.volume = null; this.beat = -1; this.chimed = false; this.warmed = false; this.welcomed = false
   }
 }

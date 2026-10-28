@@ -61,14 +61,14 @@ import type { MealMove } from '../core/meal'
 import { LightingScene } from './lightingScene'
 import { powerLinePath } from '../core/power'
 import { drawCollection, loadCollectionTextures, type CollectionTextures } from './collectionScene'
-import { WATER_BARREL_X, WATER_BARREL_Y, drawNursery, drawPlanter, drawRipeGlow, drawWaterLine } from './farmProps'
+import { drawMemoryCorner } from './memoryCorner'
+import { WATER_BARREL_X, WATER_BARREL_Y, drawNursery, drawPlanter, drawRipeGlow, drawWaterLine, planterOffset, planterPosition } from './farmProps'
 import { createStrataBackdrop, createStrataLabels, terrainTint } from './strataScene'
 import { SurfaceScene, SURFACE_ENTRANCE } from './surfaceScene'
 import { loadSurfaceTextures, type SurfaceTextures } from './surfaceTextures'
 import { loadEnvironmentTextures, type EnvironmentTextures } from './environmentArt'
 import { ExplorationScene } from './explorationScene'
 import { loadFacilityTextures, type FacilityTextures } from './facilityArt'
-import { siteAt } from '../core/sites'
 import { loadMoleTextures, MoleVisual, type MoleTextures } from './moleVisual'
 import { OpeningScene } from './OpeningScene'
 import { OPENING_DURATION, openingFrame, openingWeatherAt } from './openingTimeline'
@@ -501,6 +501,8 @@ export class PixiWorldRenderer {
   private readonly landmarkLayer = new Container()
   /** 大厅后墙的收藏架：显示已经挖到的旧物，不改变通行。 */
   private readonly relicLayer = new Container()
+  /** 第一层墙上的家庭生活记录纪念物 */
+  private readonly memoryLayer = new Container()
   /** 第一层自由摆放的储物架 */
   private readonly shelfLayer = new Container()
   /** 第一层的生产道具：种植槽与"水到家"的水管 / 水缸 */
@@ -657,6 +659,7 @@ export class PixiWorldRenderer {
       this.shelterFixtures,
       this.landmarkLayer,
       this.relicLayer,
+      this.memoryLayer,
       this.shelfLayer,
       this.farmLayer,
       this.podLayer,
@@ -776,6 +779,7 @@ export class PixiWorldRenderer {
     this.refreshTerrain()
     this.rebuildLandmarks()
     this.refreshRelics()
+    this.refreshMemories()
     this.refreshShelves()
     this.refreshFarm()
     this.refreshPods()
@@ -799,10 +803,7 @@ export class PixiWorldRenderer {
     if (!world) return
     if (world.farm.waterSupplied) this.farmLayer.addChild(drawWaterLine(world, this.environmentTextures))
     for (const planter of world.farm.planters) {
-      const site = siteAt(planter)
-      const managed = site && world.builtSites.some(b => b.id === site.id && b.kind === 'garden')
-      const offset = managed ? planter.x === site.x ? .25 : -.25 : undefined
-      this.farmLayer.addChild(drawPlanter(planter, this.environmentTextures, offset))
+      this.farmLayer.addChild(drawPlanter(planter, this.environmentTextures, planterOffset(world, planter)))
     }
     for (const nursery of world.nurseries) this.farmLayer.addChild(drawNursery(nursery))
   }
@@ -863,6 +864,12 @@ export class PixiWorldRenderer {
     this.relicLayer.addChild(drawCollection(world, this.collectionTextures))
     // 架子上摆的旧物跟着更新。
     this.refreshShelves()
+  }
+
+  refreshMemories(): void {
+    for (const child of this.memoryLayer.removeChildren()) child.destroy({ children: true })
+    if (!this.world) return
+    this.memoryLayer.addChild(drawMemoryCorner(this.world))
   }
 
   /** 只重建储物架：摆放、撤销、载入或旧物变化后调用。 */
@@ -933,6 +940,9 @@ export class PixiWorldRenderer {
   cancelDeepAnimation(): void { this.reservoirScene.stopFlow(); this.deepScene.cancel(); this.explorationScene.setRiding(false); this.cancelExplorationAnimation(); this.cancelPartnerWork(); this.refreshDeep() }
   setLampPreview(cell: Cell | null): void { if (this.world) this.lightingScene.showPreview(this.world, cell) }
   playExplorationTravel(points: Cell[], done: () => void, step?: (cell: Cell) => void): void {
+    // 跨层 / 长距离走位让镜头中心跟过去；两三格的短走位只把人推回安全区，避免镜头跟着抖。
+    const vertical = points.length ? Math.abs(points[points.length - 1].y - points[0].y) : 0
+    this.atuFollowCenter = points.length >= 6 || vertical >= 4
     this.explorationScene.travel(points, done, step)
     this.syncMoleVisibility()
   }
@@ -946,20 +956,58 @@ export class PixiWorldRenderer {
   setAtuTarget(target: Cell | null, stand?: Cell, lift = 0, text = ''): void { this.explorationScene.preview(target, stand, lift, text) }
 
   private manualCamera = false
+  /** 这一趟阿土是不是长距离 / 跨层走位：是就把镜头中心带过去，不是就只推回安全区。 */
+  private atuFollowCenter = false
+  /** 上一帧阿土是否在行动：从静止转入行动时，把镜头的跟随权拿回来。 */
+  private atuWasActing = false
   findAtu(): void {
     const p = this.world?.exploration.explorer
     if (p) { this.manualCamera = false; this.focusOn((p.x + .5) * TILE_SIZE, (p.y + .2) * TILE_SIZE) }
   }
 
-  private followAtuAtEdge(dt: number): void {
-    if (this.manualCamera || this.overview || this.cameraTween || !this.explorationScene.animating) return
+  /** 玩家主动去看别人（伙伴在哪 / 看看伙伴）：这一趟先不跟阿土。 */
+  stopAtuFollow(): void { this.manualCamera = true }
+
+  /**
+   * 阿土行动时跟镜头。
+   * 每次新行动开始都重新拿回跟随权，平时拖过图不再压住这一趟；
+   * 长距离 / 跨层走位把镜头中心带到阿土身上，原地挖一格或两三格的短走位只把他推回视野安全区；
+   * 玩家在同一趟行动里一拖一缩，就把镜头交还给他，直到这趟结束。
+   */
+  private followAtu(dt: number): void {
+    const acting = this.explorationScene.animating
+    if (acting && !this.atuWasActing) this.manualCamera = false
+    this.atuWasActing = acting
+    if (!acting || this.manualCamera || this.overview || this.cameraTween) return
     const p = this.explorationScene.speechAnchor
     if (!p) return
-    const x = (p.x - this.camera.x) * this.camera.zoom, y = (p.y - this.camera.y) * this.camera.zoom
-    if (x < 85 || x > this.viewport.width - 85 || y < 60 || y > this.viewport.height - 60) {
-      const target = centerOn(p.x, p.y, this.viewport, this.camera.zoom), k = Math.min(1, dt * 3)
-      this.camera = { ...this.camera, x: this.camera.x + (target.x - this.camera.x) * k, y: this.camera.y + (target.y - this.camera.y) * k }; this.applyCamera()
-    }
+    const zoom = this.camera.zoom
+    const lead = this.explorationScene.moving && this.atuFollowCenter
+    const target = lead ? centerOn(p.x, p.y, this.viewport, zoom) : this.comfortTarget(p, zoom)
+    const k = Math.min(1, dt * (lead ? 3.4 : 5))
+    const next = clampCamera({
+      x: this.camera.x + (target.x - this.camera.x) * k,
+      y: this.camera.y + (target.y - this.camera.y) * k,
+      zoom,
+    }, this.viewport)
+    if (Math.abs(next.x - this.camera.x) < .01 && Math.abs(next.y - this.camera.y) < .01) return
+    this.camera = next
+    this.applyCamera()
+  }
+
+  /** 只把阿土推回视野里的安全区，已经看得见就不动镜头。 */
+  private comfortTarget(p: { x: number; y: number }, zoom: number): Camera {
+    const screenX = (p.x - this.camera.x) * zoom
+    const screenY = (p.y - this.camera.y) * zoom
+    const marginX = this.viewport.width * .24
+    const marginY = this.viewport.height * .22
+    let dx = 0
+    let dy = 0
+    if (screenX < marginX) dx = screenX - marginX
+    else if (screenX > this.viewport.width - marginX) dx = screenX - (this.viewport.width - marginX)
+    if (screenY < marginY) dy = screenY - marginY
+    else if (screenY > this.viewport.height - marginY) dy = screenY - (this.viewport.height - marginY)
+    return { x: this.camera.x + dx / zoom, y: this.camera.y + dy / zoom, zoom }
   }
 
   /** 是否有正在播出的探索演出（走路 / 挥镐）。 */
@@ -1007,6 +1055,7 @@ export class PixiWorldRenderer {
   }
 
   focusPartner(id: PartnerId): void {
+    this.stopAtuFollow()
     const p = id === 'adeng' && this.lampReveal
       ? { x: this.lampReveal.to.x, y: this.lampReveal.to.y - 40 } : this.partnerAnchor(id)
     if (!p) return
@@ -1017,6 +1066,11 @@ export class PixiWorldRenderer {
       x: p.x - this.viewport.width / (2 * zoom),
       y: p.y - this.viewport.height * .72 / zoom, zoom,
     }, this.viewport), elapsed: 0, duration: .45 }
+  }
+
+  nestAnchor(pod: SleepPod): ConversationAnchor & { targetHalfWidth: number; targetHeight: number } {
+    return { x: ((pod.x + 1.5) * TILE_SIZE - this.camera.x) * this.camera.zoom, y: (pod.y * TILE_SIZE - this.camera.y) * this.camera.zoom, width: this.viewport.width, height: this.viewport.height,
+      targetHalfWidth: 1.5 * TILE_SIZE * this.camera.zoom, targetHeight: 2 * TILE_SIZE * this.camera.zoom }
   }
 
   private publishConversationAnchor(): void {
@@ -1504,7 +1558,7 @@ export class PixiWorldRenderer {
     this.gardenScene.update(this.world, this.elapsed)
     this.reservoirScene.update(this.world, dt)
     this.ventilationScene.update(this.world, dt)
-    this.followAtuAtEdge(dt)
+    this.followAtu(dt)
     this.partnerFeedback.update(dt)
     this.publishConversationAnchor()
     this.drawFarmFlow()
@@ -2078,12 +2132,10 @@ export class PixiWorldRenderer {
     this.playBurst(barrelX, (WATER_BARREL_Y + 0.6) * TILE_SIZE, { color: 0xbfe6f2, count: 16, speed: 70, ring: true, ringRadius: 38 })
   }
 
-  /** 收菜：一格小爆发 + 上飘的叶子和光点 */
+  /** 收菜：菜槽上方少量轻柔的光点。 */
   playHarvest(cell: Cell): void {
-    const x = (cell.x + 0.5) * TILE_SIZE
-    const y = (cell.y + 0.45) * TILE_SIZE
-    this.playBurst(x, y, { color: 0xd7f4a0, count: 14, speed: 74, ring: true, ringRadius: 24 })
-    this.playBurst(x, y - 6, { color: 0xffe6ad, count: 10, speed: 40, gravity: -30 })
+    const position = planterPosition(cell, this.world ? planterOffset(this.world, cell) : undefined)
+    this.playBurst(position.x, position.y - 18, { color: 0xd7f4a0, count: 5, speed: 22, gravity: -20 })
   }
 
   /** 开饭：伙伴原地开心蹦跳 + 爱心和彩纸；有菜有水，家里热闹一下 */

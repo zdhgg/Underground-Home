@@ -12,7 +12,7 @@ export function bedSlots(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall'>): 
 }
 
 /** 手绘床架位于后侧，前侧仍由玩法规则保留通行；无素材时保留旧造型。 */
-export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall'>, preview = false, texture?: Texture): Container {
+export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall' | 'mark'>, preview = false, texture?: Texture): Container {
   const view = new Container()
   const g = new Graphics()
   const w = POD_SIZE.w * TILE_SIZE
@@ -39,6 +39,21 @@ export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall'
   }
   if (texture) g.destroy()
   if (!preview) {
+    if (pod.mark) {
+      const badge = new Graphics().circle(w / 2, 9, 9).fill(0xf5e5b5).stroke({ width: 1.5, color: 0x8c744e })
+      const mark = new Graphics()
+      if (pod.mark === 'star') {
+        const points: number[] = []
+        for (let i = 0; i < 10; i++) { const angle = -Math.PI / 2 + i * Math.PI / 5, radius = i % 2 ? 3 : 6; points.push(w / 2 + Math.cos(angle) * radius, 9 + Math.sin(angle) * radius) }
+        mark.poly(points).fill(0xb47a2f)
+      } else if (pod.mark === 'leaf') {
+        mark.moveTo(w / 2 - 5, 12).quadraticCurveTo(w / 2 - 5, 3, w / 2 + 5, 4).quadraticCurveTo(w / 2 + 5, 12, w / 2 - 5, 12).fill(0x4d8862)
+        mark.moveTo(w / 2 - 4, 12).lineTo(w / 2 + 3, 6).stroke({ width: 1, color: 0xe8f3d8 })
+      } else {
+        mark.moveTo(w / 2, 3).quadraticCurveTo(w / 2 + 6, 9, w / 2 + 4, 12).quadraticCurveTo(w / 2, 16, w / 2 - 4, 12).quadraticCurveTo(w / 2 - 6, 9, w / 2, 3).fill(0x428ba1)
+      }
+      view.addChild(badge, mark)
+    }
     const label = new Text({ text: pod.backWall ? '2个床位' : '双人睡眠舱', style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 10, fill: 0xf6e9c4 } })
     label.anchor.set(0.5, 0)
     label.position.set(w / 2, h + 4)
