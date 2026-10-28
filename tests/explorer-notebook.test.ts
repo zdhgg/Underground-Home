@@ -152,6 +152,20 @@ describe('阿土的探索小本子', () => {
     expect(host.querySelectorAll('.wish-action')).toHaveLength(2)
   })
 
+  it('窄屏紧凑条目保留短标题、完整无障碍名称和缺料提示', async () => {
+    const props = { ...baseProps(), wishes: wishes() }
+    const { host } = await mountNotebook(props as ReturnType<typeof baseProps>)
+    const buttons = host.querySelectorAll<HTMLButtonElement>('.wish-action')
+    expect(buttons[0].getAttribute('aria-label')).toBe('去看看小窝')
+    expect(buttons[0].querySelector('.wish-action-full')?.textContent).toBe('去看看小窝')
+    expect(buttons[0].querySelector('.wish-action-short')?.textContent).toBe('去看看')
+    expect(buttons[1].getAttribute('aria-label')).toBe('去看看菜园')
+    expect(host.querySelector('.wish-title-full')?.textContent).toBe('给小窝添盏暖光灯')
+    expect(host.querySelector('.wish-title-short')?.textContent).toBe('小窝添盏暖光灯')
+    expect(host.querySelector('.wish-note')?.textContent).toContain('还差1个工坊部件')
+    for (const button of buttons) expect(button.hasAttribute('data-primary-action')).toBe(false)
+  })
+
   it('点击心愿只发出稳定ID，由会话重新验证目标', async () => {
     const wish = vi.fn()
     const props = { ...baseProps(), wishes: wishes() }

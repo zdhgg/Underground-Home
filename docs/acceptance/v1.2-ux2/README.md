@@ -54,3 +54,24 @@ node docs/acceptance/v1.2-ux2/verify.cjs
 - 场景 E 通过真实小满收菜完成：食物 2→3、生长阶段回 0，最后一槽熟菜收完后心愿消失。
 - 场景 F 两条心愿同时显示；小本子高度不超过舞台，内部滚动可用，“家园全景”仍可达。
 - 场景 G 小满收菜期间打开小本子只显示楼层导航；心愿与主线都让位，工作卡继续、最终完成，舞台主要操作数为 0。第三层面板打开时同样不显示心愿，章节自己的主要操作为 1。
+
+## 合并前窄屏紧凑修订复核（2026-10-28）
+
+修改前截图保留在本目录。窄屏修订后使用独立脚本复核，避免覆盖旧证据：
+
+```bash
+node docs/acceptance/v1.2-ux2/verify-compact.cjs
+```
+
+需要与上一节相同的 `5197` 开发服务和 `5198` 生产预览服务。脚本会：
+
+- 在 1440/1280/390/360 四个视口打开 `bothWishesWorld()`，测量心愿区高度、按钮 `getBoundingClientRect()`、按钮与标题重叠、文字截断、首屏楼层可见性与横向溢出。
+- 在 390 打开缺料存档，确认普通说明收起但缺料提示仍在。
+- 在 390 打开初期存档，确认无心愿时栏目不存在。
+- 在 390 点击“去看看小窝”“去看看菜园”，确认只定位、小本子收起、存档中的 `deep`/`pods`/`farm` 不变。
+
+结果：
+
+- `compact-fixed-before.json`：`d58e621` 基线测量（390/360）。
+- `compact-fixed-results.json`：修改前后对比、四视口 after 数据与功能抽查。
+- 新增截图：`{1440,1280,390,360}-F-two-wishes-compact-fixed.jpg`、`390-C-no-parts-compact-fixed.jpg`、`390-A-no-wishes-compact-fixed.jpg`、`390-B-focus-compact-fixed.jpg`、`390-D-ripe-focus-compact-fixed.jpg`。
