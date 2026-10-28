@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 25
+export const WORLD_VERSION = 26
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -66,6 +66,8 @@ export interface SleepPod extends Cell {
   backWall?: true
   /** 小主人为这间小窝选的装饰，不影响床位和通路。 */
   mark?: 'star' | 'leaf' | 'drop'
+  /** 工坊部件带回家的永久改善，不参与碰撞或照明规则。 */
+  warmLamp?: true
 }
 
 export interface Rect {

@@ -17,7 +17,7 @@ import { emptyHallUI } from '../src/app/hallChapter'
 import { emptyDeepUI } from '../src/app/deepChapter'
 
 // 只替换世界/渲染会话入口。测试真实 App 和真实面板，防止各组件单测通过却同时出现在舞台。
-const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, openDeep: vi.fn(), showOverview: vi.fn(), openHall: vi.fn(), openGarden: vi.fn(), openReservoir: vi.fn(), openVentilation: vi.fn(), openRuins: vi.fn(), openFinale: vi.fn(), cancelAction: vi.fn(), findPartner: vi.fn(), nestConfirm: vi.fn(), nestClose: vi.fn(), addMemory: vi.fn(), feed: vi.fn(), facilityPrimary: vi.fn(), facilityUpgrade: vi.fn(), gardenPrimary: vi.fn(), gardenVariety: vi.fn(), reservoirPrimary: vi.fn(), reservoirRoute: vi.fn(), finalePrimary:vi.fn(),finaleTheme:vi.fn(),finalePanorama:vi.fn(),ruinsPrimary:vi.fn(),ruinsMotif:vi.fn(),ruinsEdition:vi.fn(),ventilationPrimary:vi.fn(),ventilationMode:vi.fn(),ventilationVariety:vi.fn() }))
+const harness = vi.hoisted(() => ({ hooks: null as SessionHooks | null, openDeep: vi.fn(), showOverview: vi.fn(), openHall: vi.fn(), openGarden: vi.fn(), openReservoir: vi.fn(), openVentilation: vi.fn(), openRuins: vi.fn(), openFinale: vi.fn(), cancelAction: vi.fn(), findPartner: vi.fn(), nestImprove: vi.fn(), nestInstall: vi.fn(), nestConfirm: vi.fn(), nestClose: vi.fn(), addMemory: vi.fn(), feed: vi.fn(), facilityPrimary: vi.fn(), facilityUpgrade: vi.fn(), gardenPrimary: vi.fn(), gardenVariety: vi.fn(), reservoirPrimary: vi.fn(), reservoirRoute: vi.fn(), finalePrimary:vi.fn(),finaleTheme:vi.fn(),finalePanorama:vi.fn(),ruinsPrimary:vi.fn(),ruinsMotif:vi.fn(),ruinsEdition:vi.fn(),ventilationPrimary:vi.fn(),ventilationMode:vi.fn(),ventilationVariety:vi.fn() }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
     harness.hooks = hooks
@@ -25,7 +25,7 @@ vi.mock('../src/app/session', () => ({
       titleSave: () => ({ status: 'none' }), startNewGame: async () => {},
       startOpening: () => hooks.onOpening?.({ active: false, caption: '' }),
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
-      confirmNestMark: harness.nestConfirm, closeNestWelcome: harness.nestClose,
+      openNestWarmLamp: harness.nestImprove, confirmNestWarmLamp: harness.nestInstall, confirmNestMark: harness.nestConfirm, closeNestWelcome: harness.nestClose,
       addMemory: harness.addMemory, openDeep: harness.openDeep, lookCrystal: harness.openDeep, showOverview: harness.showOverview,
       openHall: harness.openHall, openGarden: harness.openGarden, openReservoir: harness.openReservoir, openVentilation: harness.openVentilation, openRuins: harness.openRuins, openFinale: harness.openFinale,
       cancelAction: harness.cancelAction, findPartner: harness.findPartner,
@@ -74,6 +74,46 @@ const facilityState = (over: Partial<FacilityUI> = {}): FacilityUI => ({
 })
 
 describe('后续内容必须遵守的单一主要关注对象契约', () => {
+  it('多小窝改善入口 → 预览 → 工作 → 完成详情，仅一个主要关注对象；物品栏关闭接回工作', async () => {
+    const { host, stage, hooks } = await mountGame()
+    harness.nestImprove.mockClear(); harness.nestInstall.mockClear(); harness.cancelAction.mockClear()
+    hooks.onRooms?.({ ...room(true), completed: true, nestImprovements: [{ id: 1, label: '第1间小窝 · 给小窝添盏灯', installed: false }, { id: 2, label: '第2间小窝 · 给小窝添盏灯', installed: false }], nestMarks: [{ id: 1, label: '小窝 · 星星' }] })
+    await nextTick(); assertAttention(stage, 'room')
+    Array.from(stage.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent?.includes('第2间小窝'))!.click()
+    expect(harness.nestImprove).toHaveBeenCalledWith(2)
+    const state = { podId: 2, anchor: { x: 300, y: 200, width: 800, height: 600 }, speech: '', lampAvailable: true, lamp: { installed: false, problem: null } }
+    hooks.onRooms?.(room(false)); hooks.onNestWelcome?.(state)
+    await nextTick(); assertAttention(stage, 'nest-warm-lamp')
+    expect(stage.querySelector('.lamp-preview')).not.toBeNull()
+    stage.querySelector<HTMLButtonElement>('[data-primary-action]')!.click(); expect(harness.nestInstall).toHaveBeenCalled()
+    hooks.onNestWelcome?.(null); hooks.onWork?.({ worker: 'adeng', name: '阿灯', title: '给小窝装暖光灯', phase: 'working', nestPodId: 2 })
+    await nextTick(); assertAttention(stage, 'work')
+    expect(stage.querySelector('.work-status.nest-work')).not.toBeNull()
+    host.querySelector<HTMLButtonElement>('.inventory')!.click(); await nextTick()
+    expect(host.querySelector('.app')?.hasAttribute('inert')).toBe(true)
+    host.querySelector<HTMLButtonElement>('[aria-label="关闭物品栏"]')!.click(); await nextTick(); assertAttention(stage, 'work')
+    expect(harness.cancelAction).not.toHaveBeenCalled()
+    hooks.onWork?.(null); hooks.onNestWelcome?.({ ...state, lamp: { installed: true, problem: '暖光灯已经装好啦。' } })
+    await nextTick(); assertAttention(stage, 'nest-warm-lamp')
+    expect(stage.textContent).toContain('暖光灯已经装好啦。'); expect(stage.querySelector('[data-primary-action]')).toBeNull()
+    hooks.onNestWelcome?.(null); await nextTick(); assertAttention(stage, 'guide')
+  })
+
+  it('独立睡眠舱从标记详情进入改善，缺部件保留明确原因与退出按钮', async () => {
+    const { stage, hooks } = await mountGame()
+    const state = { podId: 1, anchor: { x: 200, y: 200, width: 390, height: 700 }, speech: '小窝', lampAvailable: true }
+    hooks.onNestWelcome?.(state); await nextTick(); assertAttention(stage, 'nest-welcome')
+    Array.from(stage.querySelectorAll<HTMLButtonElement>('button')).find(b => b.textContent === '给小窝添盏灯')!.click()
+    expect(harness.nestImprove).toHaveBeenCalledWith(1)
+    hooks.onNestWelcome?.({ ...state, lamp: { installed: false, problem: '还需要1个工坊部件' } })
+    await nextTick(); assertAttention(stage, 'nest-warm-lamp')
+    expect(stage.querySelector<HTMLButtonElement>('[data-primary-action]')?.disabled).toBe(true)
+    expect(stage.textContent).toContain('还需要1个工坊部件')
+    expect(stage.textContent).toContain('先不装')
+    hooks.onNestWelcome?.({ ...state, lampInstalled: true }); await nextTick(); assertAttention(stage, 'nest-welcome')
+    expect(stage.textContent).toContain('暖光灯已经装好啦。'); expect(stage.textContent).not.toContain('给小窝添盏灯')
+  })
+
   it.each(['home', 'water', 'crystal', 'hall', 'garden', 'reservoir', 'ventilation', 'ruins', 'finale'] as const)('%s 普通游玩统一显示主线，帮助展开不产生第二个推进动作', async layer => {
     const { host, stage, hooks } = await mountGame()
     hooks.onView?.({ layer, overview: false })

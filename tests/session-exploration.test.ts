@@ -1,3 +1,4 @@
+import { warmLampWorld } from './fixtures/nestWarmLampWorld'
 import { completedFinale, workingFinale } from './fixtures/finaleWorld'
 import { workingRuins } from './fixtures/ruinsWorld'
 import { workingVentilation } from './fixtures/ventilationWorld'
@@ -30,7 +31,7 @@ const harness = vi.hoisted(() => {
     canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), focusOverview: vi.fn(), stopAtuFollow: vi.fn(), zoomBy: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
-    refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(), refreshShelves: vi.fn(),
+    refreshPods: vi.fn(), setNestLampPreview: vi.fn(), playNestLampLight: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(), refreshShelves: vi.fn(),
     playSupplyWater: vi.fn(), playHarvest: vi.fn(), playMealCelebration: vi.fn(),
     playKitchenCooking: vi.fn(), playMealGather: vi.fn((_moves: unknown, done: () => void) => done()),
     finishMealGather: vi.fn(), cancelMealGather: vi.fn(), playChapterGlance: vi.fn(),
@@ -180,6 +181,55 @@ describe('探索会话与存档集成', () => {
     harness.renderer.playPartnerWork.mockReset().mockImplementation((_plan, hit, done) => { hit(); done() })
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+
+  it('小窝预览不扣款，施工期间物品栏输入门禁不取消，结算保存/撤销与旧回调安全', async () => {
+    harness.store.load.mockResolvedValue(serialize(warmLampWorld(true)))
+    const nest = vi.fn(), work = vi.fn(), rooms = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome: nest, onWork: work, onRooms: rooms })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, parts = w.deep.parts
+    session.openNestWarmLamp(1)
+    expect(nest.mock.calls.at(-1)![0]).toMatchObject({ podId: 1, lamp: { installed: false, problem: null } })
+    expect(harness.renderer.setNestLampPreview).toHaveBeenLastCalledWith(1); expect(w.deep.parts).toBe(parts)
+    session.closeNestWelcome(); expect(w.deep.parts).toBe(parts)
+    session.openNestWarmLamp(1)
+    harness.renderer.playPartnerTravel.mockImplementation(() => {})
+    harness.renderer.playPartnerWork.mockImplementation(() => {})
+    session.confirmNestWarmLamp(); session.confirmNestWarmLamp()
+    expect(harness.renderer.playPartnerTravel).toHaveBeenCalledTimes(1)
+    expect(nest).toHaveBeenLastCalledWith(null); expect(work.mock.calls.at(-1)![0].phase).toBe('walking')
+    const [, route, step, arrive] = harness.renderer.playPartnerTravel.mock.calls[0]
+    route.forEach(step); arrive()
+    session.setInputBlocked(true); session.setInputBlocked(false)
+    expect(harness.renderer.cancelPartnerWork).not.toHaveBeenCalled()
+    const [, hit, done] = harness.renderer.playPartnerWork.mock.calls[0]
+    expect(w.deep.parts).toBe(parts); hit(); hit(); done(); done()
+    expect(w.pods[0].warmLamp).toBe(true); expect(w.deep.parts).toBe(parts - 1)
+    expect(nest.mock.calls.at(-1)![0]).toMatchObject({ podId: 1, lamp: { installed: true } })
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(deserialize(harness.store.save.mock.calls.at(-1)![0])).toMatchObject({ ok: true, world: { pods: expect.arrayContaining([expect.objectContaining({ id: 1, warmLamp: true, mark: 'leaf' })]) } })
+    session.openNestWarmLamp(1); expect(nest.mock.calls.at(-1)![0].lamp.installed).toBe(true)
+    session.undo(); hit(); done(); arrive()
+    expect(w.deep.parts).toBe(parts); expect(w.pods[0].warmLamp).toBeUndefined(); expect(w.pods[0].mark).toBe('leaf')
+    session.destroy()
+  })
+
+
+  it.each(['pan', 'zoom'] as const)('装灯期间主动%s后，完工保留灯且不重开详情或抢镜头', async gesture => {
+    harness.store.load.mockResolvedValue(serialize(warmLampWorld()))
+    const nest = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome: nest })
+    harness.renderer.playPartnerWork.mockImplementation(() => {})
+    session.openNestWarmLamp(1); session.confirmNestWarmLamp()
+    if (gesture === 'pan') harness.handlers.onPanBy({ x: 20, y: 10 })
+    else session.zoomBy(.1)
+    nest.mockClear(); harness.renderer.focusOn.mockClear()
+    const [, hit, done] = harness.renderer.playPartnerWork.mock.calls[0]; hit(); done()
+    expect(nest).not.toHaveBeenCalled(); expect(harness.renderer.focusOn).not.toHaveBeenCalled()
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(w.pods[0].warmLamp).toBe(true)
+    session.destroy()
+  })
 
   it('一次刷新仅提交最终全局目标；专属面板仍分别刷新，终章完成恢复自由建设', async () => {
     harness.store.load.mockResolvedValue(serialize(completedFinale()))

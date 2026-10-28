@@ -30,6 +30,7 @@ export interface DigHistory {
 }
 
 type WorldAction =
+  | { kind: 'nest-warm-lamp'; podId: number }
   | {kind:'finale';change:FinaleChange}
   | {kind:'ruins';change:RuinsChange}
   | { kind:'ventilation';change:VentilationChange }
@@ -72,6 +73,12 @@ export function createWorldHistory(limit = 200) {
           if (!safe) return null // 暂时有人或有人依赖这条路，保留记录供稍后重试。
         }
         const action = stack.pop()!
+        if (action.kind === 'nest-warm-lamp') {
+          const pod = world.pods.find(p => p.id === action.podId && p.warmLamp)
+          if (!pod) continue
+          delete pod.warmLamp; world.deep.parts++
+          return action
+        }
         if(action.kind==='finale'){if(undoFinale(world,action.change))return action;stack.push(action);return null}
         if(action.kind==='ruins'){if(undoRuins(world,action.change))return action;stack.push(action);return null}
         if(action.kind==='ventilation'){if(undoVentilation(world,action.change))return action;stack.push(action);return null}

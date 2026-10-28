@@ -240,7 +240,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -303,7 +303,8 @@ export function deserialize(raw: unknown): LoadResult {
       if (version >= 12 && pod.backWall !== undefined && pod.backWall !== true) return err('存档睡眠舱通行数据无效')
       if (version >= 24 && pod.mark !== undefined && !['star', 'leaf', 'drop'].includes(pod.mark)) return err('存档小窝标记数据无效')
       ids.add(pod.id)
-      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door, ...(version >= 12 && pod.backWall ? { backWall: true as const } : {}), ...(version >= 24 && pod.mark ? { mark: pod.mark } : {}) })
+      if (version >= 26 && pod.warmLamp !== undefined && pod.warmLamp !== true) return err('存档小窝暖光灯数据无效')
+      world.pods.push({ id: pod.id, x: pod.x, y: pod.y, door: pod.door, ...(version >= 12 && pod.backWall ? { backWall: true as const } : {}), ...(version >= 24 && pod.mark ? { mark: pod.mark } : {}), ...(version >= 26 && pod.warmLamp ? { warmLamp: true as const } : {}) })
     }
     const pods = world.pods
     for (const pod of pods) {
@@ -409,6 +410,7 @@ export function deserialize(raw: unknown): LoadResult {
   if(version>=21){const v=validVentilation(world,rawVentilation);if(!v)return err('存档听风工区、风路、手作或铃铃数据无效');world.ventilation=v}
   if(version>=22){const r=validRuins(world,rawRuins);if(!r)return err('存档旧地脉遗迹、岩画拓印或故事壁数据无效');world.ruins=r}
   if(version>=23){const f=validFinale(world,rawFinale);if(!f)return err('存档地心暖光、暖屋日或终章回忆数据无效');world.finale=f}
+  if (world.pods.some(p => p.warmLamp) && !world.deep.completed) return err('存档小窝暖光灯前置进度无效')
   const relocated = version < 8 && actor !== null && !atuCanStand(world, actor, true)
   if (relocated) world.exploration.explorer = initialAtuPosition(world)
   if (version >= 8 && actor) {

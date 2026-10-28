@@ -1,0 +1,174 @@
+{
+  "productionUrl": "http://127.0.0.1:5198/",
+  "errors": [],
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "partsBefore": 2,
+      "partsAfter": 1,
+      "route": [
+        {
+          "x": 24,
+          "y": 11
+        },
+        {
+          "x": 23,
+          "y": 11
+        },
+        {
+          "x": 22,
+          "y": 11
+        },
+        {
+          "x": 21,
+          "y": 11
+        },
+        {
+          "x": 20,
+          "y": 11
+        },
+        {
+          "x": 19,
+          "y": 11
+        },
+        {
+          "x": 18,
+          "y": 11
+        },
+        {
+          "x": 17,
+          "y": 11
+        },
+        {
+          "x": 16,
+          "y": 11
+        },
+        {
+          "x": 15,
+          "y": 11
+        }
+      ],
+      "canceledAt": {
+        "x": 22,
+        "y": 11
+      },
+      "stages": [
+        "before",
+        "preview",
+        "walking-cancel",
+        "working",
+        "inventory-during-work",
+        "completed",
+        "undo",
+        "reinstalled",
+        "reloaded"
+      ],
+      "partsAfterBoth": 0,
+      "doors": [
+        {
+          "id": 1,
+          "door": "right",
+          "warmLamp": true
+        },
+        {
+          "id": 2,
+          "door": "left",
+          "warmLamp": true
+        }
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "partsBefore": 2,
+      "partsAfter": 1,
+      "route": [
+        {
+          "x": 24,
+          "y": 11
+        },
+        {
+          "x": 23,
+          "y": 11
+        },
+        {
+          "x": 22,
+          "y": 11
+        },
+        {
+          "x": 21,
+          "y": 11
+        },
+        {
+          "x": 20,
+          "y": 11
+        },
+        {
+          "x": 19,
+          "y": 11
+        },
+        {
+          "x": 18,
+          "y": 11
+        },
+        {
+          "x": 17,
+          "y": 11
+        },
+        {
+          "x": 16,
+          "y": 11
+        },
+        {
+          "x": 15,
+          "y": 11
+        }
+      ],
+      "canceledAt": {
+        "x": 22,
+        "y": 11
+      },
+      "stages": [
+        "before",
+        "preview",
+        "walking-cancel",
+        "working",
+        "inventory-during-work",
+        "completed",
+        "undo",
+        "reinstalled",
+        "reloaded"
+      ],
+      "partsAfterBoth": 0,
+      "doors": [
+        {
+          "id": 1,
+          "door": "right",
+          "warmLamp": true
+        },
+        {
+          "id": 2,
+          "door": "left",
+          "warmLamp": true
+        }
+      ]
+    },
+    {
+      "standalonePod": true,
+      "installed": true
+    }
+  ]
+}

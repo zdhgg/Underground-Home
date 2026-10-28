@@ -1,0 +1,16 @@
+
+> underground-home@1.1.1 test
+> vitest run --maxWorkers=1
+
+
+ RUN  v5.0.5 D:/My Programs/Underground-Home
+
+
+ Test Files  63 passed (63)
+      Tests  765 passed (765)
+   Start at  19:08:57
+   Duration  89.54s (tests 61%, import 25%, transform 8%, environment 5%, worker 1%)
+
+     Import  370 modules were evaluated 581 times · 19.36s total, 25% of tracked time
+             ~7.03s faster with isolate: false — shared modules are evaluated once per worker instead of once per file
+             learn more: https://vitest.dev/guide/improving-performance#test-isolation
