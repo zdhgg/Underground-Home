@@ -125,26 +125,35 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     await nextTick(); assertAttention(stage, null)
   })
 
-  it('锁定楼层点按后显示原有提示，导航不派发；开放后沿用同一章节入口', async () => {
+  it('未开放楼层默认收起；点按只给原有提示，开放后沿用同一章节入口', async () => {
     const { host, stage, hooks } = await mountGame()
     harness.openDeep.mockClear()
-    const crystal = host.querySelector<HTMLButtonElement>('.depth-nav .crystal')!
-    expect(crystal.disabled).toBe(false)
-    expect(crystal.getAttribute('aria-disabled')).toBe('true')
-    crystal.click(); await nextTick()
+    const lockedCrystal = host.querySelector<HTMLButtonElement>('.depth-nav .crystal')!
+    expect(lockedCrystal.disabled).toBe(false)
+    expect(lockedCrystal.getAttribute('aria-disabled')).toBe('true')
+    expect(host.querySelector<HTMLElement>('.depth-nav .locked-floors')?.style.display).toBe('none')
+    lockedCrystal.click(); await nextTick()
     expect(host.querySelector('.toast')?.textContent).toContain('第一顿围坐饭')
     expect(harness.openDeep).not.toHaveBeenCalled()
     assertAttention(stage, 'guide')
+    const deeper = host.querySelector<HTMLButtonElement>('.depth-nav .deeper-toggle')!
+    deeper.click(); await nextTick()
+    expect(deeper.getAttribute('aria-expanded')).toBe('true')
+    expect(host.querySelector<HTMLElement>('.depth-nav .locked-floors')?.style.display).not.toBe('none')
     hooks.onDeep?.({ ...emptyDeepUI(), available: true })
-    await nextTick(); crystal.click()
+    await nextTick()
+    // 开放后楼层移到可用列表，重新取元素再点，仍然走同一个章节入口。
+    const crystal = host.querySelector<HTMLButtonElement>('.depth-nav .crystal')!
+    expect(crystal.getAttribute('aria-disabled')).toBeNull()
+    crystal.click()
     expect(harness.openDeep).toHaveBeenCalledTimes(1)
-    const toggle = host.querySelector<HTMLButtonElement>('.depth-toggle')!
-    toggle.click(); await nextTick()
-    expect(toggle.getAttribute('aria-expanded')).toBe('true')
-    toggle.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
-    await nextTick(); expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    host.querySelector('.notebook-sheet')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(host.querySelector('.notebook-tab')!.getAttribute('aria-expanded')).toBe('false')
+    expect(host.querySelector<HTMLElement>('.notebook-sheet')?.style.display).toBe('none')
+    host.querySelector<HTMLButtonElement>('.notebook-tab')!.click(); await nextTick()
     hooks.onView?.({ layer: 'reservoirSeal', overview: false }); await nextTick()
-    expect(toggle.textContent).toContain('渗水岩盖')
+    expect(host.querySelector('.depth-nav .looking')?.textContent).toContain('渗水岩盖')
   })
 
   it('共餐演出暂时收起普通引导，演出结束后接回正确目标', async () => {

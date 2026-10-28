@@ -3,8 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vu
 import { createGameSession, type BuildState, type ExplorationUI, type FarmUI, type GameSession, type Milestone, type SessionProgress, type NestWelcome as NestWelcomeState } from './app/session'
 import NestWelcome from './components/NestWelcome.vue'
 import type { DepthView } from './render/camera'
-import GuidePanel from './components/GuidePanel.vue'
-import DepthNavigation from './components/DepthNavigation.vue'
+import ExplorerNotebook from './components/ExplorerNotebook.vue'
 import PartnerConversationPanel from './components/PartnerConversation.vue'
 import type { PartnerConversation } from './core/partnerInteractions'
 import RoomTools from './components/RoomTools.vue'
@@ -118,6 +117,43 @@ const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: fa
 const exploration = ref<ExplorationUI>({ wideLighting: false, lightUpgradeReady: false, clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
+
+/**
+ * 探索小本子：窄屏默认收起，宽屏默认展开。
+ * 有章节/建筑/施工/伙伴工作等主要面板时自动让位；玩家仍可从紧凑入口打开楼层导航。
+ */
+const notebookOpen = ref(typeof window === 'undefined' || window.innerWidth > 720)
+let notebookRestore = false
+function setNotebook(open: boolean): void {
+  notebookOpen.value = open
+  notebookRestore = false
+}
+/** 选好楼层就把小本子收起来，让出画面；未开放提示保留在 TOAST 里，不收起。 */
+function navigateFromNotebook(action: () => void): void {
+  setNotebook(false)
+  action()
+}
+
+/** 与舞台 v-else-if 链一致的“已有主要面板”判定，避免小本子同时抢注意力。 */
+const chapterPanelOpen = computed(() => build.value.mode === 'none' && !exploration.value.lampMode && (
+  finale.value.active || finale.value.busy || ruins.value.active || ruins.value.busy
+  || ventilation.value.active || ventilation.value.busy || reservoir.value.active || reservoir.value.busy
+  || garden.value.active || garden.value.busy || hall.value.active || hall.value.busy
+  || deep.value.active || deep.value.busy
+))
+const panelOpen = computed(() => !view.value.overview && (
+  !!nestWelcome.value || sites.value.active || rooms.value.active || !!work.value || discovering.value
+  || !!conversation.value || facility.value.active || chapterPanelOpen.value
+))
+const guideVisible = computed(() => !panelOpen.value && !view.value.overview && !sites.value.working
+  && !farm.value.mealActive && build.value.mode === 'none' && !exploration.value.lampMode)
+watch(guideVisible, visible => {
+  if (!visible) {
+    if (notebookOpen.value) { notebookRestore = true; notebookOpen.value = false }
+    return
+  }
+  if (notebookRestore) { notebookRestore = false; notebookOpen.value = true }
+})
 
 /** 底部状态栏的一行提示：跟着当前能做的事走 */
 const legendHint = computed(() => {
@@ -377,7 +413,7 @@ onBeforeUnmount(() => {
       <div class="brand">
         <span class="logo">🏔️</span>
         <div class="brand-text">
-          <h1>{{ HOME_TITLE }}</h1>
+          <h1 :aria-label="HOME_TITLE"><span class="title-full">{{ HOME_TITLE }}</span><span class="title-short" aria-hidden="true">小家园</span></h1>
           <small>从风雪中出发 · 自由建设地下家园</small>
         </div>
       </div>
@@ -385,7 +421,6 @@ onBeforeUnmount(() => {
       <button class="memory-toggle" type="button" aria-label="打开记忆匣" aria-haspopup="dialog" :aria-expanded="memoryOpen" @click="openMemory"><span aria-hidden="true">✦</span><span>记忆匣</span><b>{{ memories.length }}</b></button>
       <button class="tools-toggle" type="button" :aria-expanded="toolsOpen" aria-controls="build-tools" @click="toolsOpen = build.mode === 'none' ? !toolsOpen : true">🧰 <span>工具</span></button>
       <button class="sound-toggle" type="button" :aria-pressed="!soundMuted" :aria-label="soundMuted ? '开启声音' : '关闭声音'" @click="toggleSound"><span class="sound-icon" aria-hidden="true">{{ soundMuted ? '🔇' : '🔊' }}</span><span class="sound-label">{{ soundMuted ? '声音已关闭' : '声音已开启' }}</span></button>
-      <DepthNavigation :view="view" :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available" :reservoir-available="reservoir.available" :ventilation-available="ventilation.available" :ruins-available="ruins.available" :finale-available="finale.available" @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()" @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()" @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()" @overview="session?.showOverview()" @locked="showMessage($event, false, 6000)" />
     </header>
 
     <main class="stage">
@@ -397,6 +432,34 @@ onBeforeUnmount(() => {
         </div>
         <p class="opening-caption" aria-live="polite">{{ opening.caption }}</p>
       </section>
+
+      <ExplorerNotebook
+        :open="notebookOpen"
+        :guide-visible="guideVisible"
+        :docked="panelOpen"
+        :dock-top="chapterPanelOpen"
+        :layer-label="progress.layer"
+        :title="progress.title"
+        :done="progress.done"
+        :total="progress.total"
+        :finished="progress.finished"
+        :primary-label="progress.action?.label ?? '看看能源石'"
+        :primary-disabled="exploration.traveling"
+        :view="view"
+        :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available"
+        :reservoir-available="reservoir.available" :ventilation-available="ventilation.available"
+        :ruins-available="ruins.available" :finale-available="finale.available"
+        @open="setNotebook(true)" @close="setNotebook(false)" @primary="performGuide"
+        @home="navigateFromNotebook(() => session?.centerOnHome())" @water="navigateFromNotebook(() => session?.lookDown())"
+        @crystal="navigateFromNotebook(() => session?.lookCrystal())" @hall="navigateFromNotebook(() => session?.openHall())"
+        @garden="navigateFromNotebook(() => session?.openGarden())" @reservoir="navigateFromNotebook(() => session?.openReservoir())"
+        @ventilation="navigateFromNotebook(() => session?.openVentilation())" @ruins="navigateFromNotebook(() => session?.openRuins())"
+        @finale="navigateFromNotebook(() => session?.openFinale())" @overview="navigateFromNotebook(() => session?.showOverview())"
+        @locked="showMessage($event, false, 6000)"
+      >
+        <p class="mole-speech">{{ progress.speech }}</p>
+        <p v-if="!progress.finished" class="mole-outcome">{{ progress.outcome }}</p>
+      </ExplorerNotebook>
 
       <NestWelcome v-if="nestWelcome && !view.overview" :state="nestWelcome" @close="session?.closeNestWelcome()" @confirm="session?.confirmNestMark($event)" @improve="session?.openNestWarmLamp(nestWelcome.podId)" @install="session?.confirmNestWarmLamp()" />
       <SiteTools v-else-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
@@ -436,13 +499,6 @@ onBeforeUnmount(() => {
       <GardenPanel v-else-if="(garden.active || garden.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="garden" :traveling="exploration.traveling" @close="session?.closeGarden()" @stop="session?.cancelAction()" @primary="session?.gardenPrimary()" @select="session?.gardenSelect($event)" @add="session?.gardenAdd($event)" @variety="session?.gardenVariety()" @ride="session?.deepRide($event)" />
       <HallPanel v-else-if="(hall.active || hall.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="hall" :traveling="exploration.traveling" @close="session?.closeHall()" @stop="session?.cancelAction()" @primary="session?.hallPrimary()" @select="session?.hallSelect($event)" @page="session?.hallAlbumPage($event)" @ride="session?.deepRide($event)" />
       <DeepPanel v-else-if="(deep.active || deep.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="deep" :traveling="exploration.traveling" @close="session?.closeDeep()" @stop="session?.cancelAction()" @primary="session?.deepPrimary()" @select="session?.deepSelect($event)" @lamp="session?.deepPlaceLamp()" @upgrade="(action, label) => session?.deepUpgrade(action, label)" @ride="session?.deepRide($event)" />
-      <GuidePanel v-else-if="!sites.working && !view.overview && !farm.mealActive && build.mode === 'none' && !exploration.lampMode" :layer-label="progress.layer" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
-        <template #quick-action>
-          <button class="talk-action guide-primary" data-primary-action type="button" :disabled="exploration.traveling" @click="performGuide">{{ progress.action?.label ?? '看看能源石' }}</button>
-        </template>
-        <p class="mole-speech">{{ progress.speech }}</p>
-        <p v-if="!progress.finished" class="mole-outcome">{{ progress.outcome }}</p>
-      </GuidePanel>
 
       <div class="zoom">
         <button type="button" aria-label="放大" @click="session?.zoomBy(0.12)">＋</button>
@@ -550,11 +606,13 @@ onBeforeUnmount(() => {
 .is-opening .stage > :not(.stage-canvas):not(.opening-overlay):not(.fatal) { visibility: hidden; }
 .is-opening .top :deep(nav), .is-opening .bottom { visibility: hidden; }
 .is-opening .top { pointer-events: none; }
-.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 6px 12px; border-radius: 14px; background: #f8fbf8; flex: none; }
-.brand { display: flex; align-items: center; gap: 10px; }
-.logo { font-size: 24px; line-height: 1; }
-.brand-text h1 { font-size: 17px; margin: 0; white-space: nowrap; }
-.brand-text small { font-size: 11px; color: #62756b; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 12px; border-radius: 14px; background: #f8fbf8; flex: none; flex-wrap: nowrap; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; margin-right: auto; }
+.logo { font-size: 24px; line-height: 1; flex: none; }
+.brand-text { min-width: 0; }
+.brand-text h1 { font-size: 17px; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.brand-text small { font-size: 11px; color: #62756b; white-space: nowrap; }
+.title-short { display: none; }
 .inventory { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 44px; padding: 6px 10px; border-radius: 12px; background: #edf3eb; color: #476759; font-size: 15px; cursor: pointer; }
 .inventory img { width: 26px; height: 26px; object-fit: contain; }.inventory:hover { background: #e0eddf; }.inventory:focus-visible { outline: 3px solid #548c70; outline-offset: 2px; }
 .inventory > span { display: flex; align-items: center; gap: 5px; white-space: nowrap; }.inventory small { font-size: 11px; color: #62756b; }.inventory b { font-size: 17px; font-variant-numeric: tabular-nums; }.bag-label { font-size: 12px; color: #62756b; }
@@ -629,19 +687,17 @@ onBeforeUnmount(() => {
 .toast-enter-active, .toast-leave-active { transition: opacity .18s ease; }
 .toast-enter-from, .toast-leave-to { opacity: 0; }
 
-@media (min-width: 721px) and (max-width: 1840px) { .top { flex-wrap: wrap; gap: 6px; }.top :deep(.depth-nav) { width: 100%; justify-content: space-between; }.top :deep(.depth-nav button) { flex: 1; }.brand-text small { display: none; } }
+@media (min-width: 721px) and (max-width: 1100px) { .brand-text small { display: none; } }
 @media (max-width: 720px) {
   .tools-toggle { width: 44px; padding: 8px; font-size: 0; }.tools-toggle:first-letter { font-size: 18px; }
   .memory-toggle { width: 44px; padding: 8px; font-size: 0; justify-content: center; }.memory-toggle > span:first-child { font-size: 18px; }.memory-toggle b { font-size: 11px; }
   .sound-toggle { order: 0; width: 44px; padding: 8px; }
   .sound-icon { display: inline; font-size: 18px; }
   .sound-label { display: none; }
-  .top :deep(.depth-nav) { order: 2; flex: 1 0 100%; width: 100%; min-width: 0; }
-  .top :deep(.depth-nav button) { padding: 0 4px; gap: 4px; font-size: 12px; }
-  .inventory { gap: 8px; margin-left: auto; padding: 6px 8px; }.inventory .bag-label { display: none; }.inventory small { display: none; }
+  .inventory { gap: 6px; margin-left: 0; padding: 5px 6px; }.inventory .bag-label { display: none; }.inventory small { display: none; }.inventory img { width: 22px; height: 22px; }
   .app { padding: 6px; gap: 6px; }
-  .top { flex-wrap: wrap; gap: 4px; padding: 6px; border-radius: 12px; }
-  .brand { padding: 2px; gap: 6px; }
+  .top { gap: 4px; padding: 4px 6px; border-radius: 12px; }
+  .brand { padding: 2px; gap: 5px; }
   .brand-text h1 { font-size: 15px; }
   .brand-text small { display: none; }
   .logo { font-size: 20px; }
@@ -660,6 +716,18 @@ onBeforeUnmount(() => {
   .milestone { top: 30%; padding: 10px 14px; gap: 8px; }
   .milestone-emoji { font-size: 22px; }
   .milestone-text strong { font-size: 15px; }
+}
+@media (max-width: 430px) {
+  .title-full { display: none; }
+  .title-short { display: inline; }
+  .logo { font-size: 18px; }
+  .brand { gap: 4px; }
+  .brand-text h1 { font-size: 14px; text-overflow: clip; }
+  .inventory { gap: 4px; padding: 4px 6px; }
+  .inventory b { font-size: 15px; }
+}
+@media (max-width: 380px) {
+  .logo { display: none; }
 }
 @media (max-height: 500px) and (min-width: 721px) { .brand-text small, .bottom { display: none; }.top { padding-top: 2px; padding-bottom: 2px; } }
 @media (prefers-reduced-motion: reduce) { .card-enter-active, .card-leave-active, .toast-enter-active, .toast-leave-active { transition: none; } }

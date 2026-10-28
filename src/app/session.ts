@@ -404,7 +404,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const renderer = await PixiWorldRenderer.create(host)
   let cameraView: DepthView = { layer: 'home', overview: false }
   renderer.onViewChanged = (view) => {
-    cameraView = { ...view, layer: siteEditor?.focusedLayer ?? view.layer }
+    const focused = siteEditor?.focusedLayer
+    cameraView = { ...view, layer: focused ?? view.layer, displayLayer: focused ?? view.displayLayer }
     hooks.onView?.(cameraView)
   }
   const store = options.store

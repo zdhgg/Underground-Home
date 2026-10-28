@@ -1,0 +1,71 @@
+{
+  "productionUrl": "http://127.0.0.1:5198/",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "availableFloors": 7,
+      "firstLocked": "🔒8层 · 遗迹",
+      "firstVisible": true,
+      "listScrollTop": 190,
+      "lastVisible": true,
+      "collapsedScrollTop": 0,
+      "esc": {
+        "firstCollapsesHelp": true,
+        "firstKeepsNotebook": true,
+        "secondCloses": true,
+        "tabFocused": true,
+        "primaryEscCloses": true,
+        "floorEscCloses": true
+      },
+      "chapterOverlap": 0,
+      "errors": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "availableFloors": 7,
+      "firstLocked": "🔒8层 · 遗迹",
+      "firstVisible": true,
+      "listScrollTop": 190,
+      "lastVisible": true,
+      "collapsedScrollTop": 0,
+      "esc": {
+        "firstCollapsesHelp": true,
+        "firstKeepsNotebook": true,
+        "secondCloses": true,
+        "tabFocused": true,
+        "primaryEscCloses": true,
+        "floorEscCloses": true
+      },
+      "chapterOverlap": 0,
+      "errors": []
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "availableFloors": 7,
+      "firstLocked": "🔒8层 · 遗迹",
+      "firstVisible": true,
+      "listScrollTop": 190,
+      "lastVisible": true,
+      "collapsedScrollTop": 0,
+      "esc": {
+        "firstCollapsesHelp": true,
+        "firstKeepsNotebook": true,
+        "secondCloses": true,
+        "tabFocused": true,
+        "primaryEscCloses": true,
+        "floorEscCloses": true
+      },
+      "chapterOverlap": 0,
+      "errors": []
+    }
+  ]
+}

@@ -91,7 +91,29 @@ export function overviewCamera(viewport: Viewport): Camera {
   return clampCamera({ x: (WORLD_PIXEL_WIDTH - viewport.width / zoom) / 2, y: (WORLD_PIXEL_HEIGHT - viewport.height / zoom) / 2, zoom }, viewport)
 }
 
-export interface DepthView { layer: StratumId; overview: boolean }
+export interface DepthView {
+  /** 镜头中心所在岩层；游戏规则仍以它为准。 */
+  layer: StratumId
+  overview: boolean
+  /** 界面“正在看”的楼层：视野上部仍露出某一层时以它为准，见 lookDepth。 */
+  displayLayer?: StratumId
+}
+
 export function cameraDepth(camera: Camera, viewport: Viewport, overview = false): DepthView {
   return { layer: stratumAt((camera.y + viewport.height / camera.zoom / 2) / TILE_SIZE), overview }
+}
+
+const FLOOR_LAYERS: ReadonlySet<StratumId> = new Set(['home', 'water', 'crystal', 'hall', 'garden', 'reservoir', 'ventilation', 'ruins', 'finale'])
+
+/**
+ * 显示用判层。窄屏选中建筑时镜头会把目标放在屏幕上方，中心可能已经落到下一层，
+ * 于是孩子看着第一层小窝、导航却写着第二层。
+ * 这里只看“视野上部 30% 是否仍是某一真实楼层”，只影响界面文案与选中态；
+ * 镜头坐标、缩放和 cameraDepth 的规则判定都不变。
+ */
+export function lookDepth(camera: Camera, viewport: Viewport, overview = false): DepthView {
+  const view = cameraDepth(camera, viewport, overview)
+  if (overview) return view
+  const upper = stratumAt((camera.y + viewport.height * 0.3 / camera.zoom) / TILE_SIZE)
+  return FLOOR_LAYERS.has(upper) ? { ...view, displayLayer: upper } : view
 }

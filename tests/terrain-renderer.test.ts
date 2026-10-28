@@ -737,13 +737,13 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     renderer.onViewChanged = onView
     renderer.focusWater()
     for (let i = 0; i < 10; i++) view.tick({ deltaMS: 100 } as Ticker)
-    expect(onView).toHaveBeenLastCalledWith({ layer: 'water', overview: false })
+    expect(onView).toHaveBeenLastCalledWith(expect.objectContaining({ layer: 'water', overview: false }))
     renderer.focusOverview()
     expect(renderer.isOverview).toBe(true)
     renderer.focusHome()
     expect(renderer.isOverview).toBe(false)
     expect(view.cameraTween).toBeNull()
-    expect(onView).toHaveBeenLastCalledWith({ layer: 'home', overview: false })
+    expect(onView).toHaveBeenLastCalledWith(expect.objectContaining({ layer: 'home', overview: false }))
     renderer.focusWater()
     renderer.panBy(0, 20)
     expect(view.cameraTween).toBeNull()
@@ -765,7 +765,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
       expect(Math.abs(centerY - anchor.y)).toBeLessThan(TILE_SIZE * 2)
       for (let i = 0; i < 14; i++) view.tick({ deltaMS: 100 } as Ticker)
       expect(arrived).toHaveBeenCalledTimes(1)
-      expect(onView).toHaveBeenLastCalledWith({ layer: 'water', overview: false })
+      expect(onView).toHaveBeenLastCalledWith(expect.objectContaining({ layer: 'water', overview: false }))
     })
 
     it('跨层跟随按 60 帧平滑推进，不会一帧跳出很远', () => {

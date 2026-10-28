@@ -85,6 +85,7 @@ import {
   zoomAt,
   overviewCamera,
   cameraDepth,
+  lookDepth,
   type DepthView,
   type Camera,
   type Viewport,
@@ -1609,7 +1610,7 @@ export class PixiWorldRenderer {
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
     this.app.canvas.dataset && Object.assign(this.app.canvas.dataset, { cameraX: String(this.camera.x), cameraY: String(this.camera.y), zoom: String(this.camera.zoom) })
-    this.onViewChanged?.(cameraDepth(this.camera, this.viewport, this.overview))
+    this.onViewChanged?.(lookDepth(this.camera, this.viewport, this.overview))
   }
 
   private computeRepairShowcase(): Camera {
