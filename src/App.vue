@@ -196,6 +196,7 @@ function performGuide(): void {
     case 'garden': game.openGarden(); break
     case 'hall': game.openHall(); break
     case 'deep': game.openDeep(); break
+    case 'overview': game.showOverview(); break
     case 'site': game.prepareNest(); break
     case 'water': game.supplyWater(); break
     case 'plant': game.startPlanting(); break
@@ -250,14 +251,14 @@ function openAllMemories(): void {
 function showCollection(): void { closeBag(); session.value?.focusCollection() }
 function findRelic(id: string): void { closeBag(); session.value?.focusRelic(id) }
 
-function showMessage(text: string, warning = false): void {
+function showMessage(text: string, warning = false, duration = 2600): void {
   message.value = text
   messageWarning.value = warning
   toastVisible.value = true
   window.clearTimeout(toastTimer)
   toastTimer = window.setTimeout(() => {
     toastVisible.value = false
-  }, 2600)
+  }, duration)
 }
 
 function showMilestone(card: Milestone): void {
@@ -384,7 +385,7 @@ onBeforeUnmount(() => {
       <button class="memory-toggle" type="button" aria-label="打开记忆匣" aria-haspopup="dialog" :aria-expanded="memoryOpen" @click="openMemory"><span aria-hidden="true">✦</span><span>记忆匣</span><b>{{ memories.length }}</b></button>
       <button class="tools-toggle" type="button" :aria-expanded="toolsOpen" aria-controls="build-tools" @click="toolsOpen = build.mode === 'none' ? !toolsOpen : true">🧰 <span>工具</span></button>
       <button class="sound-toggle" type="button" :aria-pressed="!soundMuted" :aria-label="soundMuted ? '开启声音' : '关闭声音'" @click="toggleSound"><span class="sound-icon" aria-hidden="true">{{ soundMuted ? '🔇' : '🔊' }}</span><span class="sound-label">{{ soundMuted ? '声音已关闭' : '声音已开启' }}</span></button>
-      <DepthNavigation :view="view" :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available" :reservoir-available="reservoir.available" :ventilation-available="ventilation.available" :ruins-available="ruins.available" :finale-available="finale.available" @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()" @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()" @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()" @overview="session?.showOverview()" />
+      <DepthNavigation :view="view" :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available" :reservoir-available="reservoir.available" :ventilation-available="ventilation.available" :ruins-available="ruins.available" :finale-available="finale.available" @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()" @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()" @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()" @overview="session?.showOverview()" @locked="showMessage($event, false, 6000)" />
     </header>
 
     <main class="stage">
@@ -401,10 +402,10 @@ onBeforeUnmount(() => {
       <SiteTools v-else-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
       <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" />
       <section v-else-if="work" class="work-status" data-attention-panel="work" aria-label="伙伴工作" role="status">
-        <small>伙伴来帮忙</small>
+        <small>伙伴正在帮忙</small>
         <strong>{{ work.name }} · {{ work.title }}</strong>
         <p>{{ work.phase === 'walking' ? '正沿通道走过去…' : work.phase === 'working' ? '到地方啦，正在动手…' : '水管接好了，正在沿梯子回家…' }}</p>
-        <div><button type="button" @click="session?.findPartner(work.worker)">看看{{ work.name }}</button><button type="button" @click="session?.cancelAction()">停下来</button></div>
+        <div><button type="button" @click="session?.findPartner(work.worker)">看看{{ work.name }}</button><button type="button" @click="session?.cancelAction()">停下来，换个目标</button></div>
       </section>
       <section v-else-if="discovering" class="discovery-status" data-attention-panel="discovery" role="status" aria-label="新伙伴出现">
         <span>家亮起来了，角落里有个小光点…</span>
@@ -435,7 +436,7 @@ onBeforeUnmount(() => {
       <GardenPanel v-else-if="(garden.active || garden.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="garden" :traveling="exploration.traveling" @close="session?.closeGarden()" @stop="session?.cancelAction()" @primary="session?.gardenPrimary()" @select="session?.gardenSelect($event)" @add="session?.gardenAdd($event)" @variety="session?.gardenVariety()" @ride="session?.deepRide($event)" />
       <HallPanel v-else-if="(hall.active || hall.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="hall" :traveling="exploration.traveling" @close="session?.closeHall()" @stop="session?.cancelAction()" @primary="session?.hallPrimary()" @select="session?.hallSelect($event)" @page="session?.hallAlbumPage($event)" @ride="session?.deepRide($event)" />
       <DeepPanel v-else-if="(deep.active || deep.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="deep" :traveling="exploration.traveling" @close="session?.closeDeep()" @stop="session?.cancelAction()" @primary="session?.deepPrimary()" @select="session?.deepSelect($event)" @lamp="session?.deepPlaceLamp()" @upgrade="(action, label) => session?.deepUpgrade(action, label)" @ride="session?.deepRide($event)" />
-      <GuidePanel v-else-if="!sites.working && !view.overview && build.mode === 'none' && !exploration.lampMode && view.layer !== 'crystal' && view.layer !== 'hall' && view.layer !== 'garden' && view.layer !== 'reservoir' && view.layer !== 'ventilation' && view.layer !== 'ruins' && view.layer !== 'finale'" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
+      <GuidePanel v-else-if="!sites.working && !view.overview && !farm.mealActive && build.mode === 'none' && !exploration.lampMode" :layer-label="progress.layer" :title="progress.title" :done="progress.done" :total="progress.total" :finished="progress.finished">
         <template #quick-action>
           <button class="talk-action guide-primary" data-primary-action type="button" :disabled="exploration.traveling" @click="performGuide">{{ progress.action?.label ?? '看看能源石' }}</button>
         </template>

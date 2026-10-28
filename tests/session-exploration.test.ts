@@ -1,4 +1,4 @@
-import { workingFinale } from './fixtures/finaleWorld'
+import { completedFinale, workingFinale } from './fixtures/finaleWorld'
 import { workingRuins } from './fixtures/ruinsWorld'
 import { workingVentilation } from './fixtures/ventilationWorld'
 import { workingReservoir } from './fixtures/reservoirWorld'
@@ -27,7 +27,7 @@ const harness = vi.hoisted(() => {
   const renderer = {
     playHallWork: vi.fn((_at: Cell, done: () => void) => done()), setHallPreview: vi.fn(), setGardenPreview: vi.fn(),
     playOpening: vi.fn((done: () => void, _caption: (text: string) => void) => done()), finishOpening: vi.fn(), enableOpeningSound: vi.fn(),
-    canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
+    canvasElement: {}, isOverview: false, setWorld: vi.fn(), focusHome: vi.fn(), focusOverview: vi.fn(), stopAtuFollow: vi.fn(), zoomBy: vi.fn(), setBuildPreview: vi.fn(), panBy: vi.fn(),
     setHighlight: vi.fn(), setHoverCell: vi.fn(), setCursor: vi.fn(), refresh: vi.fn(), refreshTerrain: vi.fn(),
     refreshExploration: vi.fn(), playDigEffect: vi.fn(), focusWater: vi.fn(), focusOn: vi.fn(), followShaft: vi.fn(),
     refreshPods: vi.fn(), refreshFriends: vi.fn(), refreshRelics: vi.fn(), refreshFarm: vi.fn(), refreshShelves: vi.fn(),
@@ -180,6 +180,73 @@ describe('探索会话与存档集成', () => {
     harness.renderer.playPartnerWork.mockReset().mockImplementation((_plan, hit, done) => { hit(); done() })
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
+
+  it('一次刷新仅提交最终全局目标；专属面板仍分别刷新，终章完成恢复自由建设', async () => {
+    harness.store.load.mockResolvedValue(serialize(completedFinale()))
+    const progress = vi.fn(), finale = vi.fn(), deep = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: progress, onFinale: finale, onDeep: deep })
+    progress.mockClear(); finale.mockClear(); deep.mockClear()
+    session.startPlanting()
+    expect(progress).toHaveBeenCalledTimes(1)
+    expect(progress.mock.calls[0][0]).toMatchObject({ finished: true, action: { id: 'overview' } })
+    expect(finale).toHaveBeenCalled(); expect(deep).toHaveBeenCalled()
+    session.destroy()
+  })
+
+  it('锁层调用只提示；开放楼层镜头和详情切换不改变世界或伙伴站位', async () => {
+    harness.store.load.mockResolvedValue(serialize(createInitialWorld()))
+    const message = vi.fn(), deep = vi.fn()
+    const locked = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onDeep: deep })
+    const initial = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(initial)
+    harness.renderer.focusOn.mockClear(); deep.mockClear()
+    locked.lookCrystal(); locked.openHall(); locked.openGarden(); locked.openReservoir(); locked.openVentilation(); locked.openRuins(); locked.openFinale()
+    expect(initial).toEqual(before); expect(harness.renderer.focusOn).not.toHaveBeenCalled(); expect(deep).not.toHaveBeenCalled()
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('第一顿围坐饭'), undefined)
+    locked.destroy(); harness.renderer.setWorld.mockClear()
+    harness.store.load.mockResolvedValue(serialize(completedFinale()))
+    const game = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn() })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, saved = structuredClone(w)
+    for (const open of [game.openDeep, game.openHall, game.openGarden, game.openReservoir, game.openVentilation, game.openRuins, game.openFinale]) open()
+    game.centerOnHome(); game.lookDown(); game.showOverview()
+    expect(w).toEqual(saved)
+    game.destroy()
+  })
+
+  it('伙伴工作中查看九层、拖图、缩放和关闭信息不取消；新目标提示，停止/重进不补结算', async () => {
+    const save = completedFinale()
+    save.farm.planters.push({ id: 1, x: 30, y: 21, growth: 3 })
+    harness.store.load.mockResolvedValue(serialize(save))
+    const work = vi.fn(), message = vi.fn()
+    const game = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onWork: work })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, food = w.farm.food
+    let hit = () => {}, done = () => {}
+    harness.renderer.playPartnerWork.mockImplementationOnce((_plan, strike, finish) => { hit = strike; done = finish })
+    harness.handlers.onTap({ x: 30, y: 21 })
+    expect(work.mock.calls.at(-1)![0]).toMatchObject({ name: '小满', phase: 'working' })
+    const busyWorld = structuredClone(w)
+    harness.renderer.cancelPartnerWork.mockClear()
+    for (const open of [game.openDeep, game.openHall, game.openGarden, game.openReservoir, game.openVentilation, game.openRuins, game.openFinale]) open()
+    game.centerOnHome(); game.lookDown(); game.showOverview(); game.findPartner('xiaoman')
+    harness.handlers.onPanBy({ x: 10, y: 20 }); game.zoomBy(.12)
+    game.setInputBlocked(true); game.setInputBlocked(false); game.closeFacility(); game.closeRooms()
+    harness.handlers.onTap({ x: 30, y: 21 }); harness.handlers.onTap({ x: 36, y: 9 })
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('小满正在收菜'), undefined)
+    expect(harness.renderer.cancelPartnerWork).not.toHaveBeenCalled()
+    expect(work.mock.calls.at(-1)![0]?.phase).toBe('working')
+    expect(w).toEqual(busyWorld)
+    game.cancelAction(); hit(); done()
+    expect(work.mock.calls.at(-1)![0]).toBeNull(); expect(w.farm.food).toBe(food)
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('现在可以点新的目标'), undefined)
+    const saved = serialize(w); game.destroy(); hit(); done()
+    harness.store.load.mockResolvedValue(saved); harness.renderer.setWorld.mockClear()
+    const restoredWork = vi.fn()
+    const restored = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onWork: restoredWork })
+    const loaded = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(loaded.farm.food).toBe(food)
+    expect(restoredWork.mock.calls.some(([state]) => state !== null)).toBe(false)
+    harness.handlers.onTap({ x: 30, y: 21 }); expect(loaded.farm.food).toBe(food + 1)
+    restored.destroy()
+  })
 
   it('终章与旧层互斥，后台和离页取消搬运不扣料，阿土对话与收藏定位接回九层',async()=>{
     harness.store.load.mockResolvedValue(serialize(workingFinale()));const finale=vi.fn(),ruins=vi.fn(),progress=vi.fn()

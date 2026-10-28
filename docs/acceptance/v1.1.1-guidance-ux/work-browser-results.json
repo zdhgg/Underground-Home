@@ -1,0 +1,24 @@
+[
+  {
+    "viewport": {
+      "width": 1440,
+      "height": 900
+    },
+    "workCard": true,
+    "navigateWithoutCancel": true,
+    "inventoryCloseKeepsWork": true,
+    "stopRestoresGuide": true,
+    "noEarlyHarvest": true
+  },
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "workCard": true,
+    "navigateWithoutCancel": true,
+    "inventoryCloseKeepsWork": true,
+    "stopRestoresGuide": true,
+    "noEarlyHarvest": true
+  }
+]

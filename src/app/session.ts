@@ -1,26 +1,20 @@
 import { FinaleChapter,type FinaleUI } from './finaleChapter'
-import { finaleGoal,finaleReady } from '../core/finale'
 import type { FinaleFacilityKind,FinaleTheme } from '../core/world'
 import { RuinsChapter,type RuinsUI } from './ruinsChapter'
-import { ruinsGoal,ruinsReady } from '../core/ruins'
 import type { RuinsFacilityKind,RuinsMotif,RuinsEdition } from '../core/world'
 import { VentilationChapter, type VentilationUI } from './ventilationChapter'
-import { ventilationGoal, ventilationReady } from '../core/ventilation'
 import type { VentilationFacilityKind,AirMode } from '../core/world'
 import { ReservoirChapter, type ReservoirUI } from './reservoirChapter'
-import { reservoirGoal, reservoirReady } from '../core/reservoir'
 import type { ReservoirFacilityKind, WaterRoute } from '../core/world'
 import { ROOT_SPOT, SPORE_SPOT } from '../core/gardenTopology'
 import { GardenChapter, type GardenUI } from './gardenChapter'
-import { gardenGoal, gardenReady } from '../core/garden'
 import type { GardenFacilityKind } from '../core/world'
 import { HallChapter, type HallUI } from './hallChapter'
-import { hallGoal, hallReady } from '../core/hall'
 import { MURAL_SPOT, WARM_LIGHT_SPOT } from '../core/hallTopology'
 import type { HallFacilityKind } from '../core/world'
 import { gameAudio } from '../render/gameAudio'
 import { DeepChapter, type DeepUI } from './deepChapter'
-import { deepFacilityAt, deepGoal, deepReady, type DeepAction } from '../core/deep'
+import { deepFacilityAt, type DeepAction } from '../core/deep'
 import type { DeepFacilityKind } from '../core/world'
 import { CRYSTAL_SPOT, MOSS_SPOT, DRILL_SPOT } from '../core/deepTopology'
 import { playSoilDig, playBuildComplete, playPartnerFound, playCrystalCollected, playPowerConnected, playUndo, playUnavailable } from '../render/waterSound'
@@ -29,7 +23,8 @@ import { AtuOrders } from './atuOrders'
 import { RoomEditor, type RoomUI } from './roomEditor'
 import { SiteEditor, type SiteUI } from './siteEditor'
 import { FacilityPanel, facilityView, panelFacilityAt, type FacilityUI } from './facilityPanel'
-import { primaryGuideAction, type GuideAction } from './guideAction'
+import { resolveGlobalGuide, primaryGuideAction, type GuideAction } from './guideAction'
+import { depthAccess, type ChapterLayer } from './depthAccess'
 import type { ConversationAnchor } from '../render/conversationAnchor'
 import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
 import { roomAt } from '../core/rooms'
@@ -45,7 +40,7 @@ import { atuRoute, initialAtuPosition, routeBeforePod } from '../core/atu'
 import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
-import { FIRST_NIGHT_MISSIONS, currentMission, explorationGuide, guideHighlight, missionSummary } from '../core/missions'
+import { guideHighlight, missionSummary } from '../core/missions'
 import { HOME_OWNER } from '../core/personal'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible } from '../core/exploration'
 import { HOME_FLOOR_Y, LANDMARKS, TILE, TILE_SIZE, createInitialWorld, type Cell, type Rect, type RoomKind, type SiteKind, type WorkerId, type MemoryEntry } from '../core/world'
@@ -234,6 +229,8 @@ const NURSERY_MESSAGES: Record<FarmFailure, string> = {
 /** 面向界面的一次引导快照：阿土说什么 + 唯一目标的"做完会怎样" */
 export interface SessionProgress {
   action?: GuideAction
+  /** 当前全局目标所属楼层，帮助玩家在切层后仍知道目标在哪里。 */
+  layer?: string
   title: string
   speech: string
   outcome: string
@@ -734,48 +731,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const pushProgress = (): void => {
     if (initializeWorkers(world)) { renderer.refreshFriends(); scheduleSave() }
     hooks.onWorkers?.(availablePartners(world).filter(p => p.id !== 'atu' && world.workers[p.id]).map(p => ({ id: p.id as WorkerId, name: p.name, verb: p.verb })))
-    const summary = missionSummary(world)
-    const chainDone = summary.done >= summary.total
-    // 第一间舱建成后到伙伴真正躺下之前，仍显示“睡眠舱”这一步；
-    // 第二间舱（找到水之后）不再让计数回退，直接走探索引导的最后一步。
-    const pendingRest = !chainDone && world.pods.length > 0 && !resting
-    const mission = pendingRest
-      ? FIRST_NIGHT_MISSIONS[FIRST_NIGHT_MISSIONS.length - 1]
-      : currentMission(world)
-    hooks.onProgress({
-      action: primaryGuideAction(world),
-      title: mission ? mission.title : '有灯、有床的小家园',
-      speech: pendingRest
-        ? '小床安好啦！伙伴有住处，也能来帮忙。'
-        : mission
-          ? mission.speech
-          : '伙伴说：有水真好！我们想一直住在这儿。',
-      outcome: mission ? mission.outcome : '',
-      done: pendingRest ? Math.max(0, summary.done - 1) : summary.done,
-      total: summary.total,
-      finished: !pendingRest && chainDone,
-      relics: relicSummary(world),
-    })
-    if (chainDone && !pendingRest) hooks.onProgress({ ...explorationGuide(world), action: primaryGuideAction(world), relics: relicSummary(world) })
-    if (deepReady(world) && !world.deep.completed) {
-      const goal = deepGoal(world)
-      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: '把晶光、工坊和电梯连成新一层家园。', done: goal.done, total: 13, finished: false, action: { id: 'deep', label: '看看第 3 层的新线索' }, relics: relicSummary(world) })
-    }
-    if (hallReady(world)) {
-      const goal = hallGoal(world)
-      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: world.hall.completed ? '九层旅途继续，四层家园由你布置。' : '把旧岩洞建成六位伙伴相聚的暖光大厅。', done: goal.done, total: 11, finished: world.hall.completed, action: { id: 'hall', label: '看看暖光大厅' }, relics: relicSummary(world) })
-    }
-    if (gardenReady(world)) {
-      const goal = gardenGoal(world)
-      hooks.onProgress({ title: goal.title, speech: `${goal.speaker}：${goal.speech}`, outcome: '让水、菌丝和灯光连成新朋友的花园。', done: goal.done, total: 14, finished: world.garden.completed, action: { id: 'garden', label: '看看菌光花园' }, relics: relicSummary(world) })
-    }
-    if(reservoirReady(world)) {
-      const goal=reservoirGoal(world)
-      hooks.onProgress({title:goal.title,speech:`${goal.speaker}：${goal.speech}`,outcome:'让清水沿新回廊送回花园与大厅。',done:world.reservoir.completed?18:goal.done,total:18,finished:world.reservoir.completed,action:{id:'reservoir',label:'看看蓄水回廊'},relics:relicSummary(world)})
-    }
-    if(ventilationReady(world)){const g=ventilationGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'连起风路，把手作送回九位伙伴的家。',done:world.ventilation.completed?19:g.done,total:19,finished:world.ventilation.completed,action:{id:'ventilation',label:'看看听风工区'},relics:relicSummary(world)})}
-    if(ruinsReady(world)){const g=ruinsGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:'修复三段旧故事，添上九位伙伴今天的家。',done:world.ruins.completed?19:g.done,total:19,finished:world.ruins.completed,action:{id:'ruins',label:'看看旧地脉遗迹'},relics:relicSummary(world)})}
-    if(finaleReady(world)){const g=finaleGoal(world);hooks.onProgress({title:g.title,speech:`${g.speaker}：${g.speech}`,outcome:world.finale.completed?`${HOME_OWNER}，九层终章已完成，家园由你继续建设。`:'把九位伙伴和九层成果聚成一次暖屋日。',done:g.done,total:20,finished:world.finale.completed,action:{id:'finale',label:world.finale.completed?'看看九层家园':'看看地心暖光'},relics:relicSummary(world)})}
+    // 每次仅提交一份完整快照；章节详情仍由各自 refresh 维护。
+    hooks.onProgress({ ...resolveGlobalGuide(world, resting), relics: relicSummary(world) })
     finaleChapter?.refresh()
     ruinsChapter?.refresh()
     ventilationChapter?.refresh()
@@ -1601,6 +1558,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         return
       }
       const cell = renderer.tileAtScreen(screen)
+      // 在章节/设施命中前保护正在执行的单项工作；读取入口仍可使用。
+      if (partnerOrders?.active) {
+        if (cell && inRect(COLLECTION_SHELF, cell)) { hooks.onBagRequested?.(); return }
+        if (cell && world.memories.entries.length > 0 && inRect(MEMORY_CORNER, cell)) { hooks.onMemoryRequested?.(); return }
+        partnerOrders.explainBusy(); return
+      }
       if(finaleChapter?.busy)return
       if(cell&&buildMode==='none'&&!lampMode&&!traveling&&finaleChapter?.tap(cell))return
       if(ruinsChapter?.busy)return
@@ -2097,6 +2060,20 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     notify('✦ 这段记忆放进家里啦，随时可以回来看看。')
   }
 
+  /** 导航只查看。专业工作期间不进入会取消工作的章节 prepare，也不更改角色站位。 */
+  const navigateChapter = (layer: ChapterLayer, show: () => void): void => {
+    const access = depthAccess(world, layer)
+    if (!access.available) { notify(access.reason); return }
+    if (partnerOrders?.active) {
+      const floorY = { crystal: 32, hall: 45, garden: 57, reservoir: 69, ventilation: 81, ruins: 93, finale: 105 }[layer]
+      renderer.stopAtuFollow()
+      renderer.focusOn(22 * TILE_SIZE, floorY * TILE_SIZE, 'building')
+      partnerOrders.explainBusy()
+      return
+    }
+    show()
+  }
+
   return {
     closeNestWelcome: dismissNestWelcome,
     openNestMark: id => { const pod = world.pods.find(p => p.id === id); if (pod && roomEditor?.active) showNestWelcome(pod) },
@@ -2106,48 +2083,48 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       pod.mark = mark; dismissNestWelcome(); renderer.refreshPods(); scheduleSave()
       hooks.onMessage(`${HOME_OWNER}选的${{ star: '星星', leaf: '叶子', drop: '水滴' }[mark]}挂到小窝上啦！`)
     },
-    openFinale:()=>finaleChapter?.show(true),
+    openFinale:()=>navigateChapter('finale', () => finaleChapter?.show(true)),
     closeFinale:()=>finaleChapter?.close(),
     finalePrimary:()=>{if(!traveling)finaleChapter?.primary()},
     finaleSelect:kind=>finaleChapter?.select(kind),
     finaleTheme:theme=>finaleChapter?.chooseTheme(theme),
     finalePanorama:()=>finaleChapter?.panorama(),
-    openRuins:()=>ruinsChapter?.show(true),
+    openRuins:()=>navigateChapter('ruins', () => ruinsChapter?.show(true)),
     closeRuins:()=>{finaleChapter?.close(); ruinsChapter?.close()},
     ruinsPrimary:()=>{if(!traveling)ruinsChapter?.primary()},
     ruinsSelect:kind=>ruinsChapter?.select(kind),
     ruinsMotif:motif=>ruinsChapter?.chooseMotif(motif),
     ruinsEdition:edition=>ruinsChapter?.chooseEdition(edition),
-    openVentilation:()=>ventilationChapter?.show(true),
+    openVentilation:()=>navigateChapter('ventilation', () => ventilationChapter?.show(true)),
     closeVentilation:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close()},
     ventilationPrimary:()=>{if(!traveling)ventilationChapter?.primary()},
     ventilationSelect:kind=>ventilationChapter?.select(kind),
     ventilationMode:mode=>ventilationChapter?.chooseMode(mode),
     ventilationVariety:()=>ventilationChapter?.changeVariety(),
-    openReservoir:()=>reservoirChapter?.show(true),
+    openReservoir:()=>navigateChapter('reservoir', () => reservoirChapter?.show(true)),
     closeReservoir:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close()},
     reservoirPrimary:()=>{if(!traveling)reservoirChapter?.primary()},
     reservoirSelect:kind=>reservoirChapter?.select(kind),
     reservoirRoute:route=>reservoirChapter?.chooseRoute(route),
-    openGarden: () => gardenChapter?.show(true),
+    openGarden: () => navigateChapter('garden', () => gardenChapter?.show(true)),
     closeGarden: () => {finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close();gardenChapter?.close()},
     gardenPrimary: () => { if (!traveling) gardenChapter?.primary() },
     gardenSelect: kind => gardenChapter?.select(kind),
     gardenAdd: kind => gardenChapter?.select(kind, undefined, true),
     gardenVariety: () => gardenChapter?.changeVariety(),
-    openHall: () => hallChapter?.show(true),
+    openHall: () => navigateChapter('hall', () => hallChapter?.show(true)),
     closeHall: () => { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close() },
     hallPrimary: () => { if (!traveling) hallChapter?.primary() },
     hallSelect: kind => hallChapter?.select(kind),
     hallAlbumPage: delta => hallChapter?.albumPage(delta),
-    openDeep: () => deepChapter?.show(true),
+    openDeep: () => navigateChapter('crystal', () => deepChapter?.show(true)),
     closeDeep: () => { if (deepChapter?.busy) deepChapter.cancel(); finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close() },
     deepPrimary: () => { if (!traveling) deepChapter?.primary(); else notify('等阿土走稳，再来做这件事。') },
     deepSelect: kind => deepChapter?.select(kind),
     deepPlaceLamp: () => deepChapter?.select('lamp', true),
     deepUpgrade: (action, label) => deepChapter?.selectUpgrade(action, label),
     deepRide: action => { if (!traveling && !hallChapter?.busy && !gardenChapter?.busy && !reservoirChapter?.busy && !ventilationChapter?.busy && !ruinsChapter?.busy && !finaleChapter?.busy) { deepChapter?.show(); deepChapter?.perform(action) } },
-    lookCrystal: () => deepChapter?.show(true),
+    lookCrystal: () => navigateChapter('crystal', () => deepChapter?.show(true)),
     setInputBlocked: blocked => {
       inputBlocked = blocked; pointer.reset()
       if (blocked) { renderer.setHoverCell(null); renderer.hoverPartner(null) }
