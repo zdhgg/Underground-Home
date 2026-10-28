@@ -1,0 +1,19 @@
+{
+  "zipUrl": "http://127.0.0.1:5199/",
+  "version": "v1.2.0更新记录",
+  "firstSection": "1.2.0 · 2026-10-29",
+  "metrics": {
+    "heights": [
+      44,
+      44
+    ],
+    "firstFloorVisible": true,
+    "horizontalOverflow": false
+  },
+  "webgl": {
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "renderer": "WebKit WebGL"
+  },
+  "wishClickOnlyFocus": true,
+  "errors": []
+}

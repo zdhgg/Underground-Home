@@ -1,0 +1,30 @@
+{
+  "productionUrl": "http://localhost:5198/",
+  "errors": [],
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "migratedFrom": 25,
+      "migratedTo": 26,
+      "partsBefore": 1,
+      "partsAfter": 0,
+      "warmLamp": true,
+      "reloadPreserved": true
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "migratedFrom": 25,
+      "migratedTo": 26,
+      "partsBefore": 1,
+      "partsAfter": 0,
+      "warmLamp": true,
+      "reloadPreserved": true
+    }
+  ]
+}
