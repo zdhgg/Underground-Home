@@ -1,6 +1,6 @@
 # v1.2.0 发布准备报告
 
-日期：2026-10-29。状态：**正式发布已授权；本分支合并后创建 v1.2.0 标签与 GitHub Release。**
+日期：2026-10-29。状态：**v1.2.0 已正式发布。**
 
 ## 集成
 
@@ -38,12 +38,19 @@
 - 发布说明草稿：[docs/releases/v1.2.0.md](releases/v1.2.0.md)。
 - 更新记录：[CHANGELOG.md](../CHANGELOG.md) 首条为 1.2.0。
 
-## 发布执行
+## 正式发布记录
 
-- release 准备分支合并后，在最终 main 上重新执行测试、类型检查与生产构建。
-- 使用该构建重新核验 ZIP 与 SHA-256，创建指向最终 main 的 `v1.2.0` 标签并发布 GitHub Release。
+- 发布日期：**2026-10-29**。
+- 发布准备 PR：[#5 release: prepare Underground Home v1.2.0](https://github.com/zdhgg/Underground-Home/pull/5)。
+- 最终发布提交（main）：`5c793241ecc4bc42a7addec4e48ea06d06183666`。
+- 标签：`v1.2.0` → `5c793241ecc4bc42a7addec4e48ea06d06183666`（Annotated Tag）。
+- GitHub Release：[心心的小家园 v1.2.0｜让探索的收获，变成家的温暖](https://github.com/zdhgg/Underground-Home/releases/tag/v1.2.0)。
+- 最终 main 验证：65 个测试文件、806 项通过；TypeScript 通过；生产构建通过（仅保留原有主包体积提示）。
+- 发布包：`Underground-Home-v1.2.0-web.zip`，94,385,614 字节，84 个文件。
+- SHA-256：`cef362a0904dbc0f9ea03bf79fc22ca8f12996ed9114285ce94d0b88ddeeda1b`；远端资产 digest 与本地、下载回验一致。
+- 最终 ZIP 与最终 `dist` 逐文件一致；解压后独立静态服务冒烟通过。
 - 实体手机触摸、长时性能与儿童现场试玩不作为本次发布阻断：[手机试玩清单](V1_2_0_MOBILE_PLAYTEST.md)。
 
 ## 结论
 
-工程条件已具备：PR 已合并、main 全量验证通过、生产页面与发布包冒烟通过、v25/v26 存档兼容、发布资料与包已准备。**等待最终授权后创建 v1.2.0 标签和 Release。**
+v1.2.0 已正式发布成功。main 包含 v1.2-A、v1.2-UX1、v1.2-UX2 与正式版本信息；标签、Release、ZIP 和 SHA-256 均指向最终发布提交并通过远端核验。
