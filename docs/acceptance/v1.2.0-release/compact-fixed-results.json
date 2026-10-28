@@ -1,0 +1,688 @@
+{
+  "productionUrl": "http://localhost:5198/",
+  "note": "before 为 d58e621 基线；after 为本轮窄屏紧凑修订。均来自真实生产构建。",
+  "before": [
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "errors": [],
+      "sheet": {
+        "x": 14,
+        "y": 72,
+        "width": 280,
+        "height": 473.21875,
+        "top": 72,
+        "bottom": 545.21875
+      },
+      "body": {
+        "x": 15,
+        "y": 127.25,
+        "width": 278,
+        "height": 416.96875,
+        "top": 127.25,
+        "bottom": 544.21875
+      },
+      "bodyScrollHeight": 758,
+      "bodyClientHeight": 417,
+      "wishes": {
+        "x": 25,
+        "y": 323.546875,
+        "width": 258,
+        "height": 229.4375,
+        "top": 323.546875,
+        "bottom": 552.984375
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 33,
+          "y": 393.765625,
+          "width": 86.5,
+          "height": 38,
+          "top": 393.765625,
+          "bottom": 431.765625
+        },
+        {
+          "x": 33,
+          "y": 493.984375,
+          "width": 86.5,
+          "height": 38,
+          "top": 493.984375,
+          "bottom": 531.984375
+        }
+      ],
+      "buttonsOverlap": false,
+      "floorsHeading": {
+        "x": 25,
+        "y": 562.984375,
+        "width": 258,
+        "height": 16,
+        "top": 562.984375,
+        "bottom": 578.984375
+      },
+      "floorsHeadingVisible": false,
+      "firstFloor": {
+        "x": 25,
+        "y": 586.984375,
+        "width": 256,
+        "height": 44,
+        "top": 586.984375,
+        "bottom": 630.984375
+      },
+      "firstFloorVisible": false,
+      "topHeight": 52,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "errors": [],
+      "sheet": {
+        "x": 14,
+        "y": 72,
+        "width": 280,
+        "height": 444.171875,
+        "top": 72,
+        "bottom": 516.171875
+      },
+      "body": {
+        "x": 15,
+        "y": 127.25,
+        "width": 278,
+        "height": 387.921875,
+        "top": 127.25,
+        "bottom": 515.171875
+      },
+      "bodyScrollHeight": 758,
+      "bodyClientHeight": 388,
+      "wishes": {
+        "x": 25,
+        "y": 323.546875,
+        "width": 258,
+        "height": 229.4375,
+        "top": 323.546875,
+        "bottom": 552.984375
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 33,
+          "y": 393.765625,
+          "width": 86.5,
+          "height": 38,
+          "top": 393.765625,
+          "bottom": 431.765625
+        },
+        {
+          "x": 33,
+          "y": 493.984375,
+          "width": 86.5,
+          "height": 38,
+          "top": 493.984375,
+          "bottom": 531.984375
+        }
+      ],
+      "buttonsOverlap": false,
+      "floorsHeading": {
+        "x": 25,
+        "y": 562.984375,
+        "width": 258,
+        "height": 16,
+        "top": 562.984375,
+        "bottom": 578.984375
+      },
+      "floorsHeadingVisible": false,
+      "firstFloor": {
+        "x": 25,
+        "y": 586.984375,
+        "width": 256,
+        "height": 44,
+        "top": 586.984375,
+        "bottom": 630.984375
+      },
+      "firstFloorVisible": false,
+      "topHeight": 52,
+      "horizontalOverflow": false
+    }
+  ],
+  "after": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "sheet": {
+        "x": 18,
+        "y": 82,
+        "width": 272,
+        "height": 774,
+        "top": 82,
+        "right": 290,
+        "bottom": 856,
+        "left": 18
+      },
+      "body": {
+        "x": 19,
+        "y": 137.25,
+        "width": 270,
+        "height": 717.75,
+        "top": 137.25,
+        "right": 289,
+        "bottom": 855,
+        "left": 19
+      },
+      "bodyScrollHeight": 789,
+      "bodyClientHeight": 718,
+      "wishes": {
+        "x": 31,
+        "y": 339,
+        "width": 246,
+        "height": 251.4375,
+        "top": 339,
+        "right": 277,
+        "bottom": 590.4375,
+        "left": 31
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 39,
+          "y": 414.21875,
+          "width": 86.5,
+          "height": 44,
+          "top": 414.21875,
+          "right": 125.5,
+          "bottom": 458.21875,
+          "left": 39
+        },
+        {
+          "x": 39,
+          "y": 525.4375,
+          "width": 86.5,
+          "height": 44,
+          "top": 525.4375,
+          "right": 125.5,
+          "bottom": 569.4375,
+          "left": 39
+        }
+      ],
+      "buttonsOverlap": false,
+      "titleButtonOverlap": [
+        false,
+        false
+      ],
+      "buttonTextClipped": [
+        false,
+        false
+      ],
+      "floorsHeading": {
+        "x": 31,
+        "y": 602.4375,
+        "width": 246,
+        "height": 16,
+        "top": 602.4375,
+        "right": 277,
+        "bottom": 618.4375,
+        "left": 31
+      },
+      "floorsHeadingVisible": true,
+      "floorsHeadingFullyVisible": true,
+      "firstFloor": {
+        "x": 31,
+        "y": 626.4375,
+        "width": 244,
+        "height": 44,
+        "top": 626.4375,
+        "right": 275,
+        "bottom": 670.4375,
+        "left": 31
+      },
+      "firstFloorVisible": true,
+      "firstFloorFullyVisible": true,
+      "topHeight": 56,
+      "horizontalOverflow": false,
+      "detailShown": true,
+      "shortTitleShown": false,
+      "fullTitleShown": true,
+      "shortActionShown": false,
+      "fullActionShown": true,
+      "noteShown": false,
+      "noteText": null,
+      "visibleActions": [
+        "去看看小窝",
+        "去看看菜园"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "sheet": {
+        "x": 18,
+        "y": 82,
+        "width": 272,
+        "height": 594,
+        "top": 82,
+        "right": 290,
+        "bottom": 676,
+        "left": 18
+      },
+      "body": {
+        "x": 19,
+        "y": 137.25,
+        "width": 270,
+        "height": 537.75,
+        "top": 137.25,
+        "right": 289,
+        "bottom": 675,
+        "left": 19
+      },
+      "bodyScrollHeight": 789,
+      "bodyClientHeight": 538,
+      "wishes": {
+        "x": 31,
+        "y": 339,
+        "width": 246,
+        "height": 251.4375,
+        "top": 339,
+        "right": 277,
+        "bottom": 590.4375,
+        "left": 31
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 39,
+          "y": 414.21875,
+          "width": 86.5,
+          "height": 44,
+          "top": 414.21875,
+          "right": 125.5,
+          "bottom": 458.21875,
+          "left": 39
+        },
+        {
+          "x": 39,
+          "y": 525.4375,
+          "width": 86.5,
+          "height": 44,
+          "top": 525.4375,
+          "right": 125.5,
+          "bottom": 569.4375,
+          "left": 39
+        }
+      ],
+      "buttonsOverlap": false,
+      "titleButtonOverlap": [
+        false,
+        false
+      ],
+      "buttonTextClipped": [
+        false,
+        false
+      ],
+      "floorsHeading": {
+        "x": 31,
+        "y": 602.4375,
+        "width": 246,
+        "height": 16,
+        "top": 602.4375,
+        "right": 277,
+        "bottom": 618.4375,
+        "left": 31
+      },
+      "floorsHeadingVisible": true,
+      "floorsHeadingFullyVisible": true,
+      "firstFloor": {
+        "x": 31,
+        "y": 626.4375,
+        "width": 244,
+        "height": 44,
+        "top": 626.4375,
+        "right": 275,
+        "bottom": 670.4375,
+        "left": 31
+      },
+      "firstFloorVisible": true,
+      "firstFloorFullyVisible": true,
+      "topHeight": 56,
+      "horizontalOverflow": false,
+      "detailShown": true,
+      "shortTitleShown": false,
+      "fullTitleShown": true,
+      "shortActionShown": false,
+      "fullActionShown": true,
+      "noteShown": false,
+      "noteText": null,
+      "visibleActions": [
+        "去看看小窝",
+        "去看看菜园"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "sheet": {
+        "x": 14,
+        "y": 72,
+        "width": 280,
+        "height": 473.21875,
+        "top": 72,
+        "right": 294,
+        "bottom": 545.21875,
+        "left": 14
+      },
+      "body": {
+        "x": 15,
+        "y": 119.25,
+        "width": 278,
+        "height": 424.96875,
+        "top": 119.25,
+        "right": 293,
+        "bottom": 544.21875,
+        "left": 15
+      },
+      "bodyScrollHeight": 647,
+      "bodyClientHeight": 425,
+      "wishes": {
+        "x": 23,
+        "y": 302.546875,
+        "width": 262,
+        "height": 139,
+        "top": 302.546875,
+        "right": 285,
+        "bottom": 441.546875,
+        "left": 23
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 215,
+          "y": 327.546875,
+          "width": 63,
+          "height": 44,
+          "top": 327.546875,
+          "right": 278,
+          "bottom": 371.546875,
+          "left": 215
+        },
+        {
+          "x": 215,
+          "y": 384.546875,
+          "width": 63,
+          "height": 44,
+          "top": 384.546875,
+          "right": 278,
+          "bottom": 428.546875,
+          "left": 215
+        }
+      ],
+      "buttonsOverlap": false,
+      "titleButtonOverlap": [
+        false,
+        false
+      ],
+      "buttonTextClipped": [
+        false,
+        false
+      ],
+      "floorsHeading": {
+        "x": 23,
+        "y": 446.546875,
+        "width": 262,
+        "height": 16,
+        "top": 446.546875,
+        "right": 285,
+        "bottom": 462.546875,
+        "left": 23
+      },
+      "floorsHeadingVisible": true,
+      "floorsHeadingFullyVisible": true,
+      "firstFloor": {
+        "x": 23,
+        "y": 470.546875,
+        "width": 260,
+        "height": 44,
+        "top": 470.546875,
+        "right": 283,
+        "bottom": 514.546875,
+        "left": 23
+      },
+      "firstFloorVisible": true,
+      "firstFloorFullyVisible": true,
+      "topHeight": 52,
+      "horizontalOverflow": false,
+      "detailShown": false,
+      "shortTitleShown": true,
+      "fullTitleShown": false,
+      "shortActionShown": true,
+      "fullActionShown": false,
+      "noteShown": false,
+      "noteText": null,
+      "visibleActions": [
+        "去看看小窝",
+        "去看看菜园"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "sheet": {
+        "x": 14,
+        "y": 72,
+        "width": 280,
+        "height": 444.171875,
+        "top": 72,
+        "right": 294,
+        "bottom": 516.171875,
+        "left": 14
+      },
+      "body": {
+        "x": 15,
+        "y": 119.25,
+        "width": 278,
+        "height": 395.921875,
+        "top": 119.25,
+        "right": 293,
+        "bottom": 515.171875,
+        "left": 15
+      },
+      "bodyScrollHeight": 647,
+      "bodyClientHeight": 396,
+      "wishes": {
+        "x": 23,
+        "y": 302.546875,
+        "width": 262,
+        "height": 139,
+        "top": 302.546875,
+        "right": 285,
+        "bottom": 441.546875,
+        "left": 23
+      },
+      "wishCount": 2,
+      "buttons": [
+        {
+          "x": 215,
+          "y": 327.546875,
+          "width": 63,
+          "height": 44,
+          "top": 327.546875,
+          "right": 278,
+          "bottom": 371.546875,
+          "left": 215
+        },
+        {
+          "x": 215,
+          "y": 384.546875,
+          "width": 63,
+          "height": 44,
+          "top": 384.546875,
+          "right": 278,
+          "bottom": 428.546875,
+          "left": 215
+        }
+      ],
+      "buttonsOverlap": false,
+      "titleButtonOverlap": [
+        false,
+        false
+      ],
+      "buttonTextClipped": [
+        false,
+        false
+      ],
+      "floorsHeading": {
+        "x": 23,
+        "y": 446.546875,
+        "width": 262,
+        "height": 16,
+        "top": 446.546875,
+        "right": 285,
+        "bottom": 462.546875,
+        "left": 23
+      },
+      "floorsHeadingVisible": true,
+      "floorsHeadingFullyVisible": true,
+      "firstFloor": {
+        "x": 23,
+        "y": 470.546875,
+        "width": 260,
+        "height": 44,
+        "top": 470.546875,
+        "right": 283,
+        "bottom": 514.546875,
+        "left": 23
+      },
+      "firstFloorVisible": true,
+      "firstFloorFullyVisible": true,
+      "topHeight": 52,
+      "horizontalOverflow": false,
+      "detailShown": false,
+      "shortTitleShown": true,
+      "fullTitleShown": false,
+      "shortActionShown": true,
+      "fullActionShown": false,
+      "noteShown": false,
+      "noteText": null,
+      "visibleActions": [
+        "去看看小窝",
+        "去看看菜园"
+      ]
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "scenario": "no-parts",
+      "sheet": {
+        "x": 14,
+        "y": 72,
+        "width": 280,
+        "height": 484.109375,
+        "top": 72,
+        "right": 294,
+        "bottom": 556.109375,
+        "left": 14
+      },
+      "body": {
+        "x": 15,
+        "y": 119.25,
+        "width": 278,
+        "height": 435.859375,
+        "top": 119.25,
+        "right": 293,
+        "bottom": 555.109375,
+        "left": 15
+      },
+      "bodyScrollHeight": 610,
+      "bodyClientHeight": 436,
+      "wishes": {
+        "x": 23,
+        "y": 302.546875,
+        "width": 262,
+        "height": 101.671875,
+        "top": 302.546875,
+        "right": 285,
+        "bottom": 404.21875,
+        "left": 23
+      },
+      "wishCount": 1,
+      "buttons": [
+        {
+          "x": 215,
+          "y": 327.546875,
+          "width": 63,
+          "height": 44,
+          "top": 327.546875,
+          "right": 278,
+          "bottom": 371.546875,
+          "left": 215
+        }
+      ],
+      "buttonsOverlap": false,
+      "titleButtonOverlap": [
+        false
+      ],
+      "buttonTextClipped": [
+        false
+      ],
+      "floorsHeading": {
+        "x": 23,
+        "y": 409.21875,
+        "width": 262,
+        "height": 16,
+        "top": 409.21875,
+        "right": 285,
+        "bottom": 425.21875,
+        "left": 23
+      },
+      "floorsHeadingVisible": true,
+      "floorsHeadingFullyVisible": true,
+      "firstFloor": {
+        "x": 23,
+        "y": 433.21875,
+        "width": 260,
+        "height": 44,
+        "top": 433.21875,
+        "right": 283,
+        "bottom": 477.21875,
+        "left": 23
+      },
+      "firstFloorVisible": true,
+      "firstFloorFullyVisible": true,
+      "topHeight": 52,
+      "horizontalOverflow": false,
+      "detailShown": false,
+      "shortTitleShown": true,
+      "fullTitleShown": false,
+      "shortActionShown": true,
+      "fullActionShown": false,
+      "noteShown": true,
+      "noteText": "还差1个工坊部件，可以去第三层再做一个。",
+      "visibleActions": [
+        "去看看小窝"
+      ]
+    }
+  ],
+  "functional": {
+    "lampFocus": {
+      "x": 189,
+      "y": 188
+    },
+    "ripeFocus": {
+      "x": 189,
+      "y": 188
+    }
+  },
+  "errors": []
+}

@@ -1,0 +1,62 @@
+{
+  "productionUrl": "http://localhost:5198/",
+  "errors": [],
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "versionText": "v1.2.0更新记录",
+      "notesTitle": "心心的小家园 v1.2.0",
+      "firstSection": "1.2.0 · 2026-10-29",
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "versionText": "v1.2.0更新记录",
+      "notesTitle": "心心的小家园 v1.2.0",
+      "firstSection": "1.2.0 · 2026-10-29",
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "versionText": "v1.2.0更新记录",
+      "notesTitle": "心心的小家园 v1.2.0",
+      "firstSection": "1.2.0 · 2026-10-29",
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "versionText": "v1.2.0更新记录",
+      "notesTitle": "心心的小家园 v1.2.0",
+      "firstSection": "1.2.0 · 2026-10-29",
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "horizontalOverflow": false
+    }
+  ]
+}

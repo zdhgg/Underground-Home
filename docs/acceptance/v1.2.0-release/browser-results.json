@@ -1,0 +1,271 @@
+{
+  "productionUrl": "http://localhost:5198/",
+  "viewports": [
+    [
+      1440,
+      900
+    ],
+    [
+      1280,
+      720
+    ],
+    [
+      390,
+      844
+    ],
+    [
+      360,
+      800
+    ]
+  ],
+  "errors": [],
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "scenarioA": {
+        "wishCount": 0,
+        "missionVisible": true
+      },
+      "scenarioB": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 710,
+          "screenY": 395,
+          "canvas": {
+            "width": 1420,
+            "height": 790
+          }
+        },
+        "parts": 1,
+        "warmLamp": false
+      },
+      "scenarioD": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 710,
+          "screenY": 395,
+          "canvas": {
+            "width": 1420,
+            "height": 790
+          }
+        },
+        "growth": 3,
+        "food": 2
+      },
+      "scenarioF": {
+        "wishCount": 2,
+        "stageHeight": 790,
+        "sheetHeight": 774,
+        "bodyScrollHeight": 789,
+        "bodyClientHeight": 718,
+        "horizontalOverflow": false,
+        "overviewReachable": true
+      },
+      "scenarioC": {
+        "note": "还差1个工坊部件，可以去第三层再做一个。",
+        "focus": {
+          "screenX": 710,
+          "screenY": 395,
+          "canvas": {
+            "width": 1420,
+            "height": 790
+          }
+        },
+        "parts": 0,
+        "installed": false
+      },
+      "scenarioE": {
+        "foodBefore": 2,
+        "foodAfter": 3,
+        "growth": 0
+      },
+      "scenarioG": {
+        "workContinued": true,
+        "wishHiddenDuringWork": true,
+        "primaryActions": 0
+      }
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "scenarioA": {
+        "wishCount": 0,
+        "missionVisible": true
+      },
+      "scenarioB": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 630,
+          "screenY": 305,
+          "canvas": {
+            "width": 1260,
+            "height": 610
+          }
+        },
+        "parts": 1,
+        "warmLamp": false
+      },
+      "scenarioD": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 630,
+          "screenY": 305,
+          "canvas": {
+            "width": 1260,
+            "height": 610
+          }
+        },
+        "growth": 3,
+        "food": 2
+      },
+      "scenarioF": {
+        "wishCount": 2,
+        "stageHeight": 610,
+        "sheetHeight": 594,
+        "bodyScrollHeight": 789,
+        "bodyClientHeight": 538,
+        "horizontalOverflow": false,
+        "overviewReachable": true
+      }
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "scenarioA": {
+        "wishCount": 0,
+        "missionVisible": true
+      },
+      "scenarioB": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 189,
+          "screenY": 188,
+          "canvas": {
+            "width": 378,
+            "height": 750
+          }
+        },
+        "parts": 1,
+        "warmLamp": false
+      },
+      "scenarioD": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 189,
+          "screenY": 188,
+          "canvas": {
+            "width": 378,
+            "height": 750
+          }
+        },
+        "growth": 3,
+        "food": 2
+      },
+      "scenarioF": {
+        "wishCount": 2,
+        "stageHeight": 733,
+        "sheetHeight": 473.21875,
+        "bodyScrollHeight": 647,
+        "bodyClientHeight": 425,
+        "horizontalOverflow": false,
+        "overviewReachable": true
+      },
+      "scenarioC": {
+        "note": "还差1个工坊部件，可以去第三层再做一个。",
+        "focus": {
+          "screenX": 189,
+          "screenY": 188,
+          "canvas": {
+            "width": 378,
+            "height": 750
+          }
+        },
+        "parts": 0,
+        "installed": false
+      },
+      "scenarioE": {
+        "foodBefore": 2,
+        "foodAfter": 3,
+        "growth": 0
+      },
+      "scenarioG": {
+        "workContinued": true,
+        "wishHiddenDuringWork": true,
+        "primaryActions": 0
+      }
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "webgl": {
+        "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "renderer": "WebKit WebGL"
+      },
+      "scenarioA": {
+        "wishCount": 0,
+        "missionVisible": true
+      },
+      "scenarioB": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 174,
+          "screenY": 177,
+          "canvas": {
+            "width": 348,
+            "height": 706
+          }
+        },
+        "parts": 1,
+        "warmLamp": false
+      },
+      "scenarioD": {
+        "wishCount": 1,
+        "focus": {
+          "screenX": 174,
+          "screenY": 177,
+          "canvas": {
+            "width": 348,
+            "height": 706
+          }
+        },
+        "growth": 3,
+        "food": 2
+      },
+      "scenarioF": {
+        "wishCount": 2,
+        "stageHeight": 689,
+        "sheetHeight": 444.171875,
+        "bodyScrollHeight": 647,
+        "bodyClientHeight": 396,
+        "horizontalOverflow": false,
+        "overviewReachable": true
+      },
+      "scenarioGChapter": {
+        "wishHidden": true,
+        "primaryActions": 1,
+        "deepPanelOpen": true
+      }
+    }
+  ]
+}
