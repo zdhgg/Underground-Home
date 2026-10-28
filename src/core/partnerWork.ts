@@ -1,3 +1,4 @@
+import { nestWarmLampProblem, nestWarmLampWorkCells } from './nestWarmLamp'
 import { atuCanStand, atuRoute, initialAtuPosition } from './atu'
 import { canPlaceWallLamp } from './exploration'
 import { canSupplyWater, planterAt, RIPE_STAGE } from './farm'
@@ -5,11 +6,11 @@ import { availablePartners, PARTNERS, partnerById } from './partners'
 import { LANDMARKS, type Cell, type WorkerId, type WorldState } from './world'
 import { canRetrofitLamp } from './lighting'
 
-export type WorkTarget = { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'watering'; x: number; y: number } | { kind: 'lamp' | 'lamp-retrofit'; x: number } | { kind: 'deep-rock'; x: number; y: number }
-export interface WorkPlan { worker: WorkerId; target: WorkTarget; at: Cell; route: Cell[] }
+export type WorkTarget = { kind: 'nest-warm-lamp'; podId: number } | { kind: 'harvest'; x: number; y: number } | { kind: 'water' } | { kind: 'watering'; x: number; y: number } | { kind: 'lamp' | 'lamp-retrofit'; x: number } | { kind: 'deep-rock'; x: number; y: number }
+export interface WorkPlan { worker: WorkerId; target: WorkTarget; at: Cell; route: Cell[]; facing?: Cell }
 export const WORKERS: readonly WorkerId[] = PARTNERS.map(p => p.id).filter((id): id is WorkerId => id !== 'atu')
 export const workOwner = (target: WorkTarget): WorkerId => target.kind === 'harvest' || target.kind === 'watering' ? 'xiaoman' : target.kind === 'water' ? 'xiaoquan' : 'adeng'
-export const workTitle = (target: WorkTarget): string => target.kind === 'harvest' ? '收菜' : target.kind === 'water' ? '接水管' : target.kind === 'watering' ? '浇浇水' : target.kind === 'lamp-retrofit' ? '加装聚光灯罩' : '装壁灯'
+export const workTitle = (target: WorkTarget): string => target.kind === 'nest-warm-lamp' ? '给小窝装暖光灯' : target.kind === 'harvest' ? '收菜' : target.kind === 'water' ? '接水管' : target.kind === 'watering' ? '浇浇水' : target.kind === 'lamp-retrofit' ? '加装聚光灯罩' : '装壁灯'
 export const workerName = (id: WorkerId): string => partnerById(id)!.name
 export function workerHomeRoute(w: WorldState, p: Cell, returning?: WorkerId): Cell[] | null {
   if (!returning) return atuRoute(w, p, initialAtuPosition(w), true)
@@ -55,6 +56,7 @@ export function initializeWorkers(w: WorldState): boolean {
 }
 
 export function workAvailable(w: WorldState, t: WorkTarget): boolean {
+  if (t.kind === 'nest-warm-lamp') return nestWarmLampProblem(w, t.podId) === null
   if (t.kind === 'harvest') return (planterAt(w, t.x, t.y)?.growth ?? -1) >= RIPE_STAGE
   if (t.kind === 'watering') {
     const planter = planterAt(w, t.x, t.y)
@@ -64,9 +66,19 @@ export function workAvailable(w: WorldState, t: WorkTarget): boolean {
 }
 
 export function planPartnerWork(w: WorldState, target: WorkTarget): { ok: true; plan: WorkPlan } | { ok: false; message: string } {
+  if (target.kind === 'nest-warm-lamp') {
+    const problem = nestWarmLampProblem(w, target.podId)
+    if (problem) return { ok: false, message: problem }
+  }
   const worker = workOwner(target), from = w.workers[worker]
   if (!partnerById(worker)?.joins(w) || !from) return { ok: false, message: `${workerName(worker)}还没准备好，先继续探索吧。` }
   if (!workAvailable(w, target)) return { ok: false, message: '这里还没准备好，看看设施的提示吧。' }
+  if (target.kind === 'nest-warm-lamp') {
+    const pod = w.pods.find(p => p.id === target.podId)!
+    const route = nestWarmLampWorkCells(w, pod.id).map(to => atuRoute(w, from, to)).find(r => r !== null)
+    if (!route) return { ok: false, message: '阿灯走不到这间小窝，先挖通连到门口的两格高通道吧。' }
+    return { ok: true, plan: { worker, target: { ...target }, at: { ...route.at(-1)! }, route, facing: { x: pod.x + 1, y: pod.y } } }
+  }
   const cell = target.kind === 'water' ? LANDMARKS.spring
     : target.kind === 'harvest' || target.kind === 'watering' ? { x: target.x, y: target.y }
       : { x: target.x, y: 21 }

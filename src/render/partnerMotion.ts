@@ -16,7 +16,7 @@ export class PartnerMotion {
   }
   work(friend: MovingPartner, plan: WorkPlan, strike: () => void, done: () => void): void {
     this.cancel()
-    friend.inEntrance = true; friend.pose = 'idle'; friend.visual?.face(plan.target.kind === 'water' ? 18 - plan.at.x : plan.target.x - plan.at.x)
+    friend.inEntrance = true; friend.pose = 'idle'; friend.visual?.face(plan.target.kind === 'water' ? 18 - plan.at.x : plan.target.kind === 'nest-warm-lamp' ? (plan.facing?.x ?? plan.at.x + 1) - plan.at.x : plan.target.x - plan.at.x)
     this.action = { friend, plan, time: 0, hit: false, strike, done }
   }
   cancel(): void {
@@ -49,9 +49,11 @@ export class PartnerMotion {
       // 阿灯只在已清出三格高的安装列内短暂升起，够到洞壁上的灯位。
       const lift = a.plan.target.kind === 'lamp' || a.plan.target.kind === 'lamp-retrofit' ? 32 * Math.min(1, a.time / .4, Math.max(0, (.95 - a.time) / .2)) : 0
       a.friend.view.y = a.friend.baseY - lift
-      const x = a.friend.view.x, y = a.friend.view.y, swing = Math.sin(Math.min(1, a.time / .6) * Math.PI)
+      const x = a.friend.view.x, y = a.friend.view.y
+      const duration = a.plan.target.kind === 'nest-warm-lamp' ? 2.4 : .95
+      const swing = a.plan.target.kind === 'nest-warm-lamp' ? (1 - Math.cos(a.time * Math.PI / .4)) / 2 : Math.sin(Math.min(1, a.time / .6) * Math.PI)
       const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' || a.plan.target.kind === 'watering' ? 0xa2dce0 : 0xffdf9d
-      const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.x - a.plan.at.x
+      const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.kind === 'nest-warm-lamp' ? (a.plan.facing?.x ?? a.plan.at.x + 1) - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
       // 收菜用角色自身的俯身和回身，避免凭空长出一根绿色手臂。
       if (a.plan.target.kind === 'harvest' && a.plan.worker === 'xiaoman') {
@@ -72,8 +74,8 @@ export class PartnerMotion {
       g.moveTo(x + dir * 7, y - 2).lineTo(x + dir * (15 + swing * 7), y - 9 - swing * 9).stroke({ width: 3, color })
       g.roundRect(x + dir * (15 + swing * 7) - 4, y - 16 - swing * 9, 9, 10, 3).fill(color)
       }
-      if (!a.hit && a.time >= .55) { a.hit = true; a.strike(); if (this.action !== a) return }
-      if (a.time >= .95) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.visual?.harvestLean?.(0, dir); a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
+      if (!a.hit && a.time >= (a.plan.target.kind === 'nest-warm-lamp' ? duration : .55)) { a.hit = true; a.strike(); if (this.action !== a) return }
+      if (a.time >= duration) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.visual?.harvestLean?.(0, dir); a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
     }
   }
 }

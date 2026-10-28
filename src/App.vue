@@ -67,7 +67,7 @@ function toggleSound(): void {
 const conversation = ref<PartnerConversation | null>(null)
 const nestWelcome = ref<NestWelcomeState | null>(null)
 function dismissNestOnOutside(event: PointerEvent): void {
-  if (nestWelcome.value && event.target instanceof Element && !event.target.closest('[data-attention-panel="nest-welcome"]')) session.value?.closeNestWelcome()
+  if (nestWelcome.value && event.target instanceof Element && !event.target.closest('.nest-welcome')) session.value?.closeNestWelcome()
 }
 const conversationAnchor = ref<ConversationAnchor | null>(null)
 const discovering = ref(false)
@@ -398,10 +398,10 @@ onBeforeUnmount(() => {
         <p class="opening-caption" aria-live="polite">{{ opening.caption }}</p>
       </section>
 
-      <NestWelcome v-if="nestWelcome && !view.overview" :state="nestWelcome" @close="session?.closeNestWelcome()" @confirm="session?.confirmNestMark($event)" />
+      <NestWelcome v-if="nestWelcome && !view.overview" :state="nestWelcome" @close="session?.closeNestWelcome()" @confirm="session?.confirmNestMark($event)" @improve="session?.openNestWarmLamp(nestWelcome.podId)" @install="session?.confirmNestWarmLamp()" />
       <SiteTools v-else-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
-      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" />
-      <section v-else-if="work" class="work-status" data-attention-panel="work" aria-label="伙伴工作" role="status">
+      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" @improve="session?.openNestWarmLamp($event)" />
+      <section v-else-if="work" class="work-status" :class="{ 'nest-work': work.nestPodId !== undefined }" data-attention-panel="work" aria-label="伙伴工作" role="status">
         <small>伙伴正在帮忙</small>
         <strong>{{ work.name }} · {{ work.title }}</strong>
         <p>{{ work.phase === 'walking' ? '正沿通道走过去…' : work.phase === 'working' ? '到地方啦，正在动手…' : '水管接好了，正在沿梯子回家…' }}</p>
@@ -652,6 +652,7 @@ onBeforeUnmount(() => {
   .atu-controls button { padding: 8px 10px; font-size: 12px; }
   .build-tools { left: 8px; bottom: 112px; max-width: calc(100% - 16px); }
   .work-status { top: 8px; left: 8px; width: 264px; padding: 12px; }
+  .work-status.nest-work { top: auto; bottom: 78px; width: min(264px, calc(100% - 40px)); }
   .bottom { align-items: flex-start; flex-direction: column; gap: 2px; font-size: 11px; }
   .resources { justify-content: flex-start; gap: 12px; }
   .input-hint { display: none; }

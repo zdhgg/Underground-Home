@@ -1,3 +1,4 @@
+import { installNestWarmLamp, nestWarmLampProblem } from '../core/nestWarmLamp'
 import { FinaleChapter,type FinaleUI } from './finaleChapter'
 import type { FinaleFacilityKind,FinaleTheme } from '../core/world'
 import { RuinsChapter,type RuinsUI } from './ruinsChapter'
@@ -115,7 +116,7 @@ export interface SessionHooks {
 }
 
 export type NestMark = 'star' | 'leaf' | 'drop'
-export interface NestWelcome { podId: number; anchor: ConversationAnchor & { targetHalfWidth?: number; targetHeight?: number }; speech: string; mark?: NestMark }
+export interface NestWelcome { podId: number; anchor: ConversationAnchor & { targetHalfWidth?: number; targetHeight?: number }; speech: string; mark?: NestMark; lampAvailable?: boolean; lampInstalled?: boolean; lamp?: { installed: boolean; problem: string | null } }
 
 export interface ExplorationUI {
   wideLighting: boolean; lightUpgradeReady: boolean
@@ -245,6 +246,8 @@ export interface SessionProgress {
 export interface GameSession {
   closeNestWelcome(): void
   openNestMark(podId: number): void
+  openNestWarmLamp(podId: number): void
+  confirmNestWarmLamp(): void
   confirmNestMark(mark: NestMark): void
   openFinale():void
   closeFinale():void
@@ -464,8 +467,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   let mealing = false
   let mealTimer: number | undefined
   let nestWelcome: NestWelcome | null = null
+  let nestLampFollowup = false
   let nestInteraction = 0
-  const dismissNestWelcome = (): void => { if (nestWelcome) { nestWelcome = null; hooks.onNestWelcome?.(null); pushHighlight() } }
+  const dismissNestWelcome = (): void => { if (nestWelcome) { nestWelcome = null; hooks.onNestWelcome?.(null); renderer.setNestLampPreview(null); pushHighlight() } }
   const noteNestInteraction = (): void => { nestInteraction++ }
 
   const pushConversation = (): void => {
@@ -494,14 +498,16 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     pushHighlight()
   }
 
-  const showNestWelcome = (pod: import('../core/world').SleepPod): void => {
+  const showNestWelcome = (pod: import('../core/world').SleepPod, lamp = false): void => {
+    if (traveling || partnerOrders?.active) return
     const anchor = renderer.nestAnchor(pod)
     if (anchor.x < 0 || anchor.x > anchor.width || anchor.y < 0 || anchor.y > anchor.height || renderer.isOverview) return
     const residents = availablePartners(world).filter(p => partnerBed(world, p.id)?.pod.id === pod.id).map(p => p.name).join('和')
     siteEditor?.close(); roomEditor?.close()
-    nestWelcome = { podId: pod.id, anchor, mark: pod.mark, speech: residents
+    nestWelcome = { podId: pod.id, anchor, mark: pod.mark, lampAvailable: world.deep.completed, lampInstalled: pod.warmLamp === true, ...(lamp ? { lamp: { installed: pod.warmLamp === true, problem: nestWarmLampProblem(world, pod.id) } } : {}), speech: residents
       ? `${HOME_OWNER}，你帮${residents}安好了小窝！选一个喜欢的标记，留在小窝上吧。`
       : `${HOME_OWNER}，这是我们的小窝。选一个喜欢的标记，留在小窝上吧。` }
+    renderer.setNestLampPreview(lamp && !pod.warmLamp ? pod.id : null)
     hooks.onNestWelcome?.(nestWelcome); pushHighlight()
   }
 
@@ -1293,7 +1299,12 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   const completePartnerWork = (plan: WorkPlan): boolean => {
     const target = plan.target
-    if (target.kind === 'harvest') {
+    if (target.kind === 'nest-warm-lamp') {
+      if (!installNestWarmLamp(world, target.podId)) return false
+      history.record({ kind: 'nest-warm-lamp', podId: target.podId })
+      renderer.playNestLampLight(target.podId); playBuildComplete()
+      notify('暖光灯装好啦！第三层的工坊成果，留在喜欢的小窝里了。可以撤销。')
+    } else if (target.kind === 'harvest') {
       const tomato = world.farm.planters.find(p => p.x === target.x && p.y === target.y)?.crop === 'tomato'
       if (!harvestPlanter(world, target.x, target.y)) return false
       renderer.refreshFarm(); playHarvest(); renderer.playHarvest(target)
@@ -1342,20 +1353,28 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       cancel: () => renderer.cancelPartnerWork(),
     },
     state: state => {
+      const finishedNest = !state && nestLampFollowup ? currentWork?.nestPodId : undefined
       currentWork = state
       traveling = state !== null; supplying = state?.worker === 'xiaoquan'
       if (state) beginOrder('travel')
       else { endOrder(); renderer.refreshFriends(); scheduleSave() }
       hooks.onWork?.(state); pushProgress()
+      if (!state) {
+        nestLampFollowup = false
+        const pod = world.pods.find(p => p.id === finishedNest && p.warmLamp)
+        if (pod) showNestWelcome(pod, true)
+      }
     },
     complete: completePartnerWork, changed: scheduleSave, notify,
   })
   const requestPartnerWork = (target: WorkTarget): void => {
     if (traveling || partnerOrders?.active) return
+    dismissNestWelcome()
     siteEditor?.close()
     facilityPanel?.close()
     closeConversation(); roomEditor?.close(); buildMode = 'none'; lampMode = false; candidate = null; hoverBuild = null
     renderer.setHoverCell(null); renderer.setAtuTarget(null)
+    nestLampFollowup = target.kind === 'nest-warm-lamp'
     partnerOrders?.request(target)
     pushProgress()
   }
@@ -1628,7 +1647,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       closeConversation()
       if (cell) handleTap(cell)
     },
-    onPanBy: (delta) => { if (openingActive || inputBlocked) return; closeConversation(); renderer.panBy(delta.x, delta.y) },
+    onPanBy: (delta) => { if (openingActive || inputBlocked) return; nestLampFollowup = false; closeConversation(); renderer.panBy(delta.x, delta.y) },
     onHover: (screen) => {
       if (openingActive || inputBlocked) return
       if (discovering || talkingPartnerId) { renderer.setHoverCell(null); renderer.hoverPartner(null); renderer.setCursor('default'); return }
@@ -1670,7 +1689,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
         pushBuild()
       }
     },
-    onZoom: (delta, anchor) => { if (!openingActive && !inputBlocked) { closeConversation(); renderer.zoomBy(delta, anchor) } },
+    onZoom: (delta, anchor) => { if (!openingActive && !inputBlocked) { nestLampFollowup = false; closeConversation(); renderer.zoomBy(delta, anchor) } },
   })
 
   /**
@@ -1718,6 +1737,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     playUndo()
     if (restored.kind === 'finale' || restored.kind === 'ruins' || restored.kind === 'ventilation' || restored.kind === 'deep' || restored.kind === 'hall' || restored.kind === 'garden' || restored.kind === 'reservoir') { renderer.refresh(); deepChapter?.refresh() }
     else if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
+    else if (restored.kind === 'nest-warm-lamp') renderer.refreshPods()
     else if (restored.kind === 'planter') renderer.refreshFarm()
     else if (restored.kind === 'shelf') renderer.refreshShelves()
     else if (restored.kind === 'nursery') renderer.refreshFarm()
@@ -1727,6 +1747,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     renderer.refreshExploration(); scheduleSave(); pushProgress(); hooks.onMessage('↶ 已撤销上一步')
   }
   const cancelAction = (): void => {
+    nestLampFollowup = false
     if(finaleChapter?.busy){finaleChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
     if(ruinsChapter?.busy){ruinsChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
     if(ventilationChapter?.busy){ventilationChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
@@ -2076,6 +2097,17 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
 
   return {
     closeNestWelcome: dismissNestWelcome,
+    openNestWarmLamp: id => {
+      const pod = world.pods.find(p => p.id === id)
+      if (pod && world.deep.completed) showNestWelcome(pod, true)
+      else notify(nestWarmLampProblem(world, id) ?? '请先选择小窝。')
+    },
+    confirmNestWarmLamp: () => {
+      if (!nestWelcome?.lamp || traveling || partnerOrders?.active) return
+      const id = nestWelcome.podId, problem = nestWarmLampProblem(world, id)
+      if (problem) { notify(problem); return }
+      requestPartnerWork({ kind: 'nest-warm-lamp', podId: id })
+    },
     openNestMark: id => { const pod = world.pods.find(p => p.id === id); if (pod && roomEditor?.active) showNestWelcome(pod) },
     confirmNestMark: mark => {
       const pod = world.pods.find(p => p.id === nestWelcome?.podId)
@@ -2300,7 +2332,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       }
       confirmPod()
     },
-    zoomBy: (delta) => { closeConversation(); renderer.zoomBy(delta) },
+    zoomBy: (delta) => { nestLampFollowup = false; closeConversation(); renderer.zoomBy(delta) },
     centerOnHome: () => {
       finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
       closeConversation()

@@ -32,7 +32,7 @@ function harness() {
   const complete = vi.fn((plan: WorkPlan) => {
     if (plan.target.kind === 'harvest') { w.farm.food++; w.farm.harvests++; w.farm.planters[0].growth = 0 }
     else if (plan.target.kind === 'water') w.farm.waterSupplied = true
-    else w.exploration.lamps.push({ x: plan.target.x, y: 19 })
+    else if (plan.target.kind !== 'nest-warm-lamp') w.exploration.lamps.push({ x: plan.target.x, y: 19 })
     return true
   })
   const notify = vi.fn(), changed = vi.fn()

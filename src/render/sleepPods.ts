@@ -12,7 +12,7 @@ export function bedSlots(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall'>): 
 }
 
 /** 手绘床架位于后侧，前侧仍由玩法规则保留通行；无素材时保留旧造型。 */
-export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall' | 'mark'>, preview = false, texture?: Texture): Container {
+export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall' | 'mark' | 'warmLamp'>, preview = false, texture?: Texture, lampPreview = false): Container {
   const view = new Container()
   const g = new Graphics()
   const w = POD_SIZE.w * TILE_SIZE
@@ -61,5 +61,23 @@ export function drawSleepPod(pod: Pick<SleepPod, 'x' | 'y' | 'door' | 'backWall'
   }
   view.position.set(pod.x * TILE_SIZE, pod.y * TILE_SIZE)
   if (pod.backWall) { view.y -= 8; view.scale.y = .82 }
+  if (pod.warmLamp || lampPreview) {
+    const lamp = new Container()
+    lamp.label = lampPreview ? 'nest-warm-lamp-preview' : 'nest-warm-lamp'
+    // 抵消后墙设施压扁，让灯体始终约12×18世界像素。靠入口，与床头及中央标记错开。
+    lamp.position.set(pod.door === 'left' ? 15 : w - 15, 0)
+    lamp.scale.set(pod.door === 'left' ? 1 : -1, pod.backWall ? 1 / .82 : 1)
+    const halo = new Graphics()
+    halo.label = 'warm-lamp-halo'
+    for (let r = 25; r >= 7; r -= 3) halo.circle(0, 9, r).fill({ color: 0xffcf78, alpha: .014 })
+    const body = new Graphics()
+    body.roundRect(-6, 0, 3, 13, 1.5).fill(0xa26e45)
+    body.moveTo(-4, 4).quadraticCurveTo(6, 2, 4, 9).stroke({ width: 2, color: 0xbb8955 })
+    body.roundRect(-3, 7, 9, 10, 4).fill(0xfff3d8).stroke({ width: 1, color: 0xd8c6a4 })
+    body.ellipse(1.5, 12, 2, 3).fill(0xffd16e)
+    body.roundRect(-1, 16, 5, 2, 1).fill(0xa26e45)
+    lamp.addChild(halo, body); lamp.alpha = lampPreview ? .55 : 1
+    view.addChild(lamp)
+  }
   return view
 }

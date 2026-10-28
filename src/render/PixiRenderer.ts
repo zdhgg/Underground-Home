@@ -516,6 +516,8 @@ export class PixiWorldRenderer {
   /** 阿土单独受光，暗处仍看得清脸；阿灯继续在原黑暗层里躲藏。 */
   private readonly moleLayer = new Container()
   private readonly podLayer = new Container()
+  private nestLampPreview: number | null = null
+  private readonly nestLampLitAt = new Map<number, number>()
   private readonly buildPreview = new Container()
   private readonly darkness = new Graphics()
   private readonly lamps = new Graphics()
@@ -753,6 +755,8 @@ export class PixiWorldRenderer {
 
   /** 绑定世界数据（初始加载与替换时调用） */
   setWorld(world: WorldState): void {
+    this.nestLampPreview = null
+    this.nestLampLitAt.clear()
     this.setConversationPartner(null)
     this.lootFeedback.clear()
     this.lightingScene.preview.clear()
@@ -1152,8 +1156,15 @@ export class PixiWorldRenderer {
   refreshPods(): void {
     this.podEntrance = null
     for (const child of this.podLayer.removeChildren()) child.destroy({ children: true })
-    for (const pod of this.world?.pods ?? []) this.podLayer.addChild(drawSleepPod({ ...pod, ...(!podBlocksPassage(this.world!, pod) ? { backWall: true as const } : {}) }, false, this.nestTextures.bunks))
+    for (const pod of this.world?.pods ?? []) {
+      const view = drawSleepPod({ ...pod, ...(!podBlocksPassage(this.world!, pod) ? { backWall: true as const } : {}) }, false, this.nestTextures.bunks, this.nestLampPreview === pod.id && !pod.warmLamp)
+      view.label = `pod-${pod.id}`
+      this.podLayer.addChild(view)
+    }
   }
+
+  setNestLampPreview(podId: number | null): void { this.nestLampPreview = podId; this.refreshPods() }
+  playNestLampLight(podId: number): void { this.nestLampLitAt.set(podId, this.elapsed); this.refreshPods() }
 
   /**
    * 建造预览：睡眠舱画舱体轮廓，种植槽画一格槽位。
@@ -1537,6 +1548,14 @@ export class PixiWorldRenderer {
   private readonly tick = (ticker: Ticker): void => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
     this.elapsed += dt
+    for (const pod of this.world?.pods ?? []) {
+      const lamp = this.podLayer.getChildByLabel(`pod-${pod.id}`)?.getChildByLabel('nest-warm-lamp')
+      const halo = lamp?.getChildByLabel('warm-lamp-halo')
+      if (halo) {
+        const age = this.elapsed - (this.nestLampLitAt.get(pod.id) ?? -10)
+        halo.alpha = .78 + Math.sin(this.elapsed * .65 + pod.id) * .035 + Math.max(0, 1 - age / 1.8) * .6
+      }
+    }
     this.roomScene.update(this.elapsed)
     this.frameCount += 1
     this.syncViewport()

@@ -2,7 +2,7 @@ import { planPartnerWork, workAvailable, workerHomeRoute, workerName, workTitle,
 import { sameCell } from '../core/atu'
 import type { Cell, WorkerId, WorldState } from '../core/world'
 
-export interface WorkUI { worker: WorkerId; name: string; title: string; phase: 'walking' | 'working' | 'returning' }
+export interface WorkUI { worker: WorkerId; name: string; title: string; phase: 'walking' | 'working' | 'returning'; nestPodId?: number }
 interface WorkView {
   travel(id: WorkerId, route: Cell[], step: (cell: Cell) => void, done: () => void): void
   act(plan: WorkPlan, strike: () => void, done: () => void): void
@@ -29,7 +29,7 @@ export class PartnerOrders {
     const token = { plan: result.plan, worker: result.plan.worker, applied: false, title: workTitle(result.plan.target) }
     this.order = token
     const plan = token.plan
-    const state = (phase: WorkUI['phase']): void => this.ports.state({ worker: plan.worker, name: workerName(plan.worker), title: workTitle(plan.target), phase })
+    const state = (phase: WorkUI['phase']): void => this.ports.state({ worker: plan.worker, name: workerName(plan.worker), title: workTitle(plan.target), phase, ...(plan.target.kind === 'nest-warm-lamp' ? { nestPodId: plan.target.podId } : {}) })
     const current = (): boolean => this.order === token
     const step = (cell: Cell): void => {
       if (!current()) return
