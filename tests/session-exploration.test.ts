@@ -10,6 +10,7 @@ import { LANDMARKS, createInitialWorld, TILE, type Cell, type WorldState } from 
 import { dig } from '../src/core/dig'
 import { placePod } from '../src/core/build'
 import { deserialize, serialize } from '../src/core/persistence'
+import { RIPE_STAGE } from '../src/core/farm'
 import type { PartnerConversation } from '../src/core/partnerInteractions'
 import { inspectCrack, shaftConnected, upgradePickaxe } from '../src/core/exploration'
 import { createGameSession as createSession, type SessionHooks } from '../src/app/session'
@@ -214,6 +215,67 @@ describe('探索会话与存档集成', () => {
     session.destroy()
   })
 
+
+  it('家园心愿只重新验证并移动镜头：不扣材料、不收菜、不打断伙伴工作，过期目标安全刷新', async () => {
+    const save = warmLampWorld()
+    save.farm.planters.push({ id: 99, x: 28, y: 21, growth: RIPE_STAGE })
+    harness.store.load.mockResolvedValue(serialize(save))
+    const wishes = vi.fn(), message = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onWishes: wishes })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState, before = structuredClone(w)
+    expect(wishes.mock.calls.at(-1)![0].map((wish: { id: string }) => wish.id)).toEqual(['nest-warm-lamp', 'ripe-planter'])
+    harness.renderer.focusOn.mockClear(); message.mockClear()
+
+    session.focusHomeWish('nest-warm-lamp')
+    expect(harness.renderer.focusOn).toHaveBeenCalledWith((12 + 1.5) * 32, (10 + 1) * 32, 'building')
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('小窝'), undefined)
+    session.focusHomeWish('ripe-planter')
+    expect(harness.renderer.focusOn).toHaveBeenLastCalledWith((28 + .5) * 32, (21 + .2) * 32, 'building')
+    expect(w).toEqual(before)
+    expect(w.deep.parts).toBe(before.deep.parts)
+    expect(w.farm.food).toBe(before.farm.food)
+
+    // 界面快照过期：目标已经失效时不执行旧操作，只提示并刷新心愿。
+    w.pods[0].warmLamp = true
+    w.farm.planters.find(planter => planter.id === 99)!.growth = 0
+    harness.renderer.focusOn.mockClear()
+    session.focusHomeWish('nest-warm-lamp'); session.focusHomeWish('ripe-planter')
+    expect(harness.renderer.focusOn).not.toHaveBeenCalled()
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('都装好暖光灯'), undefined)
+    expect(message).toHaveBeenCalledWith(expect.stringContaining('已经收好'), undefined)
+    expect(wishes.mock.calls.at(-1)![0]).toEqual([])
+    session.destroy()
+  })
+
+  it('心愿快照随真实安装、撤销、成熟和收获及时刷新，不需要重新载入存档', async () => {
+    const save = warmLampWorld()
+    save.deep.parts = 1
+    harness.store.load.mockResolvedValue(serialize(save))
+    const wishes = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onWishes: wishes })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    const ids = () => wishes.mock.calls.at(-1)![0].map((wish: { id: string }) => wish.id)
+
+    expect(ids()).toEqual(['nest-warm-lamp'])
+    session.openNestWarmLamp(1); session.confirmNestWarmLamp()
+    expect(w.pods[0].warmLamp).toBe(true)
+    expect(w.deep.parts).toBe(0)
+    expect(ids()).toEqual([])
+
+    session.undo()
+    expect(w.pods[0].warmLamp).toBeUndefined()
+    expect(w.deep.parts).toBe(1)
+    expect(ids()).toEqual(['nest-warm-lamp'])
+
+    // 作物长熟后，下一次会话刷新就出现；收掉后同一刷新链路让心愿消失。
+    w.farm.planters.push({ id: 99, x: 28, y: 21, growth: RIPE_STAGE })
+    session.focusHomeWish('ripe-planter')
+    expect(ids()).toEqual(['nest-warm-lamp', 'ripe-planter'])
+    harness.handlers.onTap({ x: 28, y: 21 })
+    expect(w.farm.planters.find(planter => planter.id === 99)!.growth).toBe(0)
+    expect(ids()).toEqual(['nest-warm-lamp'])
+    session.destroy()
+  })
 
   it.each(['pan', 'zoom'] as const)('装灯期间主动%s后，完工保留灯且不重开详情或抢镜头', async gesture => {
     harness.store.load.mockResolvedValue(serialize(warmLampWorld()))

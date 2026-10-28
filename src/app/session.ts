@@ -25,6 +25,7 @@ import { RoomEditor, type RoomUI } from './roomEditor'
 import { SiteEditor, type SiteUI } from './siteEditor'
 import { FacilityPanel, facilityView, panelFacilityAt, type FacilityUI } from './facilityPanel'
 import { resolveGlobalGuide, primaryGuideAction, type GuideAction } from './guideAction'
+import { homeWishTarget, homeWishes, homeWishUnavailableReason, isFirstFloorPod, type HomeWish, type HomeWishId } from './homeWishes'
 import { depthAccess, type ChapterLayer } from './depthAccess'
 import type { ConversationAnchor } from '../render/conversationAnchor'
 import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
@@ -96,6 +97,8 @@ export interface SessionHooks {
   onExploration?(state: ExplorationUI): void
   /** 引水与种植（按钮与计数） */
   onFarm?(state: FarmUI): void
+  /** 家园心愿快照：只读、随世界状态重算，不写入存档。 */
+  onWishes?(wishes: HomeWish[]): void
   /** 一次性里程碑（突破岩层 / 抵达第二层 / 发现泉水）：界面弹一张大卡片 */
   onMilestone?(card: Milestone): void
   /** 一次只与一位伙伴交流；null表示关闭，不占用建造和挖掘模式。 */
@@ -334,6 +337,8 @@ export interface GameSession {
   undo(): void
   /** 把当前任务目标居中（"带我去看看"，只移动画面） */
   focusTarget(): void
+  /** 家园心愿：重新验证后把镜头带到真实目标，不改变世界状态。 */
+  focusHomeWish(id: HomeWishId): void
   upgradeTool(): void
   /** 连续施工：从当前梯段一路挖到洞底（学会两次委托之后可用） */
   digToBottom(): void
@@ -763,6 +768,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       mealReady: facilities !== null,
       mealActive: mealing,
     })
+    hooks.onWishes?.(homeWishes(world))
     hooks.onExploration?.({
       wideLighting: hasWideLampAbility(world), lightUpgradeReady: wideLampUpgrade(world).state === 'ready',
       clue: world.exploration.clueFound, upgraded: world.exploration.pickaxeUpgraded,
@@ -2096,6 +2102,51 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     show()
   }
 
+  /**
+   * 家园心愿只是“带我去看看”：重新读取当前世界状态、验证目标，
+   * 然后复用现有镜头。不扣材料、不装灯、不收菜、不推进主线，也不取消伙伴工作。
+   */
+  const wishFocusBlocked = (): boolean => Boolean(
+    openingActive || inputBlocked || traveling || mealing || discovering || talkingPartnerId || nestWelcome
+    || partnerOrders?.active || atuOrders?.active || siteEditor?.working
+    || roomEditor?.active || siteEditor?.active || facilityPanel?.active
+    || buildMode !== 'none' || lampMode
+    || finaleChapter?.active || finaleChapter?.busy
+    || ruinsChapter?.active || ruinsChapter?.busy
+    || ventilationChapter?.active || ventilationChapter?.busy
+    || reservoirChapter?.active || reservoirChapter?.busy
+    || gardenChapter?.active || gardenChapter?.busy
+    || hallChapter?.active || hallChapter?.busy
+    || deepChapter?.active || deepChapter?.busy,
+  )
+
+  const focusHomeWish = (id: HomeWishId): void => {
+    if (wishFocusBlocked()) {
+      notify('先做完眼前这件事，再去看家园心愿。')
+      return
+    }
+    const stale = (): void => {
+      notify(`家园有变化：${homeWishUnavailableReason(world, id)}`)
+      pushProgress()
+    }
+    // 界面上的心愿可能已经过时：只信当前世界状态重新算出来的目标。
+    const target = homeWishTarget(world, id)
+    if (!target) { stale(); return }
+    if (target.kind === 'pod') {
+      const pod = world.pods.find(p => p.id === target.podId && isFirstFloorPod(p) && !p.warmLamp)
+      if (!pod) { stale(); return }
+      renderer.focusOn((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, 'building')
+      notify('小窝在这里。点小窝看看，要不要给它添一盏暖光灯。')
+    } else {
+      const planter = world.farm.planters.find(p =>
+        p.id === target.planterId && p.x === target.x && p.y === target.y && p.growth >= RIPE_STAGE)
+      if (!planter) { stale(); return }
+      renderer.focusOn((planter.x + .5) * TILE_SIZE, (planter.y + .2) * TILE_SIZE, 'building')
+      notify('成熟的菜在这里。点菜槽，小满来收。')
+    }
+    pushProgress()
+  }
+
   return {
     closeNestWelcome: dismissNestWelcome,
     openNestWarmLamp: id => {
@@ -2397,6 +2448,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       undoLast()
     },
     focusTarget: focusCurrentClue,
+    focusHomeWish,
     upgradeTool,
     digToBottom: () => {
       if (traveling || !shaftChainReady(world)) return

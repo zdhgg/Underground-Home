@@ -1,0 +1,148 @@
+[
+  {
+    "viewport": {
+      "width": 390,
+      "height": 844
+    },
+    "errors": [],
+    "sheet": {
+      "x": 14,
+      "y": 72,
+      "width": 280,
+      "height": 473.21875,
+      "top": 72,
+      "bottom": 545.21875
+    },
+    "body": {
+      "x": 15,
+      "y": 127.25,
+      "width": 278,
+      "height": 416.96875,
+      "top": 127.25,
+      "bottom": 544.21875
+    },
+    "bodyScrollHeight": 758,
+    "bodyClientHeight": 417,
+    "wishes": {
+      "x": 25,
+      "y": 323.546875,
+      "width": 258,
+      "height": 229.4375,
+      "top": 323.546875,
+      "bottom": 552.984375
+    },
+    "wishCount": 2,
+    "buttons": [
+      {
+        "x": 33,
+        "y": 393.765625,
+        "width": 86.5,
+        "height": 38,
+        "top": 393.765625,
+        "bottom": 431.765625
+      },
+      {
+        "x": 33,
+        "y": 493.984375,
+        "width": 86.5,
+        "height": 38,
+        "top": 493.984375,
+        "bottom": 531.984375
+      }
+    ],
+    "buttonsOverlap": false,
+    "floorsHeading": {
+      "x": 25,
+      "y": 562.984375,
+      "width": 258,
+      "height": 16,
+      "top": 562.984375,
+      "bottom": 578.984375
+    },
+    "floorsHeadingVisible": false,
+    "firstFloor": {
+      "x": 25,
+      "y": 586.984375,
+      "width": 256,
+      "height": 44,
+      "top": 586.984375,
+      "bottom": 630.984375
+    },
+    "firstFloorVisible": false,
+    "topHeight": 52,
+    "horizontalOverflow": false
+  },
+  {
+    "viewport": {
+      "width": 360,
+      "height": 800
+    },
+    "errors": [],
+    "sheet": {
+      "x": 14,
+      "y": 72,
+      "width": 280,
+      "height": 444.171875,
+      "top": 72,
+      "bottom": 516.171875
+    },
+    "body": {
+      "x": 15,
+      "y": 127.25,
+      "width": 278,
+      "height": 387.921875,
+      "top": 127.25,
+      "bottom": 515.171875
+    },
+    "bodyScrollHeight": 758,
+    "bodyClientHeight": 388,
+    "wishes": {
+      "x": 25,
+      "y": 323.546875,
+      "width": 258,
+      "height": 229.4375,
+      "top": 323.546875,
+      "bottom": 552.984375
+    },
+    "wishCount": 2,
+    "buttons": [
+      {
+        "x": 33,
+        "y": 393.765625,
+        "width": 86.5,
+        "height": 38,
+        "top": 393.765625,
+        "bottom": 431.765625
+      },
+      {
+        "x": 33,
+        "y": 493.984375,
+        "width": 86.5,
+        "height": 38,
+        "top": 493.984375,
+        "bottom": 531.984375
+      }
+    ],
+    "buttonsOverlap": false,
+    "floorsHeading": {
+      "x": 25,
+      "y": 562.984375,
+      "width": 258,
+      "height": 16,
+      "top": 562.984375,
+      "bottom": 578.984375
+    },
+    "floorsHeadingVisible": false,
+    "firstFloor": {
+      "x": 25,
+      "y": 586.984375,
+      "width": 256,
+      "height": 44,
+      "top": 586.984375,
+      "bottom": 630.984375
+    },
+    "firstFloorVisible": false,
+    "topHeight": 52,
+    "horizontalOverflow": false
+  }
+]

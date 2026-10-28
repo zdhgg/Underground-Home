@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { createGameSession, type BuildState, type ExplorationUI, type FarmUI, type GameSession, type Milestone, type SessionProgress, type NestWelcome as NestWelcomeState } from './app/session'
+import type { HomeWish } from './app/homeWishes'
 import NestWelcome from './components/NestWelcome.vue'
 import type { DepthView } from './render/camera'
 import ExplorerNotebook from './components/ExplorerNotebook.vue'
@@ -114,6 +115,8 @@ const progress = ref<SessionProgress>({
 const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, shelfAvailable: false, nurseryAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0, shelfCount: 0, nurseryCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
 const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false, kitchen: false, dining: false, mealReady: false, mealActive: false })
+/** 家园心愿：由会话从世界状态重算，不在界面里保存任务进度。 */
+const wishes = ref<HomeWish[]>([])
 const exploration = ref<ExplorationUI>({ wideLighting: false, lightUpgradeReady: false, clue: false, upgraded: false, connected: false, entered: false, found: false, traveling: false, downstairs: false, lampMode: false, canChain: false, chaining: false, remaining: 0 })
 /** 里程碑卡片：突破岩层 / 抵达第二层 / 发现泉水时弹一次，几秒后自己收走 */
 const milestone = ref<Milestone | null>(null)
@@ -353,6 +356,7 @@ onMounted(async () => {
       onView: (next) => { view.value = next },
       onExploration: (next) => { exploration.value = next },
       onFarm: (next) => { farm.value = next },
+      onWishes: (next) => { wishes.value = next },
       onMilestone: showMilestone,
       onNestWelcome: next => { nestWelcome.value = next; if (next) { toolsOpen.value = false; partnerMenu.value = false; toastVisible.value = false; milestone.value = null } },
       onPartnerConversation: (next) => { conversation.value = next; if (next) { partnerMenu.value = false; toastVisible.value = false; milestone.value = null } },
@@ -445,11 +449,13 @@ onBeforeUnmount(() => {
         :finished="progress.finished"
         :primary-label="progress.action?.label ?? '看看能源石'"
         :primary-disabled="exploration.traveling"
+        :wishes="wishes"
         :view="view"
         :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available"
         :reservoir-available="reservoir.available" :ventilation-available="ventilation.available"
         :ruins-available="ruins.available" :finale-available="finale.available"
         @open="setNotebook(true)" @close="setNotebook(false)" @primary="performGuide"
+        @wish="navigateFromNotebook(() => session?.focusHomeWish($event))"
         @home="navigateFromNotebook(() => session?.centerOnHome())" @water="navigateFromNotebook(() => session?.lookDown())"
         @crystal="navigateFromNotebook(() => session?.lookCrystal())" @hall="navigateFromNotebook(() => session?.openHall())"
         @garden="navigateFromNotebook(() => session?.openGarden())" @reservoir="navigateFromNotebook(() => session?.openReservoir())"
