@@ -1,0 +1,57 @@
+{
+  "productionUrl": "http://127.0.0.1:5198/",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "topHeight": 56,
+      "stageHeight": 790,
+      "canvasHeight": 790,
+      "topChildren": 5,
+      "horizontalOverflow": false,
+      "lockedToast": "先在暖光大厅办完六人暖屋宴，就能去菌光花园啦。",
+      "errors": []
+    },
+    {
+      "viewport": {
+        "width": 1280,
+        "height": 720
+      },
+      "topHeight": 56,
+      "stageHeight": 610,
+      "canvasHeight": 610,
+      "topChildren": 5,
+      "horizontalOverflow": false,
+      "lockedToast": "先在暖光大厅办完六人暖屋宴，就能去菌光花园啦。",
+      "errors": []
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "topHeight": 52,
+      "stageHeight": 750,
+      "canvasHeight": 750,
+      "topChildren": 5,
+      "horizontalOverflow": false,
+      "lockedToast": "先在暖光大厅办完六人暖屋宴，就能去菌光花园啦。",
+      "errors": []
+    },
+    {
+      "viewport": {
+        "width": 360,
+        "height": 800
+      },
+      "topHeight": 52,
+      "stageHeight": 706,
+      "canvasHeight": 706,
+      "topChildren": 5,
+      "horizontalOverflow": false,
+      "lockedToast": "先在暖光大厅办完六人暖屋宴，就能去菌光花园啦。",
+      "errors": []
+    }
+  ]
+}
