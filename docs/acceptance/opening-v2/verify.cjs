@@ -50,6 +50,7 @@ async function main() {
       [10800, 'climb', '', '05-descent.png'],
       [13400, 'core', '', '06-core.png'],
       [14800, 'clue', '', '07-clue.png'],
+      [15500, 'welcome', '心心，这里就是我们的地下小家园。', '08-home.png'],
     ]) {
       await desktop.page.clock.runFor(ms - elapsed); elapsed = ms
       assert.equal(await desktop.page.locator('canvas').getAttribute('data-opening-phase'), phase)
@@ -60,10 +61,10 @@ async function main() {
       await shot(desktop.page, name)
       results.push({ case: `desktop-${phase}`, at: ms / 1000, speech, passed: true })
     }
-    await desktop.page.clock.runFor(2000)
+    await desktop.page.clock.runFor(3000)
     await finished(desktop.page)
     const finalCamera = await camera(desktop.page)
-    await shot(desktop.page, '08-handoff.png')
+    await shot(desktop.page, '09-handoff.png')
     results.push({ case: 'natural-end-first-mission-0-of-4', passed: true })
     await desktop.context.close()
 
@@ -86,7 +87,7 @@ async function main() {
         assert.equal(await item.page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
         await shot(item.page, `${viewport.width}-${phase}.png`)
       }
-      await item.page.clock.runFor(8000)
+      await item.page.clock.runFor(10000)
       await finished(item.page)
       results.push({ case: `full-playback-${viewport.width}x${viewport.height}`, passed: true })
       await item.context.close()

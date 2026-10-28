@@ -44,6 +44,12 @@
       "passed": true
     },
     {
+      "case": "desktop-welcome",
+      "at": 15.5,
+      "speech": "心心，这里就是我们的地下小家园。",
+      "passed": true
+    },
+    {
       "case": "natural-end-first-mission-0-of-4",
       "passed": true
     },
