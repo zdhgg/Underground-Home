@@ -11,10 +11,19 @@ function collapse(): void {
   expanded.value = false
   toggle.value?.focus({ preventScroll: true })
 }
+/**
+ * 嵌入小本子时只接管“帮助展开”的那次 Esc；帮助已收起时把 Esc 留给小本子，
+ * 由它收起整个面板。独立使用时保持原来的行为。
+ */
+function onEscape(event: KeyboardEvent): void {
+  if (!expanded.value && props.embedded) return
+  event.stopPropagation()
+  collapse()
+}
 </script>
 
 <template>
-  <section class="guide" :class="{ embedded: props.embedded }" data-attention-panel="guide" aria-label="阿土的建议" @keydown.esc.stop="collapse">
+  <section class="guide" :class="{ embedded: props.embedded }" data-attention-panel="guide" aria-label="阿土的建议" @keydown.esc="onEscape">
     <div class="summary">
       <span class="portrait" aria-hidden="true">
         <img v-if="!portraitFailed" :src="atuPortraitUrl" alt="" @error="portraitFailed = true" />
