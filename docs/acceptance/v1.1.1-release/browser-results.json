@@ -1,0 +1,37 @@
+{
+  "browser": "Chrome headless, production Vite preview, isolated browser contexts",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "version": "1.1.1",
+      "newestNotes": "1.1.1 · 2026-10-28",
+      "freshTitleDoesNotWrite": true,
+      "startAndGuide": true,
+      "memoryTextSaved": true,
+      "saveVersion": 25,
+      "reloadContinue": true,
+      "memoryTextRestored": true,
+      "noHorizontalOverflow": true
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "version": "1.1.1",
+      "newestNotes": "1.1.1 · 2026-10-28",
+      "freshTitleDoesNotWrite": true,
+      "startAndGuide": true,
+      "memoryTextSaved": true,
+      "saveVersion": 25,
+      "reloadContinue": true,
+      "memoryTextRestored": true,
+      "noHorizontalOverflow": true
+    }
+  ],
+  "pageErrors": [],
+  "httpErrors": []
+}
