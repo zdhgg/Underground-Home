@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import GuidePanel from './GuidePanel.vue'
 import DepthNavigation from './DepthNavigation.vue'
+import { HOME_WISH_LIMIT, type HomeWish, type HomeWishId } from '../app/homeWishes'
 import type { DepthView } from '../render/camera'
 import atuPortraitUrl from '../assets/art/characters/atu-portrait-v1.png'
 
@@ -20,6 +21,8 @@ const props = defineProps<{
   finished: boolean
   primaryLabel: string
   primaryDisabled?: boolean
+  /** 可选的家园活动；最多显示两条，没有时整个栏目不出现。 */
+  wishes?: HomeWish[]
   view: DepthView
   crystalAvailable?: boolean
   hallAvailable?: boolean
@@ -30,12 +33,14 @@ const props = defineProps<{
   reservoirAvailable?: boolean
 }>()
 const emit = defineEmits<{
-  open: []; close: []; primary: []
+  open: []; close: []; primary: []; wish: [id: HomeWishId]
   home: []; water: []; crystal: []; hall: []; garden: []; reservoir: []; finale: []; ruins: []; ventilation: []; overview: []; locked: [reason: string]
 }>()
 const tab = ref<HTMLButtonElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
 const portraitFailed = ref(false)
+/** 心愿是次要导航：最多两条，与主线同屏时也不能把面板重新撑成大任务清单。 */
+const wishes = computed(() => (props.wishes ?? []).slice(0, HOME_WISH_LIMIT))
 
 async function closeNotebook(): Promise<void> {
   emit('close')
@@ -84,6 +89,19 @@ async function openNotebook(): Promise<void> {
           </GuidePanel>
         </section>
         <p v-else-if="props.open" class="notebook-quiet">现在先专心做眼前这件事，做完再回来看。</p>
+        <section v-if="props.open && props.guideVisible && wishes.length" class="notebook-wishes" aria-labelledby="explorer-wishes-heading">
+          <h2 id="explorer-wishes-heading">🏠 我的家园心愿</h2>
+          <ul class="wish-list">
+            <li v-for="wish in wishes" :key="wish.id" class="wish-item">
+              <div class="wish-text">
+                <strong><span aria-hidden="true">{{ wish.emoji }}</span> {{ wish.title }}</strong>
+                <p>{{ wish.detail }}</p>
+                <p v-if="wish.note" class="wish-note">{{ wish.note }}</p>
+              </div>
+              <button class="wish-action" type="button" @click="$emit('wish', wish.id)">{{ wish.actionLabel }}</button>
+            </li>
+          </ul>
+        </section>
         <section class="notebook-floors" aria-labelledby="explorer-floors-heading">
           <h2 id="explorer-floors-heading">🗺️ 去哪里？</h2>
           <DepthNavigation :view="view" :crystal-available="crystalAvailable" :hall-available="hallAvailable" :garden-available="gardenAvailable" :reservoir-available="reservoirAvailable" :ventilation-available="ventilationAvailable" :ruins-available="ruinsAvailable" :finale-available="finaleAvailable" @home="$emit('home')" @water="$emit('water')" @crystal="$emit('crystal')" @hall="$emit('hall')" @garden="$emit('garden')" @reservoir="$emit('reservoir')" @ventilation="$emit('ventilation')" @ruins="$emit('ruins')" @finale="$emit('finale')" @overview="$emit('overview')" @locked="$emit('locked', $event)" />
@@ -114,9 +132,17 @@ async function openNotebook(): Promise<void> {
 .notebook-close:hover { background: #e7efe2; }
 .notebook-close span { display: block; transform: translateY(-2px); }
 .notebook-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: grid; gap: 12px; align-content: start; }
-.notebook-mission, .notebook-floors { display: grid; gap: 8px; }
-.notebook-mission { padding-bottom: 12px; border-bottom: 1px dashed #dbe5d3; }
+.notebook-mission, .notebook-wishes, .notebook-floors { display: grid; gap: 8px; }
+.notebook-mission, .notebook-wishes { padding-bottom: 12px; border-bottom: 1px dashed #dbe5d3; }
 .notebook-body h2 { margin: 0; font-size: 12px; font-weight: 700; color: #6d8474; letter-spacing: .3px; }
+.notebook-wishes { gap: 6px; }
+.wish-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.wish-item { display: grid; gap: 5px; padding: 7px 8px 8px; border-radius: 9px; background: #f3f7ee; }
+.wish-text strong { display: block; color: #436454; font-size: 13px; line-height: 1.35; }
+.wish-text p { margin: 2px 0 0; color: #75877b; font-size: 11.5px; line-height: 1.45; }
+.wish-text .wish-note { color: #9a6734; }
+.wish-action { justify-self: start; min-height: 38px; padding: 7px 12px; border-radius: 8px; background: #e4eee2; color: #3f6653; font-size: 12.5px; font-weight: 600; }
+.wish-action:hover { background: #d8e6d8; }
 .notebook-primary { min-height: 46px; width: 100%; padding: 10px 12px; border-radius: 10px; background: #3c8063; color: #fff; font-size: 14px; font-weight: 700; }
 .notebook-primary:hover { background: #326f55; }
 .notebook-primary:disabled { opacity: .55; cursor: default; }

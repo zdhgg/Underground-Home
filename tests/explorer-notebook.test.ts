@@ -7,12 +7,17 @@ import Game from '../src/App.vue'
 import { cameraDepth, lookDepth, type DepthView } from '../src/render/camera'
 import type { GameSession, SessionHooks } from '../src/app/session'
 import { emptyHallUI } from '../src/app/hallChapter'
+import type { HomeWish } from '../src/app/homeWishes'
 
 const view = (layer: DepthView['layer'] = 'home', over: Partial<DepthView> = {}): DepthView => ({ layer, overview: false, ...over })
 const baseProps = () => reactive({
   open: true, guideVisible: true, docked: false, layerLabel: '第 1 层 · 暖窝', title: '找到发光的能源石',
   done: 0, total: 4, finished: false, primaryLabel: '看看能源石', primaryDisabled: false, view: view(),
 })
+const wishes = (): HomeWish[] => [
+  { id: 'nest-warm-lamp', emoji: '🪔', title: '给小窝添盏暖光灯', detail: '第三层做的新部件，可以带回家啦！', actionLabel: '去看看小窝', target: { kind: 'pod', podId: 1 }, note: '还差1个工坊部件，可以去第三层再做一个。' },
+  { id: 'ripe-planter', emoji: '🥕', title: '菜长熟啦！', detail: '小满照顾的菜可以收获啦！', actionLabel: '去看看菜园', target: { kind: 'planter', planterId: 2, x: 28, y: 21 } },
+]
 type Listener = (...args: never[]) => void
 
 let app: App | undefined
@@ -53,6 +58,7 @@ describe('阿土的探索小本子', () => {
   it('同一个小本子里先显示主线，再显示已开放楼层；未开放楼层默认收起', async () => {
     const { host } = await mountNotebook()
     expect(host.querySelector('.notebook-mission')?.textContent).toContain('找到发光的能源石')
+    expect(host.querySelector('.notebook-wishes')).toBeNull()
     expect(host.querySelector('.notebook-primary')?.textContent).toBe('看看能源石')
     const floors = host.querySelectorAll('.depth-nav .floors > button')
     expect(Array.from(floors).map(button => button.textContent?.trim())).toEqual(['1层 · 暖窝正在看', '2层 · 泉水'])
@@ -130,11 +136,61 @@ describe('阿土的探索小本子', () => {
     host.querySelector<HTMLButtonElement>('.notebook-primary')!.click()
     expect(primary).toHaveBeenCalledTimes(1)
   })
+
+  it('家园心愿在主线下方、楼层上方；没有主要操作标记，缺料提示可见', async () => {
+    const props = { ...baseProps(), wishes: wishes() }
+    const { host } = await mountNotebook(props as ReturnType<typeof baseProps>)
+    const order = Array.from(host.querySelectorAll('.notebook-mission, .notebook-wishes, .notebook-floors'))
+    expect(order.map(section => section.className)).toEqual(['notebook-mission', 'notebook-wishes', 'notebook-floors'])
+    const section = host.querySelector('.notebook-wishes')!
+    expect(section.textContent).toContain('我的家园心愿')
+    expect(section.textContent).toContain('给小窝添盏暖光灯')
+    expect(section.textContent).toContain('还差1个工坊部件')
+    expect(section.textContent).toContain('菜长熟啦！')
+    expect(section.querySelectorAll('[data-primary-action]')).toHaveLength(0)
+    expect(host.querySelectorAll('.notebook-sheet [data-primary-action]')).toHaveLength(1)
+    expect(host.querySelectorAll('.wish-action')).toHaveLength(2)
+  })
+
+  it('点击心愿只发出稳定ID，由会话重新验证目标', async () => {
+    const wish = vi.fn()
+    const props = { ...baseProps(), wishes: wishes() }
+    const { host } = await mountNotebook(props as ReturnType<typeof baseProps>, { onWish: wish })
+    Array.from(host.querySelectorAll<HTMLButtonElement>('.wish-action'))[1].click()
+    expect(wish).toHaveBeenCalledWith('ripe-planter')
+  })
+
+  it('同时最多两条；超过两条的部分不渲染', async () => {
+    const props = {
+      ...baseProps(),
+      wishes: [...wishes(), { ...wishes()[1], id: 'ripe-planter' as const, title: '第三条' }],
+    }
+    const { host } = await mountNotebook(props as ReturnType<typeof baseProps>)
+    expect(host.querySelectorAll('.wish-item')).toHaveLength(2)
+    expect(host.textContent).not.toContain('第三条')
+  })
+
+  it('主要面板存在时心愿跟随主线一起让位；收起后也不在紧凑入口留下内容', async () => {
+    const props = reactive({ ...baseProps(), wishes: wishes() })
+    const { host } = await mountNotebook(props as ReturnType<typeof baseProps>)
+    props.guideVisible = false
+    await nextTick()
+    expect(host.querySelector('.notebook-wishes')).toBeNull()
+    expect(host.querySelector('.notebook-mission')).toBeNull()
+    expect(host.querySelector('.notebook-quiet')?.textContent).toContain('先专心做眼前这件事')
+    expect(host.querySelector('.notebook-floors')).not.toBeNull()
+    props.open = false
+    props.guideVisible = true
+    await nextTick()
+    expect(host.querySelector('.notebook-wishes')).toBeNull()
+    expect(host.querySelector('.notebook-tab')?.textContent).not.toContain('菜长熟啦')
+    expect(host.querySelector('.notebook-tab')?.textContent).not.toContain('暖光灯')
+  })
 })
 
 const harness = vi.hoisted(() => ({
   hooks: null as SessionHooks | null,
-  lookDown: vi.fn(), centerOnHome: vi.fn(), showOverview: vi.fn(), openHall: vi.fn(), cancelAction: vi.fn(), findAtu: vi.fn(),
+  lookDown: vi.fn(), centerOnHome: vi.fn(), showOverview: vi.fn(), openHall: vi.fn(), cancelAction: vi.fn(), findAtu: vi.fn(), focusHomeWish: vi.fn(),
 }))
 vi.mock('../src/app/session', () => ({
   createGameSession: async (_host: HTMLElement, hooks: SessionHooks): Promise<Partial<GameSession>> => {
@@ -145,6 +201,7 @@ vi.mock('../src/app/session', () => ({
       enableOpeningSound: () => {}, setInputBlocked: () => {}, destroy: () => {},
       lookDown: harness.lookDown, centerOnHome: harness.centerOnHome, showOverview: harness.showOverview,
       openHall: harness.openHall, cancelAction: harness.cancelAction, findAtu: harness.findAtu,
+      focusHomeWish: harness.focusHomeWish,
     }
   },
 }))
@@ -167,19 +224,37 @@ describe('顶部工具栏与探索小本子的交接', () => {
     expect(host.querySelector('.notebook-mission')?.textContent).toContain('找到发光的能源石')
   })
 
+  it('心愿随会话快照进入小本子；点击后收起并交给会话重新验证', async () => {
+    const { host, hooks } = await mountGame()
+    harness.focusHomeWish.mockClear()
+    hooks.onWishes?.(wishes())
+    await nextTick()
+    const sections = Array.from(host.querySelectorAll('.notebook-mission, .notebook-wishes, .notebook-floors'))
+    expect(sections.map(section => section.className)).toEqual(['notebook-mission', 'notebook-wishes', 'notebook-floors'])
+    expect(host.querySelectorAll('.stage [data-primary-action]')).toHaveLength(1)
+    expect(host.querySelectorAll('.wish-action[data-primary-action]')).toHaveLength(0)
+    host.querySelectorAll<HTMLButtonElement>('.wish-action')[0].click()
+    await nextTick()
+    expect(harness.focusHomeWish).toHaveBeenCalledWith('nest-warm-lamp')
+    expect(host.querySelector<HTMLElement>('.notebook-sheet')?.style.display).toBe('none')
+  })
+
   it('章节面板打开时自动让位；仍可从小本子换楼层，且只有一个主要操作', async () => {
     const { host, hooks } = await mountGame()
     harness.openHall.mockClear(); harness.lookDown.mockClear(); harness.cancelAction.mockClear()
+    hooks.onWishes?.(wishes())
     hooks.onHall?.({ ...emptyHallUI(), available: true, active: true, title: '先把旧木梁托稳', label: '安装新支撑' })
     await nextTick()
     expect(host.querySelector('.hall-panel')).not.toBeNull()
     expect(host.querySelector('.notebook-mission')).toBeNull()
+    expect(host.querySelector('.notebook-wishes')).toBeNull()
     expect(host.querySelector<HTMLElement>('.notebook-sheet')?.style.display).toBe('none')
     const primaryCount = () => host.querySelectorAll('.stage [data-primary-action]').length
     expect(primaryCount()).toBe(1)
     host.querySelector<HTMLButtonElement>('.notebook-tab')!.click(); await nextTick()
     expect(host.querySelector<HTMLElement>('.notebook-sheet')?.style.display).not.toBe('none')
     expect(host.querySelector('.notebook-mission')).toBeNull()
+    expect(host.querySelector('.notebook-wishes')).toBeNull()
     expect(host.querySelector('.notebook-quiet')?.textContent).toContain('先专心做眼前这件事')
     expect(primaryCount()).toBe(1)
     host.querySelector<HTMLButtonElement>('.depth-nav .water')!.click(); await nextTick()
