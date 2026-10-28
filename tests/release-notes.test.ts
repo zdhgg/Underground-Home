@@ -34,7 +34,8 @@ describe('更新记录解析', () => {
 
   it('实际 CHANGELOG 能被读出，且不把 Markdown 标记带到界面上', () => {
     expect(RELEASE_NOTES.length).toBeGreaterThanOrEqual(3)
-    expect(RELEASE_NOTES[0].title).toContain('1.0.0')
+    // 最新一节应是“版本号 · 日期”；只校验形状，发版时不用再改测试。
+    expect(RELEASE_NOTES[0].title).toMatch(/^\d+\.\d+\.\d+ · \d{4}-\d{2}-\d{2}$/)
     const text = RELEASE_NOTES.flatMap((section) => [section.title, ...section.items, ...section.paragraphs]).join('\n')
     expect(text).not.toContain('**')
     expect(text).not.toContain('](')
