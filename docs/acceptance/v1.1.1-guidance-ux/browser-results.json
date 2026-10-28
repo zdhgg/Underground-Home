@@ -1,0 +1,222 @@
+{
+  "browser": "Chrome headless (real Pixi/WebGL)",
+  "results": [
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "early",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "找到发光的能源石",
+      "action": "看看能源石",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "deep",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "小石炉开工",
+      "action": "看看第三层的新线索",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "hall",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "六个人的暖屋宴",
+      "action": "看看暖光大厅",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "garden",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "小满照料菌苗",
+      "action": "看看菌光花园",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "reservoir",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "把水蓄到三道刻线",
+      "action": "看看蓄水回廊",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "ventilation",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "先试一阵家园微风",
+      "action": "看看听风工区",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "ruins",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "岩壁故事 · 一盏灯",
+      "action": "看看旧地脉遗迹",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "finale",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "花园的收成来到长桌",
+      "action": "看看地心暖光",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "phase": "completed",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "九层家园建好啦，接下来由你继续布置",
+      "action": "看看九层家园全景",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "early",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "找到发光的能源石",
+      "action": "看看能源石",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "deep",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "小石炉开工",
+      "action": "看看第三层的新线索",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "hall",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "六个人的暖屋宴",
+      "action": "看看暖光大厅",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "garden",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "小满照料菌苗",
+      "action": "看看菌光花园",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "reservoir",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "把水蓄到三道刻线",
+      "action": "看看蓄水回廊",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "ventilation",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "先试一阵家园微风",
+      "action": "看看听风工区",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "ruins",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "岩壁故事 · 一盏灯",
+      "action": "看看旧地脉遗迹",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "finale",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "花园的收成来到长桌",
+      "action": "看看地心暖光",
+      "overflow": false
+    },
+    {
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "phase": "completed",
+      "panelCount": 1,
+      "primaryCount": 1,
+      "title": "九层家园建好啦，接下来由你继续布置",
+      "action": "看看九层家园全景",
+      "overflow": false
+    }
+  ],
+  "errors": []
+}

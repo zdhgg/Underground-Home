@@ -1,6 +1,6 @@
 import { LANDMARKS, type Rect, type WorldState } from './world'
 import { shaftConnected, springVisible, suggestedBreakthrough, waterSpan } from './exploration'
-import { canBuildMorePods, waitingPartnerList, waitingPartners } from './partners'
+import { waitingPartnerList, PARTNERS_AFTER_SPRING } from './partners'
 import { DINING_SITE_ID, KITCHEN_SITE_ID } from './meal'
 import { siteById } from './sites'
 import { HOME_OWNER, HOME_TITLE } from './personal'
@@ -90,6 +90,9 @@ export type GuideHighlight =
   | { kind: 'build'; rect: Rect }
   | { kind: 'none' }
 
+/** 第二层原有四位伙伴，后续伙伴的安家由所属章节负责。 */
+const secondLayerWaiting = (world: WorldState) => waitingPartnerList(world).filter(partner => partner.bedSlot < PARTNERS_AFTER_SPRING)
+
 export function guideHighlight(world: WorldState): GuideHighlight {
   const { crystalFound, crystalCollected, coreRepaired } = world.progress
   if (!crystalFound) return { kind: 'dig', rect: LANDMARKS.crystalZone }
@@ -113,7 +116,7 @@ export function guideHighlight(world: WorldState): GuideHighlight {
     // 找到水之后先把它接进菜园（点面板上的「把水接到菜园」）
     if (!world.farm.waterSupplied) return { kind: 'repair', rect: { ...LANDMARKS.spring, w: 1, h: 1 } }
     // 先给新朋友安床；住下之后，菜园在第二层泉水边。
-    if (canBuildMorePods(world)) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
+    if (secondLayerWaiting(world).length > 0) return { kind: 'build', rect: LANDMARKS.buildSuggestion }
     if (world.farm.harvests === 0) return { kind: 'build', rect: LANDMARKS.gardenSuggestion }
     // 第一夜过完了：家里有电，该顺着梯道送到下面去了
     if (!world.powerDown) return { kind: 'repair', rect: LANDMARKS.generatorZone }
@@ -134,8 +137,10 @@ export function explorationGuide(world: WorldState): { title: string; speech: st
   const e = world.exploration
   const farm = world.farm
   const connected = shaftConnected(world)
-  const waiting = waitingPartners(world)
-  const waitingNames = waitingPartnerList(world).map((partner) => partner.name).join('和')
+  // 第二层只负责原有四位伙伴；后续新朋友的床位由各自章节引导。
+  const waitingFriends = secondLayerWaiting(world)
+  const waiting = waitingFriends.length
+  const waitingNames = waitingFriends.map((partner) => partner.name).join('和')
   // 在找到水之前，这两步都不算数：那时"没等床的伙伴""没收成"只是还没开始。
   const friendsSettled = e.springFound && waiting === 0
   const harvested = farm.harvests > 0

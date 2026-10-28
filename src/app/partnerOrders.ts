@@ -11,17 +11,22 @@ interface WorkView {
 
 /** 一项专业工作；结算只发生一次，取消后所有旧回调失效。 */
 export class PartnerOrders {
-  private order: { worker: WorkerId; applied: boolean } | null = null
+  private order: { worker: WorkerId; applied: boolean; title: string } | null = null
   get active(): boolean { return this.order !== null }
   constructor(private readonly ports: {
     world(): WorldState; view: WorkView; state(value: WorkUI | null): void
     changed(): void; complete(plan: WorkPlan): boolean; notify(text: string): void
   }) {}
+  /** 被占用时明确反馈；所有场景目标仍走原来的单项分发，不排队。 */
+  explainBusy(): void {
+    if (!this.order) return
+    this.ports.notify(`${workerName(this.order.worker)}正在${this.order.title}。可以拖图、查看楼层；想做别的，先点“停下来，换个目标”。`)
+  }
   request(target: WorkTarget): void {
-    if (this.order) return
+    if (this.order) { this.explainBusy(); return }
     const result = planPartnerWork(this.ports.world(), target)
     if (!result.ok) { this.ports.notify(result.message); return }
-    const token: { plan: WorkPlan; worker: WorkerId; applied: boolean } = { plan: result.plan, worker: result.plan.worker, applied: false }
+    const token = { plan: result.plan, worker: result.plan.worker, applied: false, title: workTitle(result.plan.target) }
     this.order = token
     const plan = token.plan
     const state = (phase: WorkUI['phase']): void => this.ports.state({ worker: plan.worker, name: workerName(plan.worker), title: workTitle(plan.target), phase })
@@ -59,7 +64,7 @@ export class PartnerOrders {
   /** 建床前的单次退让复用同一锁与取消边界，不生成新任务或瞬移。 */
   clearBed(worker: WorkerId, route: Cell[], done: () => void): void {
     if (this.order) return
-    const token = this.order = { worker, applied: false }
+    const token = this.order = { worker, applied: false, title: '让开床位' }
     this.ports.state({ worker, name: workerName(worker), title: '让开床位', phase: 'walking' })
     this.ports.view.travel(worker, route, p => {
       if (this.order !== token) return
@@ -75,6 +80,6 @@ export class PartnerOrders {
     const applied = this.order.applied, name = workerName(this.order.worker)
     this.order = null
     this.ports.view.cancel(); this.ports.state(null)
-    if (message) this.ports.notify(applied ? `${name}停下来啦，刚完成的成果保留。` : `${name}停下来啦，点设施可以重新开始。`)
+    if (message) this.ports.notify(applied ? `${name}停下来啦，刚完成的成果保留。现在可以点新的目标。` : `${name}停下来啦，现在可以点新的目标。`)
   }
 }

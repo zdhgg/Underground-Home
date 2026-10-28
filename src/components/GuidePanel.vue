@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import atuPortraitUrl from '../assets/art/characters/atu-portrait-v1.png'
 
-defineProps<{ title: string; done: number; total: number; finished: boolean }>()
+defineProps<{ layerLabel?: string; title: string; done: number; total: number; finished: boolean }>()
 const expanded = ref(false)
 const portraitFailed = ref(false)
 const toggle = ref<HTMLButtonElement | null>(null)
@@ -21,7 +21,7 @@ function collapse(): void {
         <span v-else>阿土</span>
       </span>
       <div class="goal" aria-live="polite">
-        <small>{{ finished ? '阿土说：家越来越大啦' : '阿土的建议' }} <span>{{ done }}/{{ total }}</span></small>
+        <small>{{ finished ? '自由建设' : `${layerLabel ?? '当前家园'} · 当前目标` }}</small>
         <strong>{{ title }}</strong>
       </div>
     </div>
