@@ -7,7 +7,7 @@ import { FRIEND_HOME_CELLS, findEntranceRoute } from '../src/render/friendRoutes
 
 function readyWorld() {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let y = 10; y < 12; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
   return world
 }

@@ -7,7 +7,7 @@ import { PartnerOrders } from '../src/app/partnerOrders'
 import { PartnerMotion } from '../src/render/partnerMotion'
 import { createWorldHistory } from '../src/core/history'
 import { deserialize, serialize } from '../src/core/persistence'
-import { TILE, type Cell, type WorkerId } from '../src/core/world'
+import { TILE, WORLD_VERSION, type Cell, type WorkerId } from '../src/core/world'
 import { atuCanStand } from '../src/core/atu'
 import { finishRoom, planRoom, roomCapacity } from '../src/core/roomConstruction'
 import { RoomEditor, type RoomUI } from '../src/app/roomEditor'
@@ -95,7 +95,7 @@ describe('工坊成果改善小窝', () => {
   it('v25迁移默认无灯且能继续安装；v26拒绝非法字段和未完成前置', () => {
     const save = serialize(warmLampWorld()); save.version = 25; save.world.pods[0].warmLamp = true
     const result = deserialize(save); expect(result.ok).toBe(true)
-    if (result.ok) { expect(result.world.pods[0].warmLamp).toBeUndefined(); expect(installNestWarmLamp(result.world, 1)).toBe(true); expect(serialize(result.world).version).toBe(26) }
+    if (result.ok) { expect(result.world.pods[0].warmLamp).toBeUndefined(); expect(installNestWarmLamp(result.world, 1)).toBe(true); expect(serialize(result.world).version).toBe(WORLD_VERSION) }
     const invalid = serialize(warmLampWorld()); (invalid.world.pods[0] as unknown as { warmLamp: unknown }).warmLamp = false
     expect(deserialize(invalid)).toMatchObject({ ok: false, error: expect.stringContaining('暖光灯') })
     invalid.world.pods[0].warmLamp = true; invalid.world.deep.completed = false

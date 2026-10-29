@@ -1,4 +1,5 @@
 import { checkRoom, checkRoomPlan, removeRoom, roomAt, roomContains, roomFromPoint, roomSummary, ROOM_HINTS, ROOM_MAX_WIDTH, ROOM_NAMES, type RoomChange } from '../core/rooms'
+import { loungeStage } from '../core/lounge'
 import { canFinishRoom, excavationLeft, finishRoom, planRoom, roomCapacity, ROOM_SPECS, roomExpansionCost } from '../core/roomConstruction'
 import { canAfford, changeMaterials, materialText } from '../core/materials'
 import { HOME_ROOM_TOP, HOME_FLOOR_Y, type Cell, type Inventory, type Room, type RoomKind, type WorldState } from '../core/world'
@@ -11,6 +12,8 @@ export interface RoomUI {
   items: { id: number; kind: RoomKind; width: number; name: string; built: boolean }[]
   nestImprovements?: { id: number; label: string; installed: boolean }[]
   nestMarks?: { id: number; label: string }[]
+  /** 建成的客厅：一起坐过的次数与当前"暖"的档位（0 空着 / 1 有地毯 / 2 还有盆栽）。 */
+  loungeRest?: { count: number; stage: number }
 }
 export interface RoomPreview { room: PreviewRoom; valid: boolean; hint: string }
 
@@ -79,6 +82,7 @@ export class RoomEditor {
       busy: this.ports.busy?.() === true, action: construction ? '确认建成' : original?.status === 'blueprint' ? '保存蓝图调整' : original ? '放下扩建蓝图' : '放下蓝图',
       nestImprovements: completed && original?.kind === 'home' && w.deep.completed ? w.pods.filter(p => roomContains(original, p)).map((p, i, all) => ({ id: p.id, label: `${all.length > 1 ? `第${i + 1}间小窝 · ` : ''}${p.warmLamp ? '暖光灯已经装好啦。' : '给小窝添盏灯'}`, installed: !!p.warmLamp })) : [],
       nestMarks: completed && original?.kind === 'home' ? w.pods.filter(p => roomContains(original, p)).map((p, i, all) => ({ id: p.id, label: `${all.length > 1 ? `第${i + 1}间小窝` : '小窝'}${p.mark ? ` · ${{ star: '星星', leaf: '叶子', drop: '水滴' }[p.mark]}` : ' · 选标记'}` })) : [],
+      loungeRest: completed && original?.kind === 'lounge' ? { count: w.lounge.rests, stage: loungeStage(w.lounge.rests) } : undefined,
       items: w.rooms.map(r => ({ id: r.id, kind: r.kind, width: r.w, name: `${ROOM_NAMES[r.kind]}${r.status === 'blueprint' ? r.replaces ? ' · 扩建中' : ' · 施工中' : ''}`, built: r.status !== 'blueprint' })),
     })
   }

@@ -42,6 +42,8 @@ import { atuRoute, initialAtuPosition, routeBeforePod } from '../core/atu'
 import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
+import { ENERGY_STONES, collectedStoneCount, stoneAt, stoneCollected } from '../core/energyStones'
+import { loungeRoom, planLoungeGathering, restAtLounge, restLine } from '../core/lounge'
 import { guideHighlight, missionSummary } from '../core/missions'
 import { HOME_OWNER } from '../core/personal'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible } from '../core/exploration'
@@ -308,6 +310,8 @@ export interface GameSession {
   roomWidth(delta: number): void
   saveRoom(): void
   removeRoom(): void
+  /** 客厅：一起坐一会儿（伙伴走过来坐下，客厅随次数变暖） */
+  restTogether(): void
   selectRoom(id: number): void
   newRoom(): void
   selectSite(id: string): void
@@ -808,6 +812,53 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     return true
   }
 
+  /**
+   * 客厅：一起坐一会儿。伙伴用既有的围坐走位走过来坐下，
+   * 客厅随次数变暖（地毯 → 盆栽），伙伴说一句家里的近况。
+   * 没有消耗、没有等待，可以随时再做一次。
+   */
+  let restingInLounge = false
+  let restSerial = 0
+  let restTimer: number | undefined
+  const finishRest = (): void => {
+    window.clearTimeout(restTimer)
+    restTimer = undefined
+    restingInLounge = false
+    renderer.cancelMealGather()
+    pushProgress()
+    pushBuild()
+  }
+  const restTogether = (): void => {
+    if (traveling || restingInLounge || mealBusy() || siteEditor?.working) return
+    const room = loungeRoom(world)
+    if (!room) return
+    roomEditor?.close()
+    diggingSites = false
+    renderer.setHoverCell(null)
+    const result = restAtLounge(world)
+    if (!result.ok) return
+    const token = ++restSerial
+    restingInLounge = true
+    closeConversation()
+    renderer.focusOn((room.x + room.w / 2) * TILE_SIZE, (room.y + room.h / 2) * TILE_SIZE, 'building')
+    renderer.refreshRooms()
+    scheduleSave()
+    const line = restLine(world)
+    renderer.playMealGather(planLoungeGathering(world), () => {
+      if (token !== restSerial) return
+      notify(`☕ ${line}`)
+      if (result.first) {
+        hooks.onMilestone?.({ emoji: '☕', title: '客厅暖起来了', detail: '伙伴们第一次一起坐在长椅上' })
+      } else if (result.advanced) {
+        hooks.onMilestone?.({ emoji: '🪴', title: '客厅又添了一样东西', detail: `一起坐过 ${result.rests} 次，家里越来越暖` })
+      }
+      window.clearTimeout(restTimer)
+      restTimer = window.setTimeout(() => { if (token === restSerial) finishRest() }, 2200)
+    })
+    pushProgress()
+    pushBuild()
+  }
+
   /** 玩家中途停下来 / 切后台：演出安全结束，伙伴回到自己的站位，食物不重复扣。 */
   const cancelMeal = (message?: string): boolean => {
     if (!mealing) return false
@@ -898,7 +949,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return isSpringTarget(cell) ? 'pointer' : 'crosshair'
     }
     if (inRect(LANDMARKS.generatorZone, cell)) return 'pointer'
-    if (inRect(LANDMARKS.crystalZone, cell) && !world.progress.crystalCollected) return 'pointer'
+    if (ENERGY_STONES.some(stone => inRect(stone.zone, cell) && !stoneCollected(world, stone))) return 'pointer'
     return tile === TILE.SOIL ? 'crosshair' : 'default'
   }
 
@@ -1122,22 +1173,25 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     }
 
     // 4) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
-    if (inRect(LANDMARKS.crystalZone, cell)) {
-      if (!world.progress.crystalCollected) {
+    const stone = stoneAt(cell.x, cell.y)
+    if (stone) {
+      if (!stoneCollected(world, stone)) {
         const result = collectCrystal(world, cell.x, cell.y)
         if (result.ok) {
           renderer.refresh()
-          renderer.playCrystalCollection()
+          renderer.playCrystalCollection(stone.cell)
           playCrystalCollected()
           scheduleSave()
           pushProgress()
-          hooks.onMessage('💎 能源石收好啦！')
+          hooks.onMessage(collectedStoneCount(world) >= ENERGY_STONES.length
+            ? '💎 两块能源石都收好啦！中间的大机器等着它们。'
+            : '💎 能源石收好啦！先放回中间的大机器试试。')
           return
         }
         // not-revealed：泥土还盖着，继续按挖掘处理
-      } else if (cell.x === LANDMARKS.crystal.x && cell.y === LANDMARKS.crystal.y && world.tiles[cell.y][cell.x] !== TILE.SOIL) {
+      } else if (cell.x === stone.cell.x && cell.y === stone.cell.y && world.tiles[cell.y][cell.x] !== TILE.SOIL) {
         // 已收集：给一点点小星光，不再重复提示
-        renderer.playBurst((LANDMARKS.crystal.x + 0.5) * TILE_SIZE, (LANDMARKS.crystal.y + 0.5) * TILE_SIZE, {
+        renderer.playBurst((stone.cell.x + 0.5) * TILE_SIZE, (stone.cell.y + 0.5) * TILE_SIZE, {
           color: 0x8dedfd,
           count: 6,
           speed: 50,
@@ -1147,10 +1201,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       // 已收集 + 点的是泥土 → 保持自由挖掘
     }
 
-    // 5) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
+    // 5) 能源核心区域：装石头（两级）/ 提示 / 已在运转时给个小火花
     if (inRect(LANDMARKS.generatorZone, cell)) {
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
+        if (result.stage === 'loaded') {
+          renderer.playRepairCelebration()
+          renderer.refresh()
+          scheduleSave()
+          pushProgress()
+          playCrystalCollected()
+          hooks.onMessage('核心亮了一点点！它还差一块能源石——右边土里也亮着。')
+          return
+        }
         discovering = true
         hooks.onDiscovery?.(true)
         renderer.playRepairCelebration()
@@ -1162,6 +1225,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (result.reason === 'need-crystal') {
         playUnavailable()
         hooks.onMessage('机器还没有能量：先找到能源石吧')
+      } else if (result.reason === 'need-more-stones') {
+        playUnavailable()
+        hooks.onMessage('核心还差一块能源石：右边土里也亮着。')
       } else {
         renderer.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
           color: 0xffd9a0,
@@ -1770,6 +1836,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (deepChapter?.busy) { deepChapter.cancel(); notify('先停下来啦。已完成的施工和材料都保留。'); return }
     if (deepChapter?.active) { deepChapter.close(); return }
     gameAudio.stopEffects()
+    if (restingInLounge) { restSerial++; finishRest(); return }
     if (cancelMeal('🍽 大家先停一下，再点一次就好。')) return
     if (siteEditor?.working) { siteEditor.cancel(); notify('阿土停下来啦，已挖的地方和找到的材料都保留。'); return }
     if (siteEditor?.active) { siteEditor.close(); return }
@@ -2257,6 +2324,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     roomWidth: delta => roomEditor?.resize(delta),
     saveRoom: () => roomEditor?.save(),
     removeRoom: () => roomEditor?.remove(),
+    restTogether,
     selectRoom: id => {
       if (traveling || siteEditor?.working || !roomEditor) return
       siteEditor?.close()

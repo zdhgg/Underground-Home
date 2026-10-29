@@ -3,7 +3,7 @@ import type { RoomUI } from '../app/roomEditor'
 import type { RoomKind } from '../core/world'
 import { ROOM_MAX_WIDTH } from '../core/rooms'
 defineProps<{ state: RoomUI }>()
-defineEmits<{ close: []; kind: [kind: RoomKind]; resize: [delta: number]; save: []; remove: []; mark: [id: number]; improve: [id: number] }>()
+defineEmits<{ close: []; kind: [kind: RoomKind]; resize: [delta: number]; save: []; remove: []; mark: [id: number]; improve: [id: number]; rest: [] }>()
 const kinds: { kind: RoomKind; name: string; icon: string }[] = [
   { kind: 'home', name: '住处', icon: '⌂' }, { kind: 'lounge', name: '客厅', icon: '☕' },
 ]
@@ -21,7 +21,10 @@ const kinds: { kind: RoomKind; name: string; icon: string }[] = [
     <p class="instruction" :class="{ invalid: state.placed && !state.valid && !state.completed && !state.construction }" role="status">{{ state.message }}</p>
     <p class="detail">{{ state.detail }}</p>
     <button v-if="!state.completed" class="primary" data-primary-action type="button" :disabled="!state.valid || !state.dirty" @click="$emit('save')">{{ state.busy ? '阿土正在施工…' : state.action }}</button>
+    <button v-else-if="state.loungeRest" class="primary" data-primary-action type="button" @click="$emit('rest')">☕ 一起坐一会儿</button>
     <button v-else class="primary" data-primary-action type="button" :disabled="state.width >= ROOM_MAX_WIDTH" @click="$emit('resize', 1)">{{ state.width >= ROOM_MAX_WIDTH ? '已达本层最大宽度' : '扩建房间，增加容量' }}</button>
+    <p v-if="state.loungeRest" class="lounge-rest">一起坐过 <strong>{{ state.loungeRest.count }}</strong> 次 · {{ state.loungeRest.stage === 0 ? '还空着' : state.loungeRest.stage === 1 ? '铺上地毯啦' : '有花了' }}</p>
+    <button v-if="state.loungeRest" class="expand-lounge" type="button" :disabled="state.width >= ROOM_MAX_WIDTH" @click="$emit('resize', 1)">{{ state.width >= ROOM_MAX_WIDTH ? '已达本层最大宽度' : '扩建客厅，多坐两个人' }}</button>
     <div v-if="state.nestImprovements?.length" class="nest-marks"><button v-for="nest in state.nestImprovements" :key="nest.id" type="button" @click="$emit('improve', nest.id)">{{ nest.label }}</button></div>
     <div v-if="state.nestMarks?.length" class="nest-marks"><button v-for="nest in state.nestMarks" :key="nest.id" type="button" @click="$emit('mark', nest.id)">✦ {{ nest.label }}</button></div>
     <div v-if="state.construction" class="secondary"><button type="button" :disabled="state.busy" @click="$emit('resize', 0)">调整蓝图</button><button type="button" :disabled="state.busy" @click="$emit('remove')">取消施工蓝图</button></div>
@@ -46,6 +49,8 @@ button[aria-pressed="true"] { box-shadow: inset 0 0 0 2px #4b886c; background: #
 .detail { margin: 0 0 14px; color: #748478; font-size: 12px; line-height: 1.6; }
 .primary { width: 100%; background: #3c8063; color: white; font-weight: 700; }.primary:hover { background: #326f55; }
 .secondary { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }.quiet { display: block; margin-top: 7px; }
+.lounge-rest { margin: 8px 0 0; color: #6c7f73; font-size: 12px; }.lounge-rest strong { color: #315b46; }
+.expand-lounge { width: 100%; margin-top: 6px; background: transparent; border: 1px solid #d5e2d5; }
 .nest-marks { display:grid; gap:6px; margin-top:8px; }.nest-marks button { background:transparent; border:1px solid #d5e2d5; }
 @media (max-width: 1000px) { .room-tools { width: 254px; padding: 12px; }.kinds { margin-top: 10px; }.instruction { margin-top: 10px; min-height: 0; }.detail { margin-bottom: 10px; } }
 </style>

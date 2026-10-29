@@ -160,7 +160,7 @@ describe('v8主角位置与旧档', () => {
 
   it('v7一格高旧通道中的主角回到安全处，工具与已挖地形不损失', () => {
     const w = createInitialWorld()
-    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     for (let x = 12; x <= 14; x++) { dig(w, x, 11); dig(w, x, 10) }
     placePod(w, 12, 10)
     for (const x of [26, 27]) dig(w, x, 11)

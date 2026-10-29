@@ -128,8 +128,9 @@ interface TerrainProbe {
   landmarkLayer: Container
   glowLayer: Container
   machineGlow: Graphics
-  crystal: Container | null
+  crystals: Map<string, Container>
   crystalFeedback: CrystalFeedback
+  adengIntroduction: boolean
   lightLevel: number
   spinUp: number
   cameraTween: unknown
@@ -552,21 +553,27 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     expect(collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y).ok).toBe(true)
     assertCore('能源核心 · 等待能源石', 0xfff0d0)
+    expect(repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y).stage).toBe('loaded')
+    assertCore('能源核心 · 还差一块', 0xfff0d0)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    expect(collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y).ok).toBe(true)
     expect(repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y).ok).toBe(true)
     assertCore('能源核心 · 运行中', 0xeafff2)
   })
 
-  it('能源石埋藏时只有微光，挖开显示PNG，收集后消失', () => {
-    expect(view.crystal?.children.some((child) => child instanceof Sprite)).toBe(false)
+  it('两块能源石各自埋藏时只有微光，挖开显示PNG，收集后消失', () => {
+    expect(view.crystals.get('left')?.children.some((child) => child instanceof Sprite)).toBe(false)
+    expect(view.crystals.get('right')?.children.some((child) => child instanceof Sprite)).toBe(false)
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     renderer.refresh()
-    const stone = view.crystal?.children.find((child) => child instanceof Sprite)
+    const stone = view.crystals.get('left')?.children.find((child) => child instanceof Sprite)
     expect(stone).toBeDefined()
     expect(stone!.height).toBe(48)
+    expect(view.crystals.get('right')?.children.some((child) => child instanceof Sprite)).toBe(false)
     expect(collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y).ok).toBe(true)
     renderer.refresh()
     renderer.playCrystalCollection()
-    expect(view.crystal).toBeNull()
+    expect(view.crystals.has('left')).toBe(false)
     expect(view.crystalFeedback.view.visible).toBe(true)
     const snapshot = JSON.stringify(world)
     for (let i = 0; i < 5; i++) view.tick({ deltaMS: 100 } as Ticker)
@@ -576,7 +583,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
   it('探索演出可以安全取消：没落镐就不改世界，重新委托才真的挖开', () => {
     const w = world
-    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
     expect(placePod(w, 12, 10)).not.toBeNull()
     for (let x = 26; x <= 27; x++) dig(w, x, 11)
@@ -617,6 +624,8 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   it('安装动画结束才启动和点灯；任务及存档立即完成，载入已完成世界不重播', () => {
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
     renderer.refresh()
     renderer.playRepairCelebration()
@@ -635,12 +644,26 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(view.crystalFeedback.installing).toBe(false)
     expect(view.lightLevel).toBe(1)
     expect(view.spinUp).toBe(0)
-    expect(view.crystal).toBeNull()
+    expect(view.crystals.size).toBe(0)
+  })
+
+  it('只装了一块的世界载入后停在微亮，不算点亮，也没有阿灯出场', () => {
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    expect(repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y).stage).toBe('loaded')
+    renderer.setWorld(world)
+    expect(view.lightLevel).toBeCloseTo(0.22)
+    expect(view.crystalFeedback.installing).toBe(false)
+    expect(view.adengIntroduction).toBe(false)
+    expect(view.glowLayer.children.some((child) => child instanceof Text && child.text === '能源核心 · 还差一块')).toBe(true)
+    expect(view.lightLevel).toBeLessThan(1)
   })
 
   it('安装期间手动平移仍能取消自动拉远，晶体安装与启动继续完成', () => {
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
     renderer.refresh()
     renderer.playRepairCelebration()
@@ -706,7 +729,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
   it('电送到第二层：遮罩淡下去，电线才出现', () => {
     const next = createInitialWorld()
-    next.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    next.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     next.exploration = {
       ...next.exploration,
       clueFound: true,
@@ -846,7 +869,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
     it('点亮之后：阿灯从角落飞出来，落地后有名字、不再躲着', () => {
       const world = createInitialWorld()
-      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: false }
+      world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: false }
       renderer.setWorld(world)
       const adeng = view.friends[1]
       expect(adeng.hidden).toBe(true)
@@ -876,7 +899,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
     it('每个伙伴带着自己的物种 id：画出来的不是同一个球', () => {
       const world = createInitialWorld()
-      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+      world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
       renderer.setWorld(world)
       expect(view.friends.map((friend) => friend.partnerId)).toEqual(['atu', 'adeng'])
       for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
@@ -894,7 +917,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
 
     it('已点亮的存档直接站着，不重播飞出来的演出', () => {
       const world = createInitialWorld()
-      world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+      world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
       renderer.setWorld(world)
       const adeng = view.friends[1]
       expect(adeng.hidden).toBe(false)
@@ -906,7 +929,7 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
   describe('睡眠舱入场与休息', () => {
   function carvedWorld() {
     const next = createInitialWorld()
-    next.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    next.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     for (let y = 10; y < 12; y++) for (let x = 12; x < 15; x++) dig(next, x, y)
     return next
   }

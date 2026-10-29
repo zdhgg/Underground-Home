@@ -8,7 +8,7 @@ import { createInitialWorld, TILE } from '../src/core/world'
 
 function readyWorld() {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let y = 10; y < 12; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
   return world
 }
@@ -30,8 +30,9 @@ describe('睡眠舱粗版必要规则', () => {
   it('可在自行挖出的左右两处空间建造，任务依赖真实设施', () => {
     const left = readyWorld()
     expect(placePod(left, 12, 10)?.door).toBe('right')
-    expect(missionSummary(left)).toEqual({ done: 4, total: 4 })
-    expect(currentMission(left)).toBeNull()
+    expect(missionSummary(left)).toEqual({ done: 4, total: 5 })
+    // 安床之后、下楼之前还有一间客厅
+    expect(currentMission(left)?.id).toBe('build-lounge')
     const right = readyWorld()
     for (let y = 10; y < 12; y++) for (let x = 26; x < 29; x++) dig(right, x, y)
     expect(placePod(right, 26, 10)?.door).toBe('left')

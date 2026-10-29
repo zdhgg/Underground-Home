@@ -13,7 +13,7 @@ import { drawNursery, drawPlanter } from '../src/render/farmProps'
 /** 水已引上来的第二层小世界（farmed 形状）。 */
 function wateredWorld(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   world.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
   placePod(world, 12, 10)

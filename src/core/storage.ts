@@ -2,6 +2,7 @@ import { podRect } from './build'
 import { COLLECTION_SHELF } from './bag'
 import { isShaftColumn } from './exploration'
 import { RELICS } from './relics'
+import { ENERGY_STONES } from './energyStones'
 import { BUILDING_SITES } from './sites'
 import { LANDMARKS, STRATA, SURFACE_Y, TILE, type Inventory, type Rect, type Shelf, type WorldState } from './world'
 
@@ -26,7 +27,7 @@ export function canPlaceShelf(world: WorldState, x: number, y: number): ShelfPla
   if (world.tiles[y + 1]?.[x] === TILE.EMPTY) return { ok: false, reason: 'support' }
   // 预留：竖井与梯口、能源核心、能源石、大厅收藏架、裂纹柱，以及埋着旧物的格子。
   if (isShaftColumn(x) || (x >= LANDMARKS.shaft.x && x < LANDMARKS.shaft.x + LANDMARKS.shaft.w)) return { ok: false, reason: 'reserved' }
-  const reserved: Rect[] = [LANDMARKS.generatorZone, { ...LANDMARKS.crystal, w: 1, h: 1 }, COLLECTION_SHELF,
+  const reserved: Rect[] = [LANDMARKS.generatorZone, ...ENERGY_STONES.map((stone) => ({ ...stone.cell, w: 1, h: 1 })), COLLECTION_SHELF,
     ...BUILDING_SITES.filter(site => site.layer === 'home')]
   if (reserved.some(rect => overlaps({ x, y, w: 1, h: 1 }, rect))) return { ok: false, reason: 'reserved' }
   if (RELICS.some(relic => relic.x === x && relic.y === y)) return { ok: false, reason: 'reserved' }

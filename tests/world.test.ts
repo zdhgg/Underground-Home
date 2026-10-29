@@ -59,6 +59,6 @@ describe('初始世界蓝图', () => {
   })
 
   it('初始进度位全部未完成', () => {
-    expect(world.progress).toEqual({ crystalFound: false, crystalCollected: false, coreRepaired: false })
+    expect(world.progress).toEqual({ crystalFound: false, crystalCollected: false, secondCrystalFound: false, secondCrystalCollected: false, coreLoaded: false, coreRepaired: false })
   })
 })

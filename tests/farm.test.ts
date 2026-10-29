@@ -19,7 +19,7 @@ import {
 /** 左翼挖空一带地面的第一层；引水与否由用例自己决定 */
 function homeWorld(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let y = 9; y <= 11; y++) for (let x = 2; x <= 14; x++) if (world.tiles[y][x] === TILE.SOIL) dig(world, x, y)
   return world
 }

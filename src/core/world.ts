@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 26
+export const WORLD_VERSION = 28
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -122,6 +122,11 @@ export interface MemoryState {
   nextId: number
 }
 export const freshMemories = (): MemoryState => ({ entries: [], nextId: 1 })
+/** 客厅：一起坐过的次数。只增不减；地毯与盆栽按次数出现。 */
+export interface LoungeState {
+  rests: number
+}
+export const freshLounge = (): LoungeState => ({ rests: 0 })
 /** 蓝图不改变地形；扩建蓝图完成前，原房间继续使用。 */
 export interface Room extends Rect {
   id: number; kind: RoomKind
@@ -136,10 +141,17 @@ export const LANDMARKS = {
   shelter: { x: 17, y: 7, w: 9, h: 5 },
   /** 通往地表的竖井 */
   shaft: { x: 21, y: 4, w: 2, h: 4 },
-  /** 能源石（埋在松软泥土里，挖开即露出） */
+  /** 第一块能源石（埋在松软泥土里，挖开即露出，就在大厅左门旁） */
   crystal: { x: 14, y: 9 },
   /** 能源石互动区（点按收集的容错范围） */
   crystalZone: { x: 13, y: 8, w: 3, h: 3 },
+  /**
+   * 第二块能源石：右翼最上面一排，顺着大厅右墙往上挖三格、再往右一格就能碰到。
+   * 占的是梯道保留列的顶格——小床只铺下面两格，房间也跨不过这一列，谁都压不到它。
+   */
+  secondCrystal: { x: 27, y: 9 },
+  /** 第二块能源石互动区（点按收集的容错范围） */
+  secondCrystalZone: { x: 26, y: 8, w: 3, h: 3 },
   /** 能源核心（位于大厅中，P1 修复后点亮家园） */
   generator: { x: 21, y: 9 },
   /** 能源核心互动区（点按修复的容错范围） */
@@ -154,10 +166,16 @@ export const LANDMARKS = {
 
 /** 第一夜的进度位：全部单调，不因撤销回退 */
 export interface WorldProgress {
-  /** 挖开过能源石所在泥土（发现能源石） */
+  /** 挖开过第一块能源石所在泥土（发现能源石） */
   crystalFound: boolean
-  /** 能源石已收集到手 */
+  /** 第一块能源石已收集到手 */
   crystalCollected: boolean
+  /** 挖开过第二块能源石所在泥土（右翼那块） */
+  secondCrystalFound: boolean
+  /** 第二块能源石已收集到手 */
+  secondCrystalCollected: boolean
+  /** 核心已经装进第一块能源石：只亮一点点，还不算点亮家园 */
+  coreLoaded: boolean
   /** 能源核心已修复（家园点亮） */
   coreRepaired: boolean
 }
@@ -315,6 +333,8 @@ export interface WorldState {
   powerDown: boolean
   /** 父女共同保存的生活记录（v25 起）。 */
   memories: MemoryState
+  /** 客厅一起坐过的次数（v28 起）：只增不减，用来让客厅慢慢变暖。 */
+  lounge: LoungeState
 }
 
 export interface ExplorationState {
@@ -412,7 +432,7 @@ export function createInitialWorld(): WorldState {
     dugCount: 0,
     inventory: freshInventory(),
     builtSites: [],
-    progress: { crystalFound: false, crystalCollected: false, coreRepaired: false },
+    progress: { crystalFound: false, crystalCollected: false, secondCrystalFound: false, secondCrystalCollected: false, coreLoaded: false, coreRepaired: false },
     pods: [],
     rooms: [],
     nextRoomId: 1,
@@ -424,6 +444,7 @@ export function createInitialWorld(): WorldState {
     farm: freshFarm(),
     powerDown: false,
     memories: freshMemories(),
+    lounge: freshLounge(),
   }
 }
 

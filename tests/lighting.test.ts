@@ -11,7 +11,7 @@ import { LightingScene } from '../src/render/lightingScene'
 
 function ready(): WorldState {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
   for (let x = 12; x <= 14; x++) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
   w.pods = [{ id: 1, x: 12, y: 10, door: 'right' }]
   for (const x of [26, 27]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY

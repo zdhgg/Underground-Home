@@ -11,7 +11,7 @@ import { deepFrontier, DEEP_FOOT } from '../../src/core/deepTopology'
 /** 测试夹具：只通过既有规则完成前两层，不碰浏览器里的玩家存档。 */
 export function secondLayerComplete(shaft = 27): WorldState {
   const w = createInitialWorld()
-  w.progress = { coreRepaired: true, crystalFound: true, crystalCollected: true }; w.tiles[9][14] = TILE.EMPTY
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
   for (let x = 12; x < 15; x++) for (const y of [10, 11]) dig(w, x, y)
   const pod = placePod(w, 12, 10)
   if (pod) pod.backWall = true

@@ -10,34 +10,38 @@ describe('进入页存档摘要', () => {
     expect(summarizeSave(readyFinale())).toMatchObject({phase:'地心暖光 · 终章',done:16,total:20,finished:false})
     expect(summarizeSave(completedFinale())).toMatchObject({phase:'九层家园 · 终章已完成',done:20,total:20,finished:true})
   })
-  it('刚开始的第一夜显示第一个任务和 0/4', () => {
+  it('刚开始的第一夜显示第一个任务和 0/5', () => {
     const summary = summarizeSave(createInitialWorld())
     expect(summary).toEqual({
       phase: '第一夜',
       missionTitle: '找到发光的能源石',
       done: 0,
-      total: 4,
+      total: 5,
       finished: false,
     })
   })
 
-  it('点灯之后显示下一步“给伙伴留床”和 3/4', () => {
+  it('点灯之后显示下一步“给伙伴留床”和 3/5', () => {
     const world = createInitialWorld()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
 
     const summary = summarizeSave(world)
     expect(summary.phase).toBe('第一夜')
     expect(summary.missionTitle).toBe('给伙伴留床')
     expect(summary.done).toBe(3)
-    expect(summary.total).toBe(4)
+    expect(summary.total).toBe(5)
   })
 
-  it('第一夜完成后摘要切到泉水与家园，不会一直停在 4/4', () => {
+  it('第一夜完成后摘要切到泉水与家园，不会一直停在 5/5', () => {
     const world = createInitialWorld()
-    world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     world.pods.push({ id: 1, x: 12, y: 10, door: 'left' })
+    for (let y = 9; y <= 11; y++) for (let x = 28; x <= 32; x++) dig(world, x, y)
+    world.rooms.push({ id: 1, kind: 'lounge', x: 28, y: 9, w: 5, h: 3, managed: true })
 
     const summary = summarizeSave(world)
     expect(summary.phase).toBe('泉水与家园')
