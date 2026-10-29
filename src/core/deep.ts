@@ -1,7 +1,7 @@
 /** 第三层的建设、配方和章节规则。没有计时器、镜头或 UI。 */
 import { atuRoute, initialAtuPosition } from './atu'
 import { canAfford, changeMaterials } from './materials'
-import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, deepConnected, deepFrontier, deepSpan } from './deepTopology'
+import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, DRILL_SPOT, MOSS_SPOT, deepConnected, deepFrontier, deepSpan } from './deepTopology'
 import { TILE, createInitialWorld, freshDeep, type Cell, type DeepFacility, type DeepFacilityKind, type DeepState, type Inventory, type WorldState } from './world'
 
 export const DEEP_SPECS: Record<DeepFacilityKind, { name: string; icon: string; width: number; cost: Inventory; crystals?: number; detail: string }> = {
@@ -21,7 +21,7 @@ export const deepFacilityAt = (w: WorldState, p: Cell): DeepFacility | undefined
 export const deepReach = (w: WorldState, p: Cell): Cell[] | null => atuRoute(w, w.exploration.explorer ?? initialAtuPosition(w), p, true)
 const success = (w: WorldState, before: DeepState, inventory: Inventory, message: string): DeepResult => ({ ok: true, message, change: { before, inventory, afterInventory: { ...w.inventory }, after: structuredClone(w.deep) } })
 
-export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
+export function deepSpotProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
   if (!w.deep.entered) return '先沿施工梯到晶簇层。'
   if (kind !== 'lamp' && hasDeep(w, kind)) return '这件设施已经建好啦，点它就能使用。'
   if (!w.deep.foundCrystal) return '先看看岩壁上会发光的晶簇。'
@@ -36,7 +36,35 @@ export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: numbe
     if (deepFacilityAt(w, { x: col, y: DEEP_FOOT })) return '这里放过设施啦，再选别处。'
   }
   if (!deepReach(w, { x, y: DEEP_FOOT })) return '这里还没有连到梯子。'
+  return null
+}
+export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
+  const spot = deepSpotProblem(w, kind, x)
+  if (spot) return spot
+  const spec = DEEP_SPECS[kind]
   if (!canAfford(w, spec.cost) || w.deep.crystals < (spec.crystals ?? 0)) return `还需要${deepCostText(kind)}，可以先挖土或采晶簇。`
+  return null
+}
+/**
+ * 推荐建造位：给孩子的引导，只作高亮提示、不限制选址。
+ * 采集台贴着天然晶簇，石炉贴着工坊，其余从梯口向两侧就近找；
+ * 不推荐压住苔藓和旧钻头的发现点。返回设施左格 x，找不到合适位置时为 null。
+ */
+export function deepSuggestion(w: WorldState, kind: DeepFacilityKind): number | null {
+  if (kind !== 'lamp' && hasDeep(w, kind)) return null
+  const spec = DEEP_SPECS[kind], span = deepSpan(w), shaft = w.exploration.shaftX
+  if (!span || shaft === null) return null
+  const clamp = (x: number): number => Math.max(span.left, Math.min(x, span.right - spec.width + 1))
+  const coversAnchor = (x: number): boolean => [MOSS_SPOT.x, DRILL_SPOT.x].some(a => a >= x && a < x + spec.width)
+  const fits = (x: number): boolean => !coversAnchor(x) && deepSpotProblem(w, kind, x) === null
+  const near: number[] = []
+  if (kind === 'collector') near.push(CRYSTAL_SPOT.x - spec.width, CRYSTAL_SPOT.x + 1)
+  const workshop = w.deep.facilities.find(f => f.kind === 'workshop')
+  if (kind === 'furnace' && workshop) near.push(workshop.x - spec.width, workshop.x + DEEP_SPECS.workshop.width)
+  for (const x of near) { const c = clamp(x); if (fits(c)) return c }
+  for (let d = 1; d <= span.right - span.left + 1; d++) {
+    for (const x of [clamp(shaft + d), clamp(shaft - d)]) if (fits(x)) return x
+  }
   return null
 }
 export function deepCostText(kind: DeepFacilityKind): string {

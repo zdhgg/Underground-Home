@@ -10,8 +10,11 @@ export class DeepScene {
   readonly view = new Container({ label: 'crystal-chapter' })
   readonly foreground = new Container({ label: 'crystal-chapter-front' })
   readonly preview = new Graphics()
+  /** 选址推荐位：柔和的金框加"推荐这里"小标签，只是提示、不限制选址。 */
+  readonly suggestion = new Graphics()
   /** 选址时叠在岩壁前的半透明设施影子与说明，和它一起被清空。 */
   private readonly previewGhost = new Container()
+  private readonly suggestionGhost = new Container()
   private readonly scenery = new Container()
   private readonly light = new Graphics()
   private readonly shimmer = new Graphics()
@@ -19,7 +22,7 @@ export class DeepScene {
   private trip: { from: number; to: number; time: number; done(): void; position(y: number): void } | null = null
   constructor(private art: DeepTextures = {}) {
     this.view.addChild(this.light, this.scenery)
-    this.foreground.addChild(this.shimmer, this.cabin, this.previewGhost, this.preview)
+    this.foreground.addChild(this.shimmer, this.cabin, this.suggestion, this.suggestionGhost, this.previewGhost, this.preview)
   }
   setArt(art: DeepTextures): void { this.art = art }
   private label(text: string, x: number, y: number, size = 11, color = 0xc8ddd9): void {
@@ -169,5 +172,30 @@ export class DeepScene {
     tag.addChild(bg, label)
     tag.position.set(centerX, 30.72 * T)
     this.previewGhost.addChild(tag)
+  }
+  /**
+   * 选址推荐位：柔和的金色框和四角括号（与全局引导高亮同一套语言），
+   * 配一枚"推荐这里"小标签。只提示不限制——点别处照样能建。
+   */
+  placeSuggestion(_w: WorldState, kind: DeepFacilityKind | null, x: number | null): void {
+    this.suggestion.clear()
+    for (const child of this.suggestionGhost.removeChildren()) child.destroy({ children: true })
+    if (!kind || x === null) return
+    const spec = DEEP_SPECS[kind], left = x * T, width = spec.width * T, top = 31 * T, height = 3 * T
+    const g = this.suggestion, color = 0xffdf97
+    g.roundRect(left + 2, top + 2, width - 4, height - 4, 9).fill({ color, alpha: .12 }).stroke({ width: 2, color, alpha: .75 })
+    const len = 9
+    for (const [cx, cy, dx, dy] of [[left, top, 1, 1], [left + width, top, -1, 1], [left, top + height, 1, -1], [left + width, top + height, -1, -1]] as const) {
+      g.moveTo(cx + dx * len, cy + dy * len).lineTo(cx, cy).lineTo(cx + dx * len, cy).stroke({ width: 3, color, alpha: .9 })
+    }
+    const label = new Text({ text: '推荐这里', style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 11, fontWeight: '700', fill: 0xffe9b8 } })
+    label.anchor.set(.5, 1)
+    const bg = new Graphics()
+    bg.roundRect(-label.width / 2 - 8, -label.height - 10, label.width + 16, label.height + 10, 7).fill({ color: 0x2b2413, alpha: .88 }).stroke({ width: 1, color, alpha: .55 })
+    label.position.set(0, -4)
+    const tag = new Container()
+    tag.addChild(bg, label)
+    tag.position.set(left + width / 2, top - 6)
+    this.suggestionGhost.addChild(tag)
   }
 }

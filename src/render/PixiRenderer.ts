@@ -921,6 +921,7 @@ export class PixiWorldRenderer {
   setHallPreview(kind: HallFacilityKind | null, x: number | null): void { if (this.world) this.hallScene.placePreview(this.world, kind, x) }
   playHallWork(at: Cell, done: () => void): void { this.explorationScene.work({ x: at.x, y: at.y + 1 }, () => {}, done) }
   setDeepPreview(kind: DeepFacilityKind | null, x: number | null): void { if (this.world) this.deepScene.placePreview(this.world, kind, x) }
+  setDeepSuggestion(kind: DeepFacilityKind | null, x: number | null): void { if (this.world) this.deepScene.placeSuggestion(this.world, kind, x) }
   focusCrystal(): void { this.focusOn(25 * TILE_SIZE, 32 * TILE_SIZE, 'building') }
   beginDeepCamera(): void { this.manualCamera = false }
   releaseDeepCamera(): void { this.manualCamera = true }

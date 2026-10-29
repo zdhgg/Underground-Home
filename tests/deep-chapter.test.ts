@@ -21,6 +21,7 @@ function setup(w = secondLayerComplete()) {
   const history = createWorldHistory(), saves: unknown[] = [], notify = vi.fn(), milestone = vi.fn()
   const view = {
     focusOn: vi.fn(), focusCrystal: vi.fn(), setDeepPreview: vi.fn(), cancelDeepAnimation: vi.fn(), releaseDeepCamera: vi.fn(),
+    setDeepSuggestion: vi.fn(),
     playExplorationTravel: vi.fn((route: Cell[], done: () => void, step: (p: Cell) => void) => { route.forEach(step); done() }),
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
@@ -90,6 +91,20 @@ describe('晶簇层真实会话切换和施工', () => {
     h.chapter.tap({ x: 24, y: 32 })
     expect(h.state()).toMatchObject({ placing: 'collector', candidate: 24, valid: true, label: '就在这里建造' })
     expect(h.view.setDeepPreview).toHaveBeenLastCalledWith('collector', 24)
+  })
+
+  it('选址前后地图都亮金色推荐位，点了候选位就让位给绿框，关面板即收起', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const h = setup(w)
+    h.chapter.show()
+    // 任务要求放采集台但还没进入选址：推荐位先亮出来引导。
+    expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith('collector', expect.any(Number))
+    h.chapter.primary()
+    expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith('collector', expect.any(Number))
+    h.chapter.tap({ x: 24, y: 32 })
+    expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith(null, null)
+    h.chapter.close()
+    expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith(null, null)
   })
 
   it('面板开着时点泥土照旧交给挖掘，不会被选址吞掉', () => {

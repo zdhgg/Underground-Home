@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDeep, deepActionProblem, deepBuildProblem, deepGoal, performDeep, undoDeep } from '../src/core/deep'
+import { buildDeep, deepActionProblem, deepBuildProblem, deepGoal, deepSuggestion, deepSpotProblem, performDeep, undoDeep } from '../src/core/deep'
 import { deepConnected, deepFrontier, deepLadderSegments, DEEP_FOOT } from '../src/core/deepTopology'
 import { deepLampCoverage } from '../src/core/lighting'
 import { bagItems } from '../src/core/bag'
@@ -87,6 +87,40 @@ describe('第三层完整建设章节', () => {
     expect(undoDeep(w, result.change)).toBe(true)
     expect(w.inventory).toEqual({ stone: 27, wood: 20 })
     expect(buildDeep(w, 'collector', 31).ok).toBe(true)
+  })
+
+  it('推荐位只作提示不限制选址：采集台贴天然晶簇，建议位真可建且避开梯口和发现点', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const spot = deepSuggestion(w, 'collector')
+    expect(spot).not.toBeNull()
+    if (spot === null) return
+    expect(deepSpotProblem(w, 'collector', spot)).toBeNull()
+    for (let col = spot; col < spot + 3; col++) expect([27, 30, 38, 19]).not.toContain(col)
+    expect(buildDeep(w, 'collector', spot).ok).toBe(true)
+    expect(deepSuggestion(w, 'collector')).toBeNull()
+    const distributor = deepSuggestion(w, 'distributor')
+    expect(distributor).not.toBeNull()
+    if (distributor === null) return
+    expect(buildDeep(w, 'distributor', distributor).ok).toBe(true)
+    expect(deepSuggestion(w, 'lamp')).not.toBeNull()
+  })
+
+  it('石炉优先贴着工坊，放不下时退回梯口就近；材料不足照样给位置（提示交给红框说明）', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    expect(buildDeep(w, 'distributor', 28).ok).toBe(true)
+    expect(buildDeep(w, 'workshop', 31).ok).toBe(true)
+    const spot = deepSuggestion(w, 'furnace')
+    expect(spot).not.toBeNull()
+    if (spot === null) return
+    expect(deepSpotProblem(w, 'furnace', spot)).toBeNull()
+    for (let col = spot; col < spot + 3; col++) expect([27, 30, 38, 19]).not.toContain(col)
+    const adjacent = spot === 28 - 3 || spot === 31 + 5
+    const near = Math.min(Math.abs(spot - 27), Math.abs(spot + 2 - 27))
+    expect(adjacent || near <= 4).toBe(true)
+    // 建议位只看空间：材料不够时依旧给出位置，点下去由红框说明差什么。
+    w.inventory = { stone: 0, wood: 0 }
+    expect(deepSuggestion(w, 'furnace')).toBe(spot)
+    expect(deepBuildProblem(w, 'furnace', spot)).toContain('还需要')
   })
 
   it('资源循环可以补充，精密工具改变真实产量，升级不重复扣材料', () => {

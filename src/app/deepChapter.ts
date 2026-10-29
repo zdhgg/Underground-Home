@@ -1,4 +1,4 @@
-import { buildDeep, deepActionProblem, deepBuildProblem, deepCostText, deepFacilityAt, deepGoal, deepReady, DEEP_SPECS, hasDeep, performDeep, type DeepAction, type DeepChange, type DeepGoal } from '../core/deep'
+import { buildDeep, deepActionProblem, deepBuildProblem, deepCostText, deepFacilityAt, deepGoal, deepReady, deepSuggestion, DEEP_SPECS, hasDeep, performDeep, type DeepAction, type DeepChange, type DeepGoal } from '../core/deep'
 import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, DRILL_SPOT, MOSS_SPOT, deepFrontier, deepShaftCell } from '../core/deepTopology'
 import { atuRoute, initialAtuPosition } from '../core/atu'
 import { TILE, TILE_SIZE, type Cell, type DeepFacilityKind, type WorkerId, type WorldState } from '../core/world'
@@ -64,8 +64,8 @@ export class DeepChapter {
     if (this.placing) {
       title = `摆放${DEEP_SPECS[this.placing].name}`; speaker = '阿土'; label = '就在这里建造'
       speech = this.placing === 'collector'
-        ? '采集台建 1 台就够了。建好后点它取晶簇和矿石；先选一处你喜欢的岩壁。'
-        : '点一处喜欢的岩壁。绿框表示放得下，红框会说明还差什么。'
+        ? '采集台建 1 台就够了，建好后点它取晶簇和矿石。金框是推荐位置，也可以选别处。'
+        : '点一处喜欢的岩壁。金框是推荐位置；绿框表示放得下，红框会说明还差什么。'
       hint = this.candidate === null
         ? `${deepCostText(this.placing)} · ${this.placing === 'collector' ? '本章只需 1 台；' : ''}拖动只看地图，点一下才选位置。`
         : deepBuildProblem(w, this.placing, this.candidate) ?? `${deepCostText(this.placing)} · 可以建在这里。`
@@ -74,9 +74,16 @@ export class DeepChapter {
     else if (!this.placing && !this.selected && !this.choice && goal.build) {
       label = `选择位置放置${DEEP_SPECS[goal.build].name}`
       hint = goal.build === 'collector'
-        ? '这一步只需要 1 台采集台；按按钮后，在地图上选一处喜欢的岩壁。'
-        : `这一步先放${DEEP_SPECS[goal.build].name}，位置由你决定。`
+        ? '这一步只需要 1 台采集台；按按钮后，地图上的金框是推荐位置。'
+        : `这一步先放${DEEP_SPECS[goal.build].name}；地图上的金框是推荐位置，选别处也可以。`
     }
+    // 推荐位只是金色提示框：选址中且还没点候选位时亮出来，点了候选位就交给绿/红框。
+    let suggestKind: DeepFacilityKind | null = null
+    if (this.opened && !this.running) {
+      if (this.placing && this.candidate === null) suggestKind = this.placing
+      else if (!this.placing && !this.selected && !this.choice && goal.build) suggestKind = goal.build
+    }
+    this.ports.view.setDeepSuggestion?.(suggestKind, suggestKind ? deepSuggestion(w, suggestKind) : null)
     this.ports.emit({finaleLift:w.finale.liftExtended, ruinsLift:w.ruins.liftExtended, available: deepReady(w), active: this.opened, entered: d.entered, completed: d.completed, busy: this.running,
       title, speaker, speech, label, hint, done: goal.done, placing: this.placing, selected: this.selected,
       candidate: this.candidate, valid: !!this.placing && this.candidate !== null && !deepBuildProblem(w, this.placing, this.candidate),
