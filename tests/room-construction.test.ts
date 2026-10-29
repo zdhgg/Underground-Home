@@ -11,7 +11,7 @@ import { RoomEditor, type RoomUI } from '../src/app/roomEditor'
 
 function powered() {
   const w = createInitialWorld()
-  w.progress = { coreRepaired: true, crystalFound: true, crystalCollected: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   w.tiles[9][14] = TILE.EMPTY
   w.exploration.explorer = initialAtuPosition(w)
   return w

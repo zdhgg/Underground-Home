@@ -14,7 +14,7 @@ import { drawShelfProp } from '../src/render/shelfProps'
 
 function repairedWorld(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   world.inventory = { stone: 4, wood: 3 }
   return world
 }

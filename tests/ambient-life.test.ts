@@ -4,7 +4,7 @@ import { AmbientLife, dustMotes, moteAt } from '../src/render/ambientLife'
 
 function poweredWorld() {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   world.exploration.entered = true
   world.exploration.springFound = true
   return world

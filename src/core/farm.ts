@@ -2,6 +2,7 @@ import { LANDMARKS, STRATA, SURFACE_Y, TILE, WATER_FLOOR_Y, isInside, type Cell,
 import { isShaftColumn, isMushroomSpot } from './exploration'
 import { podRect } from './build'
 import { RELICS } from './relics'
+import { ENERGY_STONES } from './energyStones'
 
 /**
  * 引水与种植（规则层，与渲染无关）。
@@ -45,7 +46,7 @@ export function canPlacePlanter(world: WorldState, x: number, y: number): Plante
   if (onWater && Math.abs(x - LANDMARKS.spring.x) <= 1) return { ok: false, reason: 'reserved' }
   // 未拾取的蘑菇需要避让；拾取后空地可自由种植。
   if (onWater && isMushroomSpot(world, x, y)) return { ok: false, reason: 'reserved' }
-  const reserved = [LANDMARKS.generatorZone, { ...LANDMARKS.crystal, w: 1, h: 1 }]
+  const reserved = [LANDMARKS.generatorZone, ...ENERGY_STONES.map((stone) => ({ ...stone.cell, w: 1, h: 1 }))]
   if (reserved.some((rect) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h)) return { ok: false, reason: 'reserved' }
   if (RELICS.some((relic) => relic.x === x && relic.y === y)) return { ok: false, reason: 'reserved' }
   if (world.pods.some((pod) => {

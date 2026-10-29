@@ -25,6 +25,8 @@ describe('进入页存档摘要', () => {
     const world = createInitialWorld()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
 
     const summary = summarizeSave(world)
@@ -36,7 +38,7 @@ describe('进入页存档摘要', () => {
 
   it('第一夜完成后摘要切到泉水与家园，不会一直停在 4/4', () => {
     const world = createInitialWorld()
-    world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     world.pods.push({ id: 1, x: 12, y: 10, door: 'left' })
 
     const summary = summarizeSave(world)

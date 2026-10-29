@@ -36,6 +36,7 @@ import { SHAFT_LAST_Y, shaftFrontier } from '../core/exploration'
 import { ENERGY_CORE_DISPLAY_WIDTH, ENERGY_CORE_SOCKET_ANCHOR, loadEnergyCoreTexture } from './energyCoreTexture'
 import { CRYSTAL_DISPLAY_HEIGHT, loadCrystalTexture } from './crystalTexture'
 import { CRYSTAL_INSTALL_DURATION, CrystalFeedback } from './CrystalFeedback'
+import { ENERGY_STONES, collectedStoneCount, stoneCollected, stoneRevealed, type EnergyStoneId } from '../core/energyStones'
 import { createShelterFixtures, LAMP_LOCATIONS, loadShelterFixtureTextures, type ShelterFixtureTextures } from './shelterFixtures'
 import { bedSlots, drawSleepPod } from './sleepPods'
 import { loadNestTextures, type NestTextures } from './nestArt'
@@ -305,6 +306,8 @@ const LAMP_CORNER = { x: 25.4, y: 10 } as const
 /** 灯亮之后等一小会儿，再让她飞出来 */
 const LAMP_REVEAL_DELAY = 0.7
 const LAMP_REVEAL_DURATION = 1.25
+/** 只装进一块能源石时的亮度：核心周围看得见，整间屋还暗着。 */
+const CORE_LOADED_LIGHT = 0.22
 
 const REPAIR_CONFETTI_ANCHORS = [
   { x: 18.6 * TILE_SIZE, y: 11.45 * TILE_SIZE - 56 },
@@ -541,7 +544,8 @@ export class PixiWorldRenderer {
   private readonly openingSound = new OpeningSound()
   private opening: { elapsed: number; done: () => void; caption: (text: string) => void } | null = null
 
-  private crystal: Container | null = null
+  /** 两块能源石各自的显示容器；收好一块就不再画。 */
+  private readonly crystals = new Map<EnergyStoneId, Container>()
   private readonly crystalFeedback: CrystalFeedback
   private springGlow: Graphics | null = null
   private machineGlow: Graphics | null = null
@@ -725,7 +729,7 @@ export class PixiWorldRenderer {
     this.openingScene.view.visible = false
     this.explorationScene.view.visible = true
     this.highlightGfx.visible = true
-    if (this.crystal) this.crystal.visible = true
+    for (const crystal of this.crystals.values()) crystal.visible = true
     this.refreshExploration()
     this.manualCamera = false
     this.focusHome()
@@ -743,7 +747,8 @@ export class PixiWorldRenderer {
     this.openingScene.update(frame)
     this.openingSound.update(frame)
     opening.caption(frame.speech || frame.caption)
-    if (this.crystal) this.crystal.visible = frame.clue > 0
+    const leftCrystal = this.crystals.get('left')
+    if (leftCrystal) leftCrystal.visible = frame.clue > 0
     const portrait = this.viewport.width < 600
     const zoom = clampZoom(Math.min(2.1, this.viewport.width / (portrait ? 360 : 560), this.viewport.height / 285))
     const close = centerOn(portrait ? 19.5 * TILE_SIZE : 21 * TILE_SIZE, frame.cameraY, this.viewport, zoom)
@@ -773,7 +778,7 @@ export class PixiWorldRenderer {
     this.adengIntroduction = false
     this.cameraTween = null
     this.world = world
-    this.lightLevel = world.progress.coreRepaired ? 1 : 0
+    this.lightLevel = world.progress.coreRepaired ? 1 : world.progress.coreLoaded ? CORE_LOADED_LIGHT : 0
     this.powerLevel = world.powerDown ? 1 : 0
     this.refresh()
   }
@@ -1350,16 +1355,19 @@ export class PixiWorldRenderer {
   }
 
   /** 收集成功后的晶体上浮消失；世界状态已经由规则层确定。 */
-  playCrystalCollection(): void {
-    const x = (LANDMARKS.crystal.x + 0.5) * TILE_SIZE
-    const y = (LANDMARKS.crystal.y + 0.5) * TILE_SIZE
+  playCrystalCollection(at: Cell = LANDMARKS.crystal): void {
+    const x = (at.x + 0.5) * TILE_SIZE
+    const y = (at.y + 0.5) * TILE_SIZE
     this.crystalFeedback.playCollection({ x, y })
     this.playBurst(x, y, { color: COLORS.crystalGlow, count: 10, speed: 75 })
   }
 
-  /** 先将已携带的能源石送入槽口，再衔接原来的启动和点灯演出。 */
+  /**
+   * 把石头送进核心：装上第一块时核心只是暖起来，
+   * 两块都到位才衔接点灯、阿灯出场和撒花。
+   */
   playRepairCelebration(): void {
-    this.adengIntroduction = true
+    if (this.world?.progress.coreRepaired) this.adengIntroduction = true
     this.crystalFeedback.playInstallation({
       x: (LANDMARKS.generator.x + 0.5) * TILE_SIZE,
       y: (LANDMARKS.generator.y + 0.5) * TILE_SIZE,
@@ -1404,6 +1412,16 @@ export class PixiWorldRenderer {
     this.pendingCelebration = true
     // 灯亮之后，躲在角落的阿灯会飞出来——这是点亮这件事的情感落点。
     if (this.friends.some((friend) => friend.hidden)) this.lampRevealDelay = LAMP_REVEAL_DELAY
+  }
+
+  /** 只装进第一块：核心哼一下、亮一点点，留出"还差一块"的悬念。 */
+  private startCoreHums(): void {
+    playCoreStarted()
+    this.rebuildLandmarks()
+    this.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
+      color: COLORS.warmGlow, count: 8, speed: 60,
+    })
+    this.spinUp = 0.6
   }
 
   /** 初始 / 回家视角：同时看见地表风雪、地下大厅和左侧能源石区。 */
@@ -1560,7 +1578,10 @@ export class PixiWorldRenderer {
     this.roomScene.update(this.elapsed)
     this.frameCount += 1
     this.syncViewport()
-    if (this.crystalFeedback.update(dt)) this.startRepairCelebration()
+    if (this.crystalFeedback.update(dt)) {
+      if (this.world?.progress.coreRepaired) this.startRepairCelebration()
+      else this.startCoreHums()
+    }
     this.updateCameraTween(dt)
     this.updateChapterGlance(dt)
     if (this.spinUp > 0) this.spinUp = Math.max(0, this.spinUp - dt)
@@ -1583,7 +1604,7 @@ export class PixiWorldRenderer {
     this.publishConversationAnchor()
     this.drawFarmFlow()
     this.drawPowerLine()
-    if (this.crystal) this.crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
+    for (const crystal of this.crystals.values()) crystal.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     if (this.springGlow) this.springGlow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 1.6)
     this.updateOpening(dt)
     this.surfaceScene.update(this.elapsed, this.opening ? openingWeatherAt(this.opening.elapsed) : undefined)
@@ -1647,7 +1668,11 @@ export class PixiWorldRenderer {
   // ---------- 内部：光照 ----------
 
   private updateLighting(dt: number): void {
-    const target = this.world?.progress.coreRepaired && !this.crystalFeedback.installing ? 1 : 0
+    // 修复前后中间还有一个"只装了一块"的台阶：家还暗着，核心周围先暖起来。
+    const progress = this.world?.progress
+    const target = !progress || this.crystalFeedback.installing
+      ? 0
+      : progress.coreRepaired ? 1 : progress.coreLoaded ? CORE_LOADED_LIGHT : 0
     if (Math.abs(this.lightLevel - target) < 0.002) {
       this.lightLevel = target
     } else {
@@ -1744,12 +1769,12 @@ export class PixiWorldRenderer {
     const glow = this.machineGlow
     const world = this.world
     if (!glow || !world) return
-    const { crystalCollected, coreRepaired } = world.progress
+    const { coreLoaded, coreRepaired } = world.progress
     if (coreRepaired && !this.crystalFeedback.installing) {
       // 启动瞬间快速闪烁，随后稳定运转
       glow.alpha = this.spinUp > 0 ? 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(this.elapsed * 28)) : 1
-    } else if (crystalCollected) {
-      // 拿到能源石后核心微微呼吸，提示"可以来装了"
+    } else if (coreLoaded || collectedStoneCount(world) > 0) {
+      // 手上/机里已经有能源石：核心微微呼吸，提示"这里还等着你"
       glow.alpha = 0.65 + 0.35 * Math.sin(this.elapsed * 4)
     } else {
       glow.alpha = 1
@@ -2426,7 +2451,7 @@ export class PixiWorldRenderer {
   private rebuildLandmarks(): void {
     this.landmarkLayer.removeChildren()
     this.glowLayer.removeChildren()
-    this.crystal = null
+    this.crystals.clear()
     this.springGlow = null
     this.machineGlow = null
     const world = this.world
@@ -2436,7 +2461,9 @@ export class PixiWorldRenderer {
     // 能源核心：机身（结构层）
     const installing = this.crystalFeedback.installing
     const repaired = world.progress.coreRepaired && !installing
-    const ready = world.progress.crystalCollected && !repaired
+    const loaded = world.progress.coreLoaded && !repaired
+    const heldStones = collectedStoneCount(world)
+    const ready = !loaded && heldStones > 0 && !repaired
     const generatorX = (LANDMARKS.generator.x + 0.5) * T
     const generatorY = (LANDMARKS.generator.y + 0.5) * T
     const machine = new Sprite(this.energyCoreTexture)
@@ -2451,6 +2478,11 @@ export class PixiWorldRenderer {
       machineGlow.circle(generatorX, generatorY, 40).fill({ color: COLORS.coreOn, alpha: 0.22 })
       machineGlow.circle(generatorX, generatorY, 15).fill(COLORS.coreOn)
       machineGlow.circle(generatorX, generatorY, 8).fill(COLORS.coreOnInner)
+    } else if (loaded) {
+      // 只装了一块：核心已经暖起来，但还撑不亮整间屋
+      machineGlow.circle(generatorX, generatorY, 34).fill({ color: COLORS.warmGlow, alpha: 0.13 })
+      machineGlow.circle(generatorX, generatorY, 15).fill(COLORS.coreReady)
+      machineGlow.circle(generatorX, generatorY, 8).fill(COLORS.coreReadyInner)
     } else if (ready) {
       // 手上有能源石：核心透出暖橘色呼吸光，明确"来点我"
       machineGlow.circle(generatorX, generatorY, 44).fill({ color: COLORS.warmGlow, alpha: 0.16 })
@@ -2462,8 +2494,11 @@ export class PixiWorldRenderer {
     }
     this.machineGlow = machineGlow
     this.glowLayer.addChild(machineGlow)
-    const machineLabel = installing ? '能源核心 · 正在安装' : repaired ? '能源核心 · 运行中' : ready ? '能源核心 · 等待能源石' : '能源核心 · 待修复'
-    const machineLabelColor = repaired ? COLORS.labelOn : ready ? COLORS.labelReady : COLORS.labelDim
+    const machineLabel = installing ? '能源核心 · 正在安装'
+      : repaired ? '能源核心 · 运行中'
+        : loaded ? '能源核心 · 还差一块'
+          : ready ? '能源核心 · 等待能源石' : '能源核心 · 待修复'
+    const machineLabelColor = repaired ? COLORS.labelOn : ready || loaded ? COLORS.labelReady : COLORS.labelDim
     this.glowLayer.addChild(this.makeLabel(machineLabel, generatorX, generatorY + 52, machineLabelColor))
 
     // 地表入口标签
@@ -2478,11 +2513,11 @@ export class PixiWorldRenderer {
     this.glowLayer.addChild(spring)
 
     // 能源石：露出且未收集时显示；收集后消失；未挖开只透出一点微光
-    const revealed = world.tiles[LANDMARKS.crystal.y][LANDMARKS.crystal.x] === TILE.EMPTY
-    const collected = world.progress.crystalCollected
-    const crystalX = (LANDMARKS.crystal.x + 0.5) * T
-    const crystalY = (LANDMARKS.crystal.y + 0.5) * T
-    if (!collected) {
+    for (const stone of ENERGY_STONES) {
+      if (stoneCollected(world, stone)) continue
+      const revealed = stoneRevealed(world, stone)
+      const crystalX = (stone.cell.x + 0.5) * T
+      const crystalY = (stone.cell.y + 0.5) * T
       const crystal = new Container()
       const halo = new Graphics()
       if (revealed) {
@@ -2492,13 +2527,14 @@ export class PixiWorldRenderer {
         sprite.position.set(crystalX, crystalY)
         sprite.scale.set(CRYSTAL_DISPLAY_HEIGHT / this.crystalTexture.height)
         crystal.addChild(halo, sprite)
+        this.glowLayer.addChild(crystal)
         this.glowLayer.addChild(this.makeLabel('能源石', crystalX, crystalY - 38, COLORS.crystalGlow))
       } else {
         halo.circle(crystalX, crystalY, 24).fill({ color: COLORS.crystalGlow, alpha: 0.12 })
         crystal.addChild(halo)
+        this.glowLayer.addChild(crystal)
       }
-      this.crystal = crystal
-      this.glowLayer.addChild(crystal)
+      this.crystals.set(stone.id, crystal)
     }
   }
 

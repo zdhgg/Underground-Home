@@ -12,7 +12,7 @@ import { advancePlanters, canPlacePlanter, harvestPlanter, placePlanter } from '
 
 function readyWorld(podX = 12): WorldState {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = podX; x < podX + 3; x++) dig(w, x, y)
   expect(placePod(w, podX, 10)).not.toBeNull()

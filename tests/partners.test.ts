@@ -119,7 +119,7 @@ describe('伙伴与床位：每位伙伴有自己的出场理由', () => {
 describe('第二间舱要真的建得出来', () => {
   it('见到小满之后就能放下第二间舱，不用等到找到水；并且不碰第二层', () => {
     const world = createInitialWorld()
-    world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
     expect(placePod(world, 12, 10)).not.toBeNull()
     // 还没下去：第一层只有两位老住户，第二间舱还不该出现。

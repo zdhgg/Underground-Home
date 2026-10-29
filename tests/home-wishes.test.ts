@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createInitialWorld, TILE, type SleepPod, type WorldState } from '../src/core/world'
+import { createInitialWorld, TILE, WORLD_VERSION, type SleepPod, type WorldState } from '../src/core/world'
 import { dig } from '../src/core/dig'
 import { advancePlanters, harvestPlanter, RIPE_STAGE } from '../src/core/farm'
 import { deserialize, serialize } from '../src/core/persistence'
@@ -15,7 +15,7 @@ import {
 /** 第一层左翼挖出一带地面、水已接通、第三层章末完成：心愿的基础世界。 */
 function wishWorld(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let y = 9; y <= 11; y++) for (let x = 2; x <= 14; x++) if (world.tiles[y][x] === TILE.SOIL) dig(world, x, y)
   world.exploration.entered = true
   world.farm.waterSupplied = true
@@ -170,7 +170,7 @@ describe('家园心愿：只从真实世界状态生成', () => {
     const loaded = deserialize(serialize(world))
     if (!loaded.ok) throw new Error(loaded.error)
     expect(loaded.ok).toBe(true)
-    expect(loaded.world.version).toBe(26)
+    expect(loaded.world.version).toBe(WORLD_VERSION)
     expect(homeWishes(loaded.world)).toEqual(before)
     expect(serialize(loaded.world)).not.toHaveProperty('wishes')
     expect(serialize(loaded.world).world).not.toHaveProperty('wishProgress')

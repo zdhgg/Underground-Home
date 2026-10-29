@@ -19,7 +19,7 @@ import {
 /** 已经下到第二层、找到泉水、接过水、有床位和一槽菜的完整小世界。 */
 function mealWorld(): WorldState {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
   placePod(w, 12, 10)

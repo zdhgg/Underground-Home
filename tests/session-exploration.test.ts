@@ -76,7 +76,7 @@ const createGameSession = (host: HTMLElement, hooks: SessionHooks) => createSess
 
 function readySave() {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
   placePod(w, 12, 10)
@@ -97,7 +97,7 @@ function clueSave(upgraded = false) {
 /** 已经找到泉水、引水到家、左翼挖出一带地面的存档：用来测种植与收获 */
 function farmedSave() {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   w.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(w, x, y)
   placePod(w, 12, 10)
@@ -628,7 +628,7 @@ describe('探索会话与存档集成', () => {
     const onNestWelcome = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
+    w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
     for (const x of [12, 13, 14]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
     session.setBuildMode('pod'); harness.handlers.onTap({ x: 13, y: 11 }); session.confirmBuild()
     expect(w.workers.xiaoman).toBeUndefined(); expect(w.pods).toHaveLength(1)
@@ -643,7 +643,7 @@ describe('探索会话与存档集成', () => {
     const onNestWelcome = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onNestWelcome })
     const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
-    w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
+    w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }; w.tiles[9][14] = TILE.EMPTY
     for (const x of [12, 13, 14]) for (const y of [10, 11]) w.tiles[y][x] = TILE.EMPTY
     let settled = () => {}
     harness.renderer.playPodEntrance.mockImplementationOnce((_pod, done) => { settled = done })
@@ -658,7 +658,7 @@ describe('探索会话与存档集成', () => {
 
   it('修好核心先播放亮灯和出场，落地后阿灯才开口，随后可准备小窝', async () => {
     const raw = readySave()
-    raw.world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: false }
+    raw.world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: false }
     raw.world.pods = []; raw.world.workers = {}
     harness.store.load.mockResolvedValue(raw)
     const onPartner = vi.fn()

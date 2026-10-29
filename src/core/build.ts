@@ -4,6 +4,7 @@ import { ventilationLadderCell, ventilationOccupies, VENTILATION_FOOT } from './
 import { reservoirLadderCell, reservoirOccupies, RESERVOIR_FOOT } from './reservoirTopology'
 import { gardenLadderCell, gardenOccupies, GARDEN_FOOT } from './gardenTopology'
 import { podBlocksPassage } from './passages'
+import { ENERGY_STONES, stoneFound } from './energyStones'
 import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type Cell, type Rect, type SleepPod, type WorldState } from './world'
 import { explorationAccessIntact, explorationProtects, hallToShaftRouteIntact, isShaftColumn } from './exploration'
 import { routeBeforePod, workersSafe,atuRoute,initialAtuPosition } from './atu'
@@ -119,7 +120,7 @@ export function canRestoreDig(world: WorldState, x: number, y: number): boolean 
   if (!isInside(world, x, y) || world.tiles[y][x] !== TILE.EMPTY || isPodStructure(world, x, y)) return false
   if (world.farm.planters.some(p => p.x === x && (p.y === y || p.y + 1 === y))) return false
   if (explorationProtects(world, x, y)) return false
-  if (world.progress.crystalFound && x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y) return false
+  if (ENERGY_STONES.some(stone => stoneFound(world, stone) && stone.cell.x === x && stone.cell.y === y)) return false
   world.tiles[y][x] = TILE.SOIL
   try { return accessPreserved(world, reachable(world)) && explorationAccessIntact(world) && workersSafe(world)
     && (!world.finale.foundWarmth||atuRoute(world,initialAtuPosition(world),WARMTH_SPOT,true)!==null)

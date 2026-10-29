@@ -42,6 +42,7 @@ import { atuRoute, initialAtuPosition, routeBeforePod } from '../core/atu'
 import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
+import { ENERGY_STONES, collectedStoneCount, stoneAt, stoneCollected } from '../core/energyStones'
 import { guideHighlight, missionSummary } from '../core/missions'
 import { HOME_OWNER } from '../core/personal'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible } from '../core/exploration'
@@ -898,7 +899,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return isSpringTarget(cell) ? 'pointer' : 'crosshair'
     }
     if (inRect(LANDMARKS.generatorZone, cell)) return 'pointer'
-    if (inRect(LANDMARKS.crystalZone, cell) && !world.progress.crystalCollected) return 'pointer'
+    if (ENERGY_STONES.some(stone => inRect(stone.zone, cell) && !stoneCollected(world, stone))) return 'pointer'
     return tile === TILE.SOIL ? 'crosshair' : 'default'
   }
 
@@ -1122,22 +1123,25 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     }
 
     // 4) 能源石区域：收集（还埋在土里则自然落入挖掘流程）
-    if (inRect(LANDMARKS.crystalZone, cell)) {
-      if (!world.progress.crystalCollected) {
+    const stone = stoneAt(cell.x, cell.y)
+    if (stone) {
+      if (!stoneCollected(world, stone)) {
         const result = collectCrystal(world, cell.x, cell.y)
         if (result.ok) {
           renderer.refresh()
-          renderer.playCrystalCollection()
+          renderer.playCrystalCollection(stone.cell)
           playCrystalCollected()
           scheduleSave()
           pushProgress()
-          hooks.onMessage('💎 能源石收好啦！')
+          hooks.onMessage(collectedStoneCount(world) >= ENERGY_STONES.length
+            ? '💎 两块能源石都收好啦！中间的大机器等着它们。'
+            : '💎 能源石收好啦！先放回中间的大机器试试。')
           return
         }
         // not-revealed：泥土还盖着，继续按挖掘处理
-      } else if (cell.x === LANDMARKS.crystal.x && cell.y === LANDMARKS.crystal.y && world.tiles[cell.y][cell.x] !== TILE.SOIL) {
+      } else if (cell.x === stone.cell.x && cell.y === stone.cell.y && world.tiles[cell.y][cell.x] !== TILE.SOIL) {
         // 已收集：给一点点小星光，不再重复提示
-        renderer.playBurst((LANDMARKS.crystal.x + 0.5) * TILE_SIZE, (LANDMARKS.crystal.y + 0.5) * TILE_SIZE, {
+        renderer.playBurst((stone.cell.x + 0.5) * TILE_SIZE, (stone.cell.y + 0.5) * TILE_SIZE, {
           color: 0x8dedfd,
           count: 6,
           speed: 50,
@@ -1147,10 +1151,19 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       // 已收集 + 点的是泥土 → 保持自由挖掘
     }
 
-    // 5) 能源核心区域：修复 / 提示 / 已在运转时给个小火花
+    // 5) 能源核心区域：装石头（两级）/ 提示 / 已在运转时给个小火花
     if (inRect(LANDMARKS.generatorZone, cell)) {
       const result = repairCore(world, cell.x, cell.y)
       if (result.ok) {
+        if (result.stage === 'loaded') {
+          renderer.playRepairCelebration()
+          renderer.refresh()
+          scheduleSave()
+          pushProgress()
+          playCrystalCollected()
+          hooks.onMessage('核心亮了一点点！它还差一块能源石——右边土里也亮着。')
+          return
+        }
         discovering = true
         hooks.onDiscovery?.(true)
         renderer.playRepairCelebration()
@@ -1162,6 +1175,9 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       if (result.reason === 'need-crystal') {
         playUnavailable()
         hooks.onMessage('机器还没有能量：先找到能源石吧')
+      } else if (result.reason === 'need-more-stones') {
+        playUnavailable()
+        hooks.onMessage('核心还差一块能源石：右边土里也亮着。')
       } else {
         renderer.playBurst((LANDMARKS.generator.x + 0.5) * TILE_SIZE, (LANDMARKS.generator.y + 0.5) * TILE_SIZE, {
           color: 0xffd9a0,

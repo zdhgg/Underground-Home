@@ -3,7 +3,8 @@ import { ruinsOccupies,ruinsSpan } from './ruinsTopology'
 import { ventilationOccupies, ventilationSpan } from './ventilationTopology'
 import { reservoirOccupies, reservoirSpan } from './reservoirTopology'
 import { GARDEN_FOOT, GARDEN_TOP, gardenOccupies, gardenSpan } from './gardenTopology'
-import { LANDMARKS, SURFACE_Y, TILE, isInside, isPreviewLayer, type TileType, type WorldState } from './world'
+import { SURFACE_Y, TILE, isInside, isPreviewLayer, type TileType, type WorldState } from './world'
+import { ENERGY_STONES, markStoneFound } from './energyStones'
 import { isPodStructure } from './build'
 import { isShaftCell, waterSpan } from './exploration'
 import { planterAt } from './farm'
@@ -139,9 +140,9 @@ export function dig(world: WorldState, x: number, y: number): DigResult {
     if (result.tile === TILE.ROCK && mineralCell(x, y)) world.deep.ore += 2
     if (world.deep.entered && x === DRILL_SPOT.x && y === DRILL_SPOT.y) world.deep.foundDrill = true
     if (world.deep.entered && x === MOSS_SPOT.x && y === MOSS_SPOT.y) world.deep.foundMoss = true
-    // 挖开能源石所在的泥土 = 发现能源石。进度位单调，撤销不会回退它。
-    if (x === LANDMARKS.crystal.x && y === LANDMARKS.crystal.y) {
-      world.progress.crystalFound = true
+    // 挖开能源石所在的泥土 = 发现这块能源石。进度位单调，撤销不会回退它。
+    for (const stone of ENERGY_STONES) {
+      if (stone.cell.x === x && stone.cell.y === y) markStoneFound(world, stone)
     }
   }
   return result

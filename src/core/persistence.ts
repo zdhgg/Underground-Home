@@ -188,7 +188,7 @@ function validateBaseWorld(world: unknown, version: number): { ok: true; data: B
   }
 }
 
-function validateProgress(progress: unknown): WorldProgress | null {
+function validateProgress(progress: unknown, version: number): WorldProgress | null {
   if (typeof progress !== 'object' || progress === null) return null
   const raw = progress as Record<string, unknown>
   if (
@@ -198,11 +198,51 @@ function validateProgress(progress: unknown): WorldProgress | null {
   ) {
     return null
   }
+  const loaded = validateStoneStage(raw, version)
+  if (!loaded) return null
   return {
     crystalFound: raw.crystalFound,
     crystalCollected: raw.crystalCollected,
+    secondCrystalFound: loaded.secondCrystalFound,
+    secondCrystalCollected: loaded.secondCrystalCollected,
+    coreLoaded: loaded.coreLoaded,
     coreRepaired: raw.coreRepaired,
   }
+}
+
+/**
+ * v27 起点亮家园要两块能源石。旧档（≤v26）没有这几个字段：
+ * 先把它们读成 false，再由 deserialize 按"已达成的旧规则"补齐，
+ * 这样玩到一半的存档不会突然被要求回去多挖一块石头。
+ */
+function validateStoneStage(
+  raw: Record<string, unknown>,
+  version: number,
+): { secondCrystalFound: boolean; secondCrystalCollected: boolean; coreLoaded: boolean } | null {
+  const fields = ['secondCrystalFound', 'secondCrystalCollected', 'coreLoaded'] as const
+  const present = fields.filter(key => typeof raw[key] === 'boolean')
+  if (version >= 27 && present.length !== fields.length) return null
+  if (present.length !== 0 && present.length !== fields.length) return null
+  return {
+    secondCrystalFound: raw.secondCrystalFound === true,
+    secondCrystalCollected: raw.secondCrystalCollected === true,
+    coreLoaded: raw.coreLoaded === true,
+  }
+}
+
+/**
+ * v27 起一块能源石不够用了。旧档只按老规则走过一遍：
+ * 已经收好石头的存档等于"旧要求已满足"，直接算作两块都到手、核心已装，
+ * 下一次点核心仍然是点亮家园——不在玩家半途加一道新功课。
+ */
+function migrateSingleStoneProgress(progress: WorldProgress, tiles: readonly (readonly number[])[]): void {
+  if (progress.crystalCollected || progress.coreRepaired) {
+    progress.secondCrystalFound = true
+    progress.secondCrystalCollected = true
+    progress.coreLoaded = true
+    return
+  }
+  progress.secondCrystalFound = tiles[LANDMARKS.secondCrystal.y]?.[LANDMARKS.secondCrystal.x] === TILE.EMPTY
 }
 
 /**
@@ -229,7 +269,7 @@ export function deserialize(raw: unknown): LoadResult {
         finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
         inventory: freshInventory(), builtSites: [],
         version: WORLD_VERSION,
-        progress: { crystalFound: found, crystalCollected: false, coreRepaired: false },
+        progress: { crystalFound: found, crystalCollected: false, secondCrystalFound: false, secondCrystalCollected: false, coreLoaded: false, coreRepaired: false },
         pods: [],
         rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
         exploration: freshExploration(),
@@ -240,12 +280,13 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== 26 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
-  const progress = validateProgress((payload.world as { progress?: unknown }).progress)
+  const progress = validateProgress((payload.world as { progress?: unknown }).progress, version)
   if (!progress) return err('存档进度字段无效')
+  if (version < 27) migrateSingleStoneProgress(progress, base.data.tiles)
 
   const world: WorldState = {
     finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),

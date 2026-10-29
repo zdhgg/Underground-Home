@@ -45,7 +45,7 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'repair-energy-core',
     title: '修好能源核心，点亮家园',
-    speech: '把石头放进中间的大机器，家就能亮起来了！',
+    speech: '中间的大机器要两块能源石才能完全亮起来。先把找到的放进去——它会轻轻亮一下，告诉你“我准备好了”。',
     todo: '点一下大厅中间的能源核心。',
     outcome: '灯一盏一盏亮起来，阿灯也敢出来了。',
     isDone: (world) => world.progress.coreRepaired,
@@ -94,9 +94,13 @@ export type GuideHighlight =
 const secondLayerWaiting = (world: WorldState) => waitingPartnerList(world).filter(partner => partner.bedSlot < PARTNERS_AFTER_SPRING)
 
 export function guideHighlight(world: WorldState): GuideHighlight {
-  const { crystalFound, crystalCollected, coreRepaired } = world.progress
+  const { crystalFound, crystalCollected, coreLoaded, coreRepaired } = world.progress
   if (!crystalFound) return { kind: 'dig', rect: LANDMARKS.crystalZone }
   if (!crystalCollected) return { kind: 'collect', rect: LANDMARKS.crystalZone }
+  // 先把手上的那一块装进核心（看见一点点亮），再去找右翼的第二块。
+  if (!coreLoaded) return { kind: 'repair', rect: LANDMARKS.generatorZone }
+  if (!world.progress.secondCrystalFound) return { kind: 'dig', rect: LANDMARKS.secondCrystalZone }
+  if (!world.progress.secondCrystalCollected) return { kind: 'collect', rect: LANDMARKS.secondCrystalZone }
   if (!coreRepaired) return { kind: 'repair', rect: LANDMARKS.generatorZone }
   if (world.pods.length) {
     const e = world.exploration

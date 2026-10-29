@@ -15,7 +15,7 @@ import { inspectCrack, upgradePickaxe } from '../src/core/exploration'
 /** 已经找到泉水、引水到家、种下一槽菜的世界：用来测 v6 的引水与种植字段 */
 function farmWorld(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   world.tiles[9][14] = TILE.EMPTY
   for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
   placePod(world, 12, 10)
@@ -68,6 +68,8 @@ describe('存档序列化与校验', () => {
     const world = createInitialWorld()
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
     expect(missionSummary(world)).toEqual({ done: 3, total: 4 })
 
@@ -99,6 +101,9 @@ describe('存档序列化与校验', () => {
       expect(result.world.progress).toEqual({
         crystalFound: true,
         crystalCollected: false,
+        secondCrystalFound: false,
+        secondCrystalCollected: false,
+        coreLoaded: false,
         coreRepaired: false,
       })
       expect(missionSummary(result.world).done).toBe(1)
@@ -123,6 +128,9 @@ describe('存档序列化与校验', () => {
       expect(result.world.progress).toEqual({
         crystalFound: false,
         crystalCollected: false,
+        secondCrystalFound: false,
+        secondCrystalCollected: false,
+        coreLoaded: false,
         coreRepaired: false,
       })
     }
@@ -264,7 +272,7 @@ describe('围坐共餐计数（v14）', () => {
 describe('伙伴站位迁移', () => {
   it('旧档里“建好床就加入”的小满站位会被丢弃，整份存档仍能读取', () => {
     const world = createInitialWorld()
-    world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
     for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
     expect(placePod(world, 12, 10)).not.toBeNull()
     world.workers = { adeng: { x: 24, y: 11 }, xiaoman: { x: 17, y: 11 } }

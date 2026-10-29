@@ -11,7 +11,7 @@ import { facilityView, panelFacilityAt } from '../src/app/facilityPanel'
 /** 第一夜基本做完：两间床、四位伙伴、水引上来了、收过一次菜 */
 function readyForPower(): WorldState {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   // 第一间床（大厅左侧）
   for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
   placePod(world, 12, 10)

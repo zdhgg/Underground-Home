@@ -25,7 +25,7 @@ describe('第一夜任务链', () => {
     if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.crystalZone)
   })
 
-  it('挖开 → 收集 → 修复，任务逐级推进，高亮跟随切换', () => {
+  it('挖开 → 收集 → 装第一块 → 找第二块 → 点亮，高亮跟随切换', () => {
     const world = createInitialWorld()
 
     dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
@@ -36,14 +36,36 @@ describe('第一夜任务链', () => {
     collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
     expect(missionSummary(world).done).toBe(2)
     expect(currentMission(world)?.id).toBe('repair-energy-core')
-    const guide = guideHighlight(world)
-    expect(guide.kind).toBe('repair')
-    if (guide.kind !== 'none') expect(guide.rect).toEqual(LANDMARKS.generatorZone)
+    expect(guideHighlight(world).kind).toBe('repair')
+
+    // 第一块先送进核心：家园还没点亮，高亮转去右翼的第二块石头
+    const first = repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    expect(first.stage).toBe('loaded')
+    expect(missionSummary(world).done).toBe(2)
+    const second = guideHighlight(world)
+    expect(second.kind).toBe('dig')
+    if (second.kind !== 'none') expect(second.rect).toEqual(LANDMARKS.secondCrystalZone)
+
+    dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    expect(guideHighlight(world).kind).toBe('collect')
+    collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
+    const lastGuide = guideHighlight(world)
+    expect(lastGuide.kind).toBe('repair')
+    if (lastGuide.kind !== 'none') expect(lastGuide.rect).toEqual(LANDMARKS.generatorZone)
 
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
     expect(missionSummary(world).done).toBe(3)
     expect(currentMission(world)?.id).toBe('build-sleep-pod')
     expect(guideHighlight(world).kind).toBe('none')
+  })
+
+  it('点亮之前高亮不会指向核心以外的地方：只装一块时高亮离开核心去找第二块', () => {
+    const world = createInitialWorld()
+    dig(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    collectCrystal(world, LANDMARKS.crystal.x, LANDMARKS.crystal.y)
+    repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
+    const guide = guideHighlight(world)
+    expect(guide.kind === 'none' ? null : guide.rect).not.toEqual(LANDMARKS.generatorZone)
   })
 
   it('挖别处的泥土不会完成任何任务', () => {
@@ -101,7 +123,7 @@ describe('第一夜任务链', () => {
 /** 已经点亮家园、安好小床、挖通梯道、抵达第二层并找到泉水 */
 function reachedSpringWorld() {
   const world = createInitialWorld()
-  world.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let y = 10; y <= 11; y++) for (let x = 12; x < 15; x++) dig(world, x, y)
   placePod(world, 12, 10)
   for (let x = 26; x <= 27; x++) dig(world, x, 11)

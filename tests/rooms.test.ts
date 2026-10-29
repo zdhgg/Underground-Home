@@ -12,7 +12,7 @@ import { RoomScene } from '../src/render/roomScene'
 
 function ready() {
   const w = createInitialWorld()
-  w.progress = { crystalFound: true, crystalCollected: true, coreRepaired: true }
+  w.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
   for (let x = 2; x <= 15; x++) for (let y = 9; y <= 11; y++) w.tiles[y][x] = TILE.EMPTY
   for (let x = 26; x <= 41; x++) for (let y = 9; y <= 11; y++) w.tiles[y][x] = TILE.EMPTY
   return w
