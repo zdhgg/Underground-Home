@@ -1,5 +1,6 @@
 import { Assets, Container, Sprite, type Texture } from 'pixi.js'
 import { FACILITY_ART, type FacilityKind } from './facilityArtSpec'
+import { loungeComfortProps } from './loungeArt'
 
 export type FacilityTextures = Partial<Record<FacilityKind, readonly Texture[]>>
 /** 一类设施失败时只让该类使用备用画法，其他建筑仍可正常显示。 */
@@ -15,7 +16,7 @@ export async function loadFacilityTextures(): Promise<FacilityTextures> {
   return result
 }
 
-export function drawFacilityArt(textures: FacilityTextures, kind: FacilityKind, x: number, y: number, width: number, height: number): Container | null {
+export function drawFacilityArt(textures: FacilityTextures, kind: FacilityKind, x: number, y: number, width: number, height: number, rests = 0): Container | null {
   const images = textures[kind], spec = FACILITY_ART[kind]
   if (!images || images.length !== spec.layers.length) return null
   const view = new Container({ label: `${kind}-art` })
@@ -30,5 +31,10 @@ export function drawFacilityArt(textures: FacilityTextures, kind: FacilityKind, 
     sprite.width = layer.width * w; sprite.height = layer.height * h
     view.addChild(sprite)
   })
+  // 客厅住过之后才有的东西：地毯、盆栽。其他设施不参与。
+  if (kind === 'lounge') {
+    const comfort = loungeComfortProps(w, h, rests)
+    if (comfort) view.addChild(comfort)
+  }
   return view
 }

@@ -43,6 +43,7 @@ import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
 import { collectCrystal, repairCore } from '../core/interact'
 import { ENERGY_STONES, collectedStoneCount, stoneAt, stoneCollected } from '../core/energyStones'
+import { loungeRoom, planLoungeGathering, restAtLounge, restLine } from '../core/lounge'
 import { guideHighlight, missionSummary } from '../core/missions'
 import { HOME_OWNER } from '../core/personal'
 import { canPlaceWallLamp, inspectCrack, isShaftColumn, SHAFT_LAST_Y, shaftChainReady, shaftConnected, shaftFrontier, shaftRemainingSegments, springVisible } from '../core/exploration'
@@ -309,6 +310,8 @@ export interface GameSession {
   roomWidth(delta: number): void
   saveRoom(): void
   removeRoom(): void
+  /** 客厅：一起坐一会儿（伙伴走过来坐下，客厅随次数变暖） */
+  restTogether(): void
   selectRoom(id: number): void
   newRoom(): void
   selectSite(id: string): void
@@ -807,6 +810,53 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (!mealing) return false
     cancelMeal('🍽 大家先停一下，再做别的。')
     return true
+  }
+
+  /**
+   * 客厅：一起坐一会儿。伙伴用既有的围坐走位走过来坐下，
+   * 客厅随次数变暖（地毯 → 盆栽），伙伴说一句家里的近况。
+   * 没有消耗、没有等待，可以随时再做一次。
+   */
+  let restingInLounge = false
+  let restSerial = 0
+  let restTimer: number | undefined
+  const finishRest = (): void => {
+    window.clearTimeout(restTimer)
+    restTimer = undefined
+    restingInLounge = false
+    renderer.cancelMealGather()
+    pushProgress()
+    pushBuild()
+  }
+  const restTogether = (): void => {
+    if (traveling || restingInLounge || mealBusy() || siteEditor?.working) return
+    const room = loungeRoom(world)
+    if (!room) return
+    roomEditor?.close()
+    diggingSites = false
+    renderer.setHoverCell(null)
+    const result = restAtLounge(world)
+    if (!result.ok) return
+    const token = ++restSerial
+    restingInLounge = true
+    closeConversation()
+    renderer.focusOn((room.x + room.w / 2) * TILE_SIZE, (room.y + room.h / 2) * TILE_SIZE, 'building')
+    renderer.refreshRooms()
+    scheduleSave()
+    const line = restLine(world)
+    renderer.playMealGather(planLoungeGathering(world), () => {
+      if (token !== restSerial) return
+      notify(`☕ ${line}`)
+      if (result.first) {
+        hooks.onMilestone?.({ emoji: '☕', title: '客厅暖起来了', detail: '伙伴们第一次一起坐在长椅上' })
+      } else if (result.advanced) {
+        hooks.onMilestone?.({ emoji: '🪴', title: '客厅又添了一样东西', detail: `一起坐过 ${result.rests} 次，家里越来越暖` })
+      }
+      window.clearTimeout(restTimer)
+      restTimer = window.setTimeout(() => { if (token === restSerial) finishRest() }, 2200)
+    })
+    pushProgress()
+    pushBuild()
   }
 
   /** 玩家中途停下来 / 切后台：演出安全结束，伙伴回到自己的站位，食物不重复扣。 */
@@ -1786,6 +1836,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (deepChapter?.busy) { deepChapter.cancel(); notify('先停下来啦。已完成的施工和材料都保留。'); return }
     if (deepChapter?.active) { deepChapter.close(); return }
     gameAudio.stopEffects()
+    if (restingInLounge) { restSerial++; finishRest(); return }
     if (cancelMeal('🍽 大家先停一下，再点一次就好。')) return
     if (siteEditor?.working) { siteEditor.cancel(); notify('阿土停下来啦，已挖的地方和找到的材料都保留。'); return }
     if (siteEditor?.active) { siteEditor.close(); return }
@@ -2273,6 +2324,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     roomWidth: delta => roomEditor?.resize(delta),
     saveRoom: () => roomEditor?.save(),
     removeRoom: () => roomEditor?.remove(),
+    restTogether,
     selectRoom: id => {
       if (traveling || siteEditor?.working || !roomEditor) return
       siteEditor?.close()

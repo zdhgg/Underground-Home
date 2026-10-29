@@ -90,7 +90,7 @@ export class RoomScene {
       label.anchor.set(.5, 1); label.position.set(x + width / 2, y - 4); label.label = 'room-name'
       view.addChild(g, label); return view
     }
-    const facility = r.managed && r.kind !== 'home' ? drawFacilityArt(this.facilityTextures, r.kind, x, y, width, height) : null
+    const facility = r.managed && r.kind !== 'home' ? drawFacilityArt(this.facilityTextures, r.kind, x, y, width, height, world.lounge.rests) : null
     const detailedHome = this.textures && r.kind === 'home' && r.managed && r.h === 3 && r.w % 3 === 0
     if (facility) {
       view.addChild(facility)
@@ -103,7 +103,7 @@ export class RoomScene {
         view.addChild(light)
       }
     } else if (this.loungeTextures && r.kind === 'lounge' && r.managed) {
-      view.addChild(drawLounge(this.loungeTextures, x, y, width, height))
+      view.addChild(drawLounge(this.loungeTextures, x, y, width, height, world.lounge.rests))
     } else {
       g.roundRect(x + 2, y + 2, width - 4, height - 2, 5).fill({ color: c.wall, alpha: .085 })
       g.rect(x + 2, y + height - 5, width - 4, 5).fill(c.floor)

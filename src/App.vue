@@ -205,6 +205,7 @@ const legendHint = computed(() => {
   if (!farm.value.kitchen) return '🔨 点「泉边建设」修一个灶台'
   if (!farm.value.dining) return '🍽 再摆一张餐桌，大家就能围坐'
   if (view.value.layer === 'home' && build.value.shelfAvailable && build.value.shelfCount === 0) return '📦 想让材料和旧物看得见？第一层能摆储物架'
+  if (view.value.layer === 'home' && rooms.value.items.some(item => item.kind === 'lounge' && item.built)) return '☕ 点客厅，和大家坐一会儿'
   return '🌱 点泉边小菜园就能建设 · 熟了叫小满来收'
 })
 
@@ -469,7 +470,7 @@ onBeforeUnmount(() => {
 
       <NestWelcome v-if="nestWelcome && !view.overview" :state="nestWelcome" @close="session?.closeNestWelcome()" @confirm="session?.confirmNestMark($event)" @improve="session?.openNestWarmLamp(nestWelcome.podId)" @install="session?.confirmNestWarmLamp()" />
       <SiteTools v-else-if="sites.active" :state="sites" @close="session?.closeRooms()" @browse="session?.openRooms()" @select="session?.selectSite($event)" @kind="session?.siteKind($event)" @build="session?.buildSite()" @stop="session?.cancelAction()" @dig="session?.setBuildMode('none')" />
-      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" @improve="session?.openNestWarmLamp($event)" />
+      <RoomTools v-else-if="rooms.active" :state="rooms" @close="session?.closeRooms()" @kind="session?.roomKind($event)" @resize="session?.roomWidth($event)" @save="session?.saveRoom()" @remove="session?.removeRoom()" @mark="session?.openNestMark($event)" @improve="session?.openNestWarmLamp($event)" @rest="session?.restTogether()" />
       <section v-else-if="work" class="work-status" :class="{ 'nest-work': work.nestPodId !== undefined }" data-attention-panel="work" aria-label="伙伴工作" role="status">
         <small>伙伴正在帮忙</small>
         <strong>{{ work.name }} · {{ work.title }}</strong>

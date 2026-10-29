@@ -42,7 +42,9 @@ import {
   type BuiltSite,
   type MemoryEntry,
   type MemoryState,
+  type LoungeState,
   freshMemories,
+  freshLounge,
   BREAKTHROUGHS,
 } from './world'
 import { canPlacePod } from './build'
@@ -104,6 +106,8 @@ export interface SavePayload {
     powerDown: boolean
     /** 父女共同保存的生活记录（v25 起） */
     memories: MemoryState
+    /** 客厅一起坐过的次数（v28 起） */
+    lounge: LoungeState
   }
 }
 
@@ -137,6 +141,7 @@ export function serialize(world: WorldState): SavePayload {
       farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
       powerDown: world.powerDown,
       memories: { entries: world.memories.entries.map(entry => ({ ...entry })), nextId: world.memories.nextId },
+      lounge: { ...world.lounge },
     },
   }
 }
@@ -276,11 +281,12 @@ export function deserialize(raw: unknown): LoadResult {
         farm: freshFarm(),
         powerDown: false,
         memories: freshMemories(),
+        lounge: freshLounge(),
       },
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== 26 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== 26 && version !== 27 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -292,7 +298,7 @@ export function deserialize(raw: unknown): LoadResult {
     finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
     ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
-    exploration: freshExploration(), farm: freshFarm(), powerDown: false, memories: freshMemories(),
+    exploration: freshExploration(), farm: freshFarm(), powerDown: false, memories: freshMemories(), lounge: freshLounge(),
   }
   const rawFinale=(payload.world as {finale?:FinaleState}).finale
   if(version>=23)world.finale={...freshFinale(),braced:rawFinale?.braced===true,entered:rawFinale?.entered===true}
@@ -372,6 +378,11 @@ export function deserialize(raw: unknown): LoadResult {
     const memories = validateMemories((payload.world as { memories?: unknown }).memories)
     if (!memories) return err('存档生活记录数据无效')
     world.memories = memories
+  }
+  if (version >= 28) {
+    const lounge = validateLounge((payload.world as { lounge?: unknown }).lounge)
+    if (!lounge) return err('存档客厅数据无效')
+    world.lounge = lounge
   }
   if (hasWideLampAbility(world) && !(world.progress.coreRepaired && world.exploration.springFound && world.powerDown)) return err('存档照明升级前置成果无效')
 
@@ -523,6 +534,14 @@ function validateFarm(raw: unknown, world: WorldState, version: number): FarmSta
 }
 
 /** v25 起：家庭生活记录。限制条目和媒体大小，避免损坏或超大文件拖垮存档。 */
+/** 客厅一起坐过的次数：只增不减的非负整数；旧档（<v28）按 0 补齐。 */
+function validateLounge(raw: unknown): LoungeState | null {
+  if (typeof raw !== 'object' || raw === null) return null
+  const rests = (raw as { rests?: unknown }).rests
+  if (!Number.isSafeInteger(rests) || Number(rests) < 0 || Number(rests) > 100000) return null
+  return { rests: Number(rests) }
+}
+
 function validateMemories(raw: unknown): MemoryState | null {
   if (typeof raw !== 'object' || raw === null) return null
   const data = raw as { entries?: unknown; nextId?: unknown }

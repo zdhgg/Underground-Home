@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 27
+export const WORLD_VERSION = 28
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -122,6 +122,11 @@ export interface MemoryState {
   nextId: number
 }
 export const freshMemories = (): MemoryState => ({ entries: [], nextId: 1 })
+/** 客厅：一起坐过的次数。只增不减；地毯与盆栽按次数出现。 */
+export interface LoungeState {
+  rests: number
+}
+export const freshLounge = (): LoungeState => ({ rests: 0 })
 /** 蓝图不改变地形；扩建蓝图完成前，原房间继续使用。 */
 export interface Room extends Rect {
   id: number; kind: RoomKind
@@ -328,6 +333,8 @@ export interface WorldState {
   powerDown: boolean
   /** 父女共同保存的生活记录（v25 起）。 */
   memories: MemoryState
+  /** 客厅一起坐过的次数（v28 起）：只增不减，用来让客厅慢慢变暖。 */
+  lounge: LoungeState
 }
 
 export interface ExplorationState {
@@ -437,6 +444,7 @@ export function createInitialWorld(): WorldState {
     farm: freshFarm(),
     powerDown: false,
     memories: freshMemories(),
+    lounge: freshLounge(),
   }
 }
 
