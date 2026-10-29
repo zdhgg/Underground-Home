@@ -156,7 +156,7 @@ describe('伙伴工作：从真实站位到设施', () => {
 describe('伙伴动作与效果同步', () => {
   it('收菜时朝目标俯身，落手后收回；取消也恢复姿势', () => {
     const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
-    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), harvestLean: lean } }
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
     const motion = new PartnerMotion()
     const plan: WorkPlan = { worker: 'xiaoman', target: { kind: 'harvest', x: 31, y: 21 }, at: { x: 32, y: 21 }, route: [] }
     motion.work(friend, plan, hit, done)
@@ -171,7 +171,7 @@ describe('伙伴动作与效果同步', () => {
 
   it('浇水同样朝菜槽俯身而不画手臂，特效是落进槽里的水珠', () => {
     const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
-    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), harvestLean: lean } }
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
     const motion = new PartnerMotion()
     const arm = vi.spyOn(motion.effects, 'roundRect')
     const drops = vi.spyOn(motion.effects, 'circle')
@@ -183,6 +183,54 @@ describe('伙伴动作与效果同步', () => {
     expect(hit).not.toHaveBeenCalled()
     motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
     motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('接水管朝泉眼俯身，泉面冒水珠而不是凭空手臂', () => {
+    const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const drops = vi.spyOn(motion.effects, 'circle')
+    // 泉眼在 x=18：站在 19 侧要朝左（dir=-1）俯身。
+    motion.work(friend, { worker: 'xiaoquan', target: { kind: 'water' }, at: { x: 19, y: 21 }, route: [] }, hit, done)
+    motion.update(.3)
+    expect(lean).toHaveBeenLastCalledWith(expect.any(Number), -1); expect(lean.mock.lastCall![0]).toBeGreaterThan(0)
+    expect(drops).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('阿灯装壁灯升到灯位迸火花，不再画横伸的手臂', () => {
+    const hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 21.6 * 32, pose: 'idle', inEntrance: false, visual: { face: vi.fn() } }
+    friend.view.y = friend.baseY
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const sparks = vi.spyOn(motion.effects, 'circle')
+    motion.work(friend, { worker: 'adeng', target: { kind: 'lamp', x: 31 }, at: { x: 30, y: 20 }, route: [] }, hit, done)
+    motion.update(.5)
+    expect(friend.view.y).toBe(friend.baseY - 32)
+    expect(sparks).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.2); expect(done).toHaveBeenCalledTimes(1)
+    expect(friend.view.y).toBe(friend.baseY)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('给小窝装暖光灯同样只有火花没有手臂，2.4 秒才落手', () => {
+    const hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn() } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const sparks = vi.spyOn(motion.effects, 'circle')
+    motion.work(friend, { worker: 'adeng', target: { kind: 'nest-warm-lamp', podId: 1 }, at: { x: 30, y: 10 }, route: [], facing: { x: 31, y: 10 } }, hit, done)
+    motion.update(1)
+    expect(friend.view.y).toBe(friend.baseY)
+    expect(sparks).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    expect(hit).not.toHaveBeenCalled(); expect(done).not.toHaveBeenCalled()
+    motion.update(1.5); expect(hit).toHaveBeenCalledTimes(1)
     friend.view.destroy(); motion.effects.destroy()
   })
 

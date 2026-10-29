@@ -1,8 +1,11 @@
 import { Container, Graphics } from 'pixi.js'
-import { TILE_SIZE as T, type Cell } from '../core/world'
+import { LANDMARKS, TILE_SIZE as T, type Cell } from '../core/world'
 import type { WorkPlan } from '../core/partnerWork'
 
-export interface MovingPartner { view: Container; baseY: number; pose: 'idle' | 'walk' | 'climb' | 'rest'; inEntrance: boolean; visual: { face(dx: number): void; harvestLean?(amount: number, direction: number): void } | null }
+export interface MovingPartner { view: Container; baseY: number; pose: 'idle' | 'walk' | 'climb' | 'rest'; inEntrance: boolean; visual: { face(dx: number): void; lean?(amount: number, direction: number): void } | null }
+
+/** 前 .55s 俯身到位、之后 .4s 收回：收菜、浇水和接水管共用的俯身曲线。 */
+const leanCurve = (t: number): number => t < .55 ? Math.sin(Math.min(1, t / .55) * Math.PI / 2) : Math.max(0, 1 - (t - .55) / .4)
 
 /** 只负责一位伙伴的路径与短动作；规则和结算由会话回调决定。 */
 export class PartnerMotion {
@@ -21,7 +24,7 @@ export class PartnerMotion {
   }
   cancel(): void {
     const f = this.motion?.friend ?? this.action?.friend
-    if (this.action) { this.action.friend.view.y = this.action.friend.baseY; this.action.friend.visual?.harvestLean?.(0, 1) }
+    if (this.action) { this.action.friend.view.y = this.action.friend.baseY; this.action.friend.visual?.lean?.(0, 1) }
     if (f) { f.inEntrance = false; f.pose = 'idle' }
     this.motion = null; this.action = null; this.effects.clear()
   }
@@ -51,20 +54,37 @@ export class PartnerMotion {
       a.friend.view.y = a.friend.baseY - lift
       const x = a.friend.view.x, y = a.friend.view.y
       const duration = a.plan.target.kind === 'nest-warm-lamp' ? 2.4 : .95
-      const swing = a.plan.target.kind === 'nest-warm-lamp' ? (1 - Math.cos(a.time * Math.PI / .4)) / 2 : Math.sin(Math.min(1, a.time / .6) * Math.PI)
-      const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' || a.plan.target.kind === 'watering' ? 0xa2dce0 : 0xffdf9d
+      const swing = Math.sin(Math.min(1, a.time / .6) * Math.PI)
+      const g = this.effects.clear()
       const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.kind === 'nest-warm-lamp' ? (a.plan.facing?.x ?? a.plan.at.x + 1) - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
       // 收菜和浇水都用角色自身的俯身和回身，避免凭空长出一条手臂；浇水另画落进槽里的水珠。
       if ((a.plan.target.kind === 'harvest' || a.plan.target.kind === 'watering') && a.plan.worker === 'xiaoman') {
-        const lean = a.time < .55 ? Math.sin(Math.min(1, a.time / .55) * Math.PI / 2) : Math.max(0, 1 - (a.time - .55) / .4)
-        a.friend.visual?.harvestLean?.(lean, dir)
+        a.friend.visual?.lean?.(leanCurve(a.time), dir)
         if (a.plan.target.kind === 'watering') {
           const cx = (a.plan.target.x + .5) * T, top = (a.plan.target.y - .1) * T, soil = (a.plan.target.y + .6) * T
           for (let i = 0; i < 3; i++) {
             const drop = (a.time * 1.5 + i / 3) % 1
             g.circle(cx + (i - 1) * 6, top + drop * (soil - top), 1.8).fill({ color: 0x9ed7f2, alpha: .85 })
           }
+        }
+      } else if (a.plan.worker === 'xiaoquan' && a.plan.target.kind === 'water') {
+        // 接水管：朝泉眼俯身，水珠从泉面咕嘟咕嘟冒出来，不画手臂。
+        a.friend.visual?.lean?.(leanCurve(a.time), dir)
+        const sx = (LANDMARKS.spring.x + .5) * T, surface = 22 * T - 7
+        for (let i = 0; i < 3; i++) {
+          const up = (a.time * 1.1 + i / 3) % 1
+          g.circle(sx + Math.sin((up + i * .8) * Math.PI * 2) * 5, surface - up * 15, 1.8).fill({ color: 0x9ed7f2, alpha: .2 + .65 * (1 - up) })
+        }
+      } else if (a.plan.worker === 'adeng' && (a.plan.target.kind === 'lamp' || a.plan.target.kind === 'lamp-retrofit' || a.plan.target.kind === 'nest-warm-lamp')) {
+        // 装灯：阿灯升到灯位（或面向小窝）点亮它，火花在灯位迸出，不再画手臂。
+        // 壁灯挂在 target.x 列正中（explorationScene 同款算法），火花直接锚定灯位。
+        const cx = a.plan.target.kind === 'nest-warm-lamp' ? x + dir * 11 : (a.plan.target.x + .5) * T
+        for (let i = 0; i < 4; i++) {
+          const tw = (a.time * 2.2 + i * .37) % 1
+          const angle = i * Math.PI / 2 + tw * 1.3
+          const r = 2.5 + 5.5 * tw
+          g.circle(cx + Math.cos(angle) * r, y - 10 + Math.sin(angle) * r * .7, 1.4).fill({ color: i % 2 ? 0xfff3c8 : 0xffdf9d, alpha: .85 * (1 - tw) })
         }
       } else if(a.plan.worker==='lingling'){
         for(let i=0;i<3;i++)g.arc(x+dir*8,y-13,8+i*6+swing*3,dir>0?-Math.PI/3:Math.PI*2/3,dir>0?Math.PI/3:Math.PI*4/3).stroke({width:1.2,color:0xc6b9d5,alpha:.55-i*.1})
@@ -78,11 +98,12 @@ export class PartnerMotion {
         for(let i=0;i<3;i++){const a=angle+i*Math.PI*2/3;g.moveTo(cx,cy).lineTo(cx+Math.cos(a)*8,cy+Math.sin(a)*8).stroke({width:2,color:0xc5aa7c})}
         g.moveTo(x-8,y+11).lineTo(x+8,y+11).lineTo(x+8,y+5).stroke({width:3,color:0x85b8bc,alpha:.7})
       } else {
-      g.moveTo(x + dir * 7, y - 2).lineTo(x + dir * (15 + swing * 7), y - 9 - swing * 9).stroke({ width: 3, color })
-      g.roundRect(x + dir * (15 + swing * 7) - 4, y - 16 - swing * 9, 9, 10, 3).fill(color)
+      // 深层凿岩等挥镐动作：手臂和镐头与阿土的矢量画风一致，保留。
+      g.moveTo(x + dir * 7, y - 2).lineTo(x + dir * (15 + swing * 7), y - 9 - swing * 9).stroke({ width: 3, color: 0xffdf9d })
+      g.roundRect(x + dir * (15 + swing * 7) - 4, y - 16 - swing * 9, 9, 10, 3).fill(0xffdf9d)
       }
       if (!a.hit && a.time >= (a.plan.target.kind === 'nest-warm-lamp' ? duration : .55)) { a.hit = true; a.strike(); if (this.action !== a) return }
-      if (a.time >= duration) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.visual?.harvestLean?.(0, dir); a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
+      if (a.time >= duration) { this.action = null; this.effects.clear(); a.friend.view.y = a.friend.baseY; a.friend.visual?.lean?.(0, dir); a.friend.inEntrance = false; a.friend.pose = 'idle'; a.done() }
     }
   }
 }
