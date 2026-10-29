@@ -5,7 +5,7 @@ import { partnerBed, partnerById, type PartnerId } from './partners'
 import { HOME_OWNER } from './personal'
 import type { WorldState } from './world'
 
-export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale'
+export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale' | 'share-meal'
 export interface PartnerConversation {
   partnerId: PartnerId
   name: string
@@ -16,8 +16,21 @@ export interface PartnerConversation {
   action: { id: PartnerAction; label: string } | null
 }
 
+/** 照顾时刻的话：伙伴点名"心心"，孩子用现有的开饭动作回应；没有数值、不衰减、不阻塞。 */
+const CARE_LINES: Partial<Record<PartnerId, string[]>> = {
+  atu: ['心心，干了一上午活，肚子咕咕叫啦。', '仓里有新鲜菜，叫大家一起吃口热饭吧！'],
+  adeng: ['心心，饭菜的香味顺着风飘过来啦！', '小灯的肚子也在咕咕叫，一起吃一口？'],
+  xiaoman: ['心心，菜园的菜新鲜极啦！', '我一喊，大家就都到餐桌啦！'],
+  xiaoquan: ['心心，吃饭前喝一口泉水最舒服啦。', '今天的菜是哪道呀？'],
+  ayan: ['心心，凿硬岩最费力气啦。', '吃口热饭，爪子就又有劲了！'],
+  amu: ['心心，做了一上午部件，肚子在打鼓啦。', '一起去餐桌那边吧？'],
+  taitai: ['心心，菌床的新鲜菌伞也想上餐桌。', '大家围坐在一起，比什么都香。'],
+  tuantuan: ['心心，在水边待久了，肚子有点饿啦。', '吃完饭我再去修水路！'],
+  lingling: ['心心，风里都飘着饭菜香啦。', '是开饭的信号吧？'],
+}
+
 /** 根据眼前世界生成简短回应，不领取任务、不修改进度、不新增愿望待办。 */
-export function partnerConversation(world: WorldState, id: string): PartnerConversation | null {
+export function partnerConversation(world: WorldState, id: string, care = false): PartnerConversation | null {
   const partner = partnerById(id)
   if (!partner?.joins(world)) return null
   const result: PartnerConversation = {
@@ -89,6 +102,12 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
     result.lines = world.farm.waterSupplied
       ? ['水已经流到菜园啦。', '泉水边能种菜了。']
       : ['哗啦！我是小泉，这口泉水一直在等人听见。', '我能把水送回家……如果你们也给我和小满留个住处。']
+  }
+  // 照顾时刻：仓里有粮、眼前没有更急的升级或章节指引时，伙伴开口点名"心心"。
+  // 只是把现有的开饭递到孩子手边，不领任务、不改进度。
+  if (care && !result.action && world.farm.food > 0) {
+    result.lines = CARE_LINES[partner.id] ?? ['心心，肚子咕咕叫啦。', '一起吃口热饭吧！']
+    result.action = { id: 'share-meal', label: '一起吃一口' }
   }
   if(world.ventilation.completed&&id==='atu'){result.lines=['旧地脉岩壁上留着灯、水和一起建造的故事。','我们可以把九位伙伴现在的家，也添进旧故事里。'];result.action={id:'open-ruins',label:'去看看旧地脉遗迹'}}
   if(world.ruins.completed&&id==='atu'){result.upgrade=null;result.lines=world.finale.completed?['九层终章已经留进家园相册。','每位伙伴和每一层都还在，继续把家建成你喜欢的样子吧。']:['最深的岩缝里透出温柔的金色。','把大家请到一起，办一次九位伙伴的暖屋日吧。'];result.action={id:'open-finale',label:world.finale.completed?'去看看九层家园':'去迎接地心暖光'}}

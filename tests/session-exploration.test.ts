@@ -1,4 +1,5 @@
 import { warmLampWorld } from './fixtures/nestWarmLampWorld'
+import { secondLayerComplete } from './fixtures/deepWorld'
 import { completedFinale, workingFinale } from './fixtures/finaleWorld'
 import { workingRuins } from './fixtures/ruinsWorld'
 import { workingVentilation } from './fixtures/ventilationWorld'
@@ -358,6 +359,32 @@ describe('探索会话与存档集成', () => {
     expect(restoredWork.mock.calls.some(([state]) => state !== null)).toBe(false)
     harness.handlers.onTap({ x: 30, y: 21 }); expect(loaded.farm.food).toBe(food + 1)
     restored.destroy()
+  })
+
+  it('照顾节奏：伙伴隔一阵子开口点名心心，接现有的开饭；吃完重新攒', async () => {
+    const w = secondLayerComplete()
+    harness.store.load.mockResolvedValue(serialize(w))
+    const conversation = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: conversation })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(world.farm.food).toBeGreaterThan(0)
+    expect(conversation.mock.calls.some(([c]) => c?.action?.id === 'share-meal')).toBe(false)
+    // 攒够一小段"亲手做过的事"：推进任务若干步，照顾时刻就该到来，伙伴主动点名"心心"。
+    for (let n = 0; n < 20; n++) session.prepareNest()
+    expect(harness.renderer.playPartnerReaction).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('心心'))
+    // 点开说话的伙伴：照顾对话递上现有的开饭动作。
+    session.talkToPartner('xiaoman')
+    const care = conversation.mock.calls.at(-1)![0]
+    expect(care.lines.join(' ')).toContain('心心')
+    expect(care.action).toMatchObject({ id: 'share-meal', label: '一起吃一口' })
+    // 回应开饭：走既有结算（食物 -1），节奏重新攒，对话回到日常。
+    const food = world.farm.food
+    session.partnerAction()
+    expect(world.farm.food).toBe(food - 1)
+    vi.advanceTimersByTime(9500)
+    session.talkToPartner('xiaoman')
+    expect(conversation.mock.calls.at(-1)![0].action).toBeNull()
+    session.destroy()
   })
 
   it('终章与旧层互斥，后台和离页取消搬运不扣料，阿土对话与收藏定位接回九层',async()=>{

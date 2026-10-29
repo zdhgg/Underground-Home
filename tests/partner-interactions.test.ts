@@ -49,6 +49,27 @@ describe('伙伴能力与对话：不增加任务门槛', () => {
     expect(partnerConversation(world, 'atu')?.action?.id).toBe('look-at-clue')
   })
 
+  it('照顾时刻：仓里有粮时伙伴点名心心并递上开饭；仓空或另有指引时不插队', () => {
+    const world = createInitialWorld()
+    world.farm.food = 3
+    world.exploration.entered = true
+    // 照顾时刻没到：聊天一切照旧，不冒照顾话。
+    expect(partnerConversation(world, 'xiaoman')?.action).toBeNull()
+    const care = partnerConversation(world, 'xiaoman', true)
+    expect(care?.lines.join(' ')).toContain('心心')
+    expect(care?.action).toMatchObject({ id: 'share-meal', label: '一起吃一口' })
+    // 仓空了就没有照顾时刻——没有东西可吃，不许诺做不到的事。
+    world.farm.food = 0
+    expect(partnerConversation(world, 'xiaoman', true)?.action).toBeNull()
+    // 升级与线索指引优先于照顾：atu 的对话不被开饭顶掉。
+    world.farm.food = 3
+    world.progress.coreRepaired = true
+    world.exploration.clueFound = true
+    world.exploration.pickaxeUpgraded = true
+    expect(partnerConversation(world, 'atu', true)?.action?.id).toBe('look-at-clue')
+    expect(partnerConversation(world, 'atu', true)?.lines.join(' ')).not.toContain('咕咕叫')
+  })
+
   it('原v7存档不新增升级状态，基础存档读取后仍显示原工具状态', () => {
     const world = createInitialWorld()
     const payload = serialize(world)

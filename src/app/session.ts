@@ -32,7 +32,7 @@ import { BUILDING_SITES, siteAt, siteBlueprintVisible, siteById, siteBuilt } fro
 import { roomAt } from '../core/rooms'
 import { canAfford, changeMaterials, digLoot, materialText, PLANTER_COST } from '../core/materials'
 import { canPlaceShelf, placeShelf, SHELF_COST, type ShelfFailure } from '../core/storage'
-import { canPlaceNursery, isMushroomSpot, NURSERY_COST, placeNursery } from '../core/nursery'
+import { canPlaceNursery, isMushroomSpot, mushroomSpots, NURSERY_COST, placeNursery } from '../core/nursery'
 import type { Inventory } from '../core/world'
 import { bagItems, COLLECTION_SHELF, type BagItem } from '../core/bag'
 import { activateGardens } from '../core/roomConstruction'
@@ -482,8 +482,27 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const dismissNestWelcome = (): void => { if (nestWelcome) { nestWelcome = null; hooks.onNestWelcome?.(null); renderer.setNestLampPreview(null); pushHighlight() } }
   const noteNestInteraction = (): void => { nestInteraction++ }
 
+  /**
+   * 暖心照顾节奏：不进存档、不衰减、不阻塞——攒够一小段"亲手做过的事"，
+   * 伙伴就会开口点名"心心"，用现有的开饭动作回应。回应一顿饭就重新攒。
+   */
+  const CARE_EVERY = 12
+  let careClock = 0
+  let carePinged = false
+  const careDue = (): boolean => careClock >= CARE_EVERY && world.farm.food > 0
+  const careTick = (): void => {
+    careClock++
+    // 注意不能调 mealBusy()：那会把进行中的开饭演出打断，这里只读状态。
+    if (carePinged || !careDue() || mealing || traveling || currentWork || discovering || talkingPartnerId) return
+    const joinable = availablePartners(world)
+    const pick = joinable[Math.floor(Math.random() * joinable.length)]
+    if (!pick) return
+    renderer.playPartnerReaction(pick.id, `${HOME_OWNER}，我肚子有点咕咕叫啦…点点我，一起吃口热饭？`)
+    carePinged = true
+  }
+
   const pushConversation = (): void => {
-    const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId) : null
+    const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId, careDue()) : null
     if (!conversation) talkingPartnerId = null
     renderer.setConversationPartner(talkingPartnerId)
     hooks.onPartnerConversation?.(conversation)
@@ -789,6 +808,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     hooks.onMemories?.(world.memories.entries.map(entry => ({ ...entry })))
     if (!lampMode) renderer.setLampPreview(null)
 
+    careTick()
+
     pushConversation()
 
     pushHighlight()
@@ -876,7 +897,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
     if (mealBusy()) return
     if (traveling || buildMode !== 'none' || lampMode || renderer.isOverview || roomEditor?.active) return
-    const conversation = partnerConversation(world, id)
+    const conversation = partnerConversation(world, id, careDue())
     if (!conversation) return
     facilityPanel?.close()
     // 主动聊天也算打过照面，之后下楼不再自动重播相遇对话。
@@ -2010,6 +2031,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       return
     }
     mealing = true
+    careClock = 0; carePinged = false
     scheduleSave()
     if (!result.shared) {
       // 旧存档 / 还没建灶台餐桌：保留原来的吃饭方式，仍然只结算一次。
@@ -2061,6 +2083,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     if (reservoirSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((reservoirSpot.x+.5)*TILE_SIZE, (reservoirSpot.y-1)*TILE_SIZE, 'building'); return }
     const gardenSpot = id === 'garden-spores' ? SPORE_SPOT : id === 'garden-root' ? ROOT_SPOT : null
     if (gardenSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((gardenSpot.x + .5) * TILE_SIZE, (gardenSpot.y - 1) * TILE_SIZE, 'building'); return }
+    if (id === 'glow-mushroom') { const spot = mushroomSpots(world)[0] ?? { x: 20, y: 21 }; finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((spot.x + .5) * TILE_SIZE, (spot.y - 1) * TILE_SIZE, 'building'); return }
     const hallSpot = id === 'hall-mural' ? MURAL_SPOT : id === 'warm-wick' ? WARM_LIGHT_SPOT : null
     if (hallSpot) { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close(); renderer.focusOn((hallSpot.x + .5) * TILE_SIZE, (hallSpot.y - 1) * TILE_SIZE, 'building'); return }
     const deepSpot = id === 'crystal-cluster' ? CRYSTAL_SPOT : id === 'crystal-moss' ? MOSS_SPOT : id === 'old-drill' ? DRILL_SPOT : null
@@ -2339,7 +2362,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     closePartnerConversation: closeConversation,
     partnerAction: () => {
       if (!talkingPartnerId || traveling || buildMode !== 'none' || lampMode) return
-      const conversation = partnerConversation(world, talkingPartnerId)
+      // 照顾时刻的对话要按同一状态重算，"一起吃一口"才不会在点击时丢失。
+      const conversation = partnerConversation(world, talkingPartnerId, careDue())
       if (conversation?.action?.id === 'prepare-nest') prepareNest()
       else if (conversation?.action?.id === 'upgrade-pickaxe') upgradeTool()
       else if (conversation?.action?.id === 'learn-wide-lamp' && upgradePartner(world, 'adeng', WIDE_LAMP_ID)) {
@@ -2359,6 +2383,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       else if(conversation?.action?.id==='open-ventilation'){closeConversation();ventilationChapter?.show(true)}
       else if (conversation?.action?.id === 'open-reservoir') { closeConversation(); reservoirChapter?.show(true) }
       else if (conversation?.action?.id === 'open-garden') { closeConversation(); gardenChapter?.show(true) }
+      else if (conversation?.action?.id === 'share-meal') { closeConversation(); startMeal() }
       else if (conversation?.action?.id === 'look-at-clue') { closeConversation(); focusCurrentClue() }
     },
     setBuildMode: (mode) => {
