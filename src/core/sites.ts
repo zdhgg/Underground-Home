@@ -4,6 +4,7 @@ import { canAfford, changeMaterials, materialText } from './materials'
 import { canFinishRoom, finishRoom, planRoom } from './roomConstruction'
 import { checkRoomPlan, roomContains, undoRoom, type RoomChange } from './rooms'
 import { TILE, type BuiltSite, type Cell, type Inventory, type Rect, type Room, type RoomKind, type SiteKind, type WorldState } from './world'
+import { LOUNGE_SITE_ID } from './lounge'
 
 export interface BuildingSite extends Rect {
   id: string; name: string; icon: string; layer: 'home' | 'water'; kinds: readonly SiteKind[]; cost: Inventory; description: string
@@ -14,7 +15,7 @@ export const DINING_SITE_ID = 'spring-table'
 /** 第一层定用途；第二层有一个二选一洞室，右侧其余软土继续自由探索。 */
 export const BUILDING_SITES: readonly BuildingSite[] = [
   { id: 'first-nest', name: '两人小窝', icon: '🛏', layer: 'home', x: 12, y: 9, w: 3, h: 3, kinds: ['home'], cost: { stone: 3, wood: 2 }, description: '铺好两张床，今晚睡个好觉。' },
-  { id: 'home-lounge', name: '暖暖客厅', icon: '☕', layer: 'home', x: 28, y: 9, w: 5, h: 3, kinds: ['lounge'], cost: { stone: 4, wood: 2 }, description: '修好旧座椅，家里多一个休息的地方。' },
+  { id: LOUNGE_SITE_ID, name: '暖暖客厅', icon: '☕', layer: 'home', x: 28, y: 9, w: 5, h: 3, kinds: ['lounge'], cost: { stone: 4, wood: 2 }, description: '修好旧座椅，家里多一个休息的地方。' },
   { id: 'friends-nest', name: '新朋友的小窝', icon: '🛏', layer: 'home', x: 9, y: 9, w: 3, h: 3, kinds: ['home'], cost: { stone: 3, wood: 2 }, description: '给楼下遇见的新朋友留两张床。' },
   { id: 'spring-garden', name: '泉边小菜园', icon: '🌱', layer: 'water', x: 28, y: 19, w: 3, h: 3, kinds: ['garden'], cost: { stone: 2, wood: 2 }, description: '摆上两个菜槽，让小满种出新鲜蔬菜。' },
   { id: 'water-corner', name: '泉边小洞室', icon: '🌿', layer: 'water', x: 32, y: 19, w: 4, h: 3, kinds: ['garden', 'lounge'], cost: { stone: 2, wood: 2 }, description: '这里由你决定：种菜，还是放休息座椅？' },

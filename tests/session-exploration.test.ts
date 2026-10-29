@@ -1801,9 +1801,9 @@ describe('探索会话与存档集成', () => {
     const save = session.titleSave()
     expect(save.status).toBe('ready')
     if (save.status !== 'ready') throw new Error('应读到存档')
-    expect(save.summary.phase).toBe('泉水与家园')
-    expect(save.summary.missionTitle).toBe('楼下有谁在喊饿')
-    expect(save.summary.total).toBe(12)
+    expect(save.summary.phase).toBe('第一夜')
+    expect(save.summary.missionTitle).toBe('给家里留个一起坐的地方')
+    expect(save.summary.total).toBe(5)
     expect(save.savedAt).not.toBe('')
     expect(harness.renderer.playOpening).not.toHaveBeenCalled()
 

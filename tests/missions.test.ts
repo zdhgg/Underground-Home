@@ -14,9 +14,9 @@ import {
 import { LANDMARKS, TILE, createInitialWorld, tileAt } from '../src/core/world'
 
 describe('第一夜任务链', () => {
-  it('初始：0/4，当前任务是找到能源石，高亮指向能源石区域', () => {
+  it('初始：0/5，当前任务是找到能源石，高亮指向能源石区域', () => {
     const world = createInitialWorld()
-    expect(missionSummary(world)).toEqual({ done: 0, total: 4 })
+    expect(missionSummary(world)).toEqual({ done: 0, total: 5 })
     expect(currentMission(world)?.id).toBe('find-energy-stone')
     expect(currentMission(world)?.title).toBe('找到发光的能源石')
 
@@ -97,6 +97,45 @@ describe('第一夜任务链', () => {
     expect(world.progress.crystalFound).toBe(true)
   })
 
+  it('安床之后、下楼之前：主线先要一间一起坐的地方', () => {
+    const world = createInitialWorld()
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
+    for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
+    placePod(world, 12, 10)
+
+    expect(missionSummary(world)).toEqual({ done: 4, total: 5 })
+    expect(currentMission(world)?.id).toBe('build-lounge')
+    const lounge = guideHighlight(world)
+    expect(lounge.kind).toBe('build')
+    if (lounge.kind !== 'none') expect(lounge.rect).toMatchObject({ x: 28, y: 9, w: 5, h: 3 })
+
+    // 建好客厅，主线才交给"楼下有谁在喊饿"
+    world.rooms.push({ id: 1, kind: 'lounge', x: 28, y: 9, w: 5, h: 3, managed: true })
+    expect(missionSummary(world)).toEqual({ done: 5, total: 5 })
+    expect(currentMission(world)).toBeNull()
+    expect(guideHighlight(world).kind).toBe('dig')
+  })
+
+  it('客厅不限定选址：自己挖出来的客厅也算数', () => {
+    const world = createInitialWorld()
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
+    for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
+    placePod(world, 12, 10)
+    for (let y = 9; y <= 11; y++) for (let x = 4; x <= 8; x++) dig(world, x, y)
+    world.rooms.push({ id: 2, kind: 'lounge', x: 4, y: 9, w: 5, h: 3, managed: true })
+    expect(missionSummary(world)).toEqual({ done: 5, total: 5 })
+  })
+
+  it('已经下到第二层的旧档不补课：不会突然被要求回头建客厅', () => {
+    const world = createInitialWorld()
+    world.progress = { crystalFound: true, crystalCollected: true, secondCrystalFound: true, secondCrystalCollected: true, coreLoaded: true, coreRepaired: true }
+    for (let y = 10; y <= 11; y++) for (let x = 12; x <= 14; x++) dig(world, x, y)
+    placePod(world, 12, 10)
+    world.exploration.entered = true
+    expect(currentMission(world)).toBeNull()
+    expect(missionSummary(world)).toEqual({ done: 5, total: 5 })
+  })
+
   it('找到水之后先引水，再回暖窝层给新朋友安床', () => {
     const world = reachedSpringWorld()
     // 还没引水：高亮留泉水那一格，提示先把水接回家
@@ -116,7 +155,7 @@ describe('第一夜任务链', () => {
       expect(mission.todo.length).toBeGreaterThan(0)
       expect(mission.outcome.length).toBeGreaterThan(0)
     }
-    expect(getMissionProgress(createInitialWorld())).toHaveLength(4)
+    expect(getMissionProgress(createInitialWorld())).toHaveLength(5)
   })
 })
 

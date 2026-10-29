@@ -71,12 +71,12 @@ describe('存档序列化与校验', () => {
     dig(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     collectCrystal(world, LANDMARKS.secondCrystal.x, LANDMARKS.secondCrystal.y)
     repairCore(world, LANDMARKS.generator.x, LANDMARKS.generator.y)
-    expect(missionSummary(world)).toEqual({ done: 3, total: 4 })
+    expect(missionSummary(world)).toEqual({ done: 3, total: 5 })
 
     const result = deserialize(JSON.parse(JSON.stringify(serialize(world))))
     expect(result.ok).toBe(true)
     if (result.ok) {
-      expect(missionSummary(result.world)).toEqual({ done: 3, total: 4 })
+      expect(missionSummary(result.world)).toEqual({ done: 3, total: 5 })
       expect(result.world.progress.coreRepaired).toBe(true)
     }
   })

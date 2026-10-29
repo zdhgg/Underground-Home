@@ -19,6 +19,11 @@ function readyWorld(podX = 12): WorldState {
   for (let x = 26; x <= 27; x++) { dig(w, x, 11); dig(w, x, 10) }
   return w
 }
+/** 客厅是下楼之前的主要目标：先把它建起来，再检查裂纹引导。 */
+function addLounge(w: WorldState): void {
+  for (let y = 9; y <= 11; y++) for (let x = 28; x <= 32; x++) if (w.tiles[y][x] === TILE.SOIL) dig(w, x, y)
+  w.rooms.push({ id: 99, kind: 'lounge', x: 28, y: 9, w: 5, h: 3, managed: true })
+}
 function openShaft(w: WorldState, x = 27): void {
   expect(inspectCrack(w, x, 12)).toBe(true)
   expect(upgradePickaxe(w)).toBe(true)
@@ -65,6 +70,7 @@ describe('首次突破岩层闭环', () => {
   })
   it('旧舱虽不压住裂纹但挡住右翼地面时，引导仍选择可达的左侧', () => {
     const w = readyWorld(24)
+    addLounge(w)
     expect(guideHighlight(w)).toMatchObject({ rect: { x: 16 } })
     expect(inspectCrack(w, 27, 12)).toBe(false)
     expect(inspectCrack(w, 16, 12)).toBe(true)

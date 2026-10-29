@@ -3,6 +3,7 @@ import { shaftConnected, springVisible, suggestedBreakthrough, waterSpan } from 
 import { waitingPartnerList, PARTNERS_AFTER_SPRING } from './partners'
 import { DINING_SITE_ID, KITCHEN_SITE_ID } from './meal'
 import { siteById } from './sites'
+import { LOUNGE_SITE_ID, loungeTaskDone } from './lounge'
 import { HOME_OWNER, HOME_TITLE } from './personal'
 
 /**
@@ -24,7 +25,7 @@ export interface Mission {
   isDone: (world: WorldState) => boolean
 }
 
-/** 第一夜当前主线：找到能源石 → 收好它 → 修好核心 → 安置睡眠舱 */
+/** 第一夜当前主线：找能源石 → 收好它们 → 修好核心 → 安床 → 客厅 */
 export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
   {
     id: 'find-energy-stone',
@@ -57,6 +58,14 @@ export const FIRST_NIGHT_MISSIONS: readonly Mission[] = [
     todo: '挖出左边的暖窝空间，蓝图出现后点“开工”。',
     outcome: '阿土和阿灯住下来，地下才真正像一个家。',
     isDone: (world) => world.pods.length > 0,
+  },
+  {
+    id: 'build-lounge',
+    title: '给家里留个一起坐的地方',
+    speech: '床安好啦！可是醒来以后，家里还没有一处能一起坐坐的地方。右边那个洞口再往里挖一挖，挖出一间小屋，摆上长椅和小茶桌吧。',
+    todo: '挖开右边的客厅空间，蓝图出现后点“开工”。',
+    outcome: '有了长椅和茶桌，伙伴们就有歇脚的地方，第一层才真正像个家。',
+    isDone: (world) => loungeTaskDone(world),
   },
 ]
 
@@ -103,6 +112,8 @@ export function guideHighlight(world: WorldState): GuideHighlight {
   if (!world.progress.secondCrystalCollected) return { kind: 'collect', rect: LANDMARKS.secondCrystalZone }
   if (!coreRepaired) return { kind: 'repair', rect: LANDMARKS.generatorZone }
   if (world.pods.length) {
+    // 安床之后、下楼之前：先给家里留一处一起坐的地方。
+    if (!loungeTaskDone(world)) return { kind: 'build', rect: siteById(LOUNGE_SITE_ID)! }
     const e = world.exploration
     const x = e.shaftX ?? suggestedBreakthrough(world)
     if (!e.clueFound) return { kind: 'dig', rect: { x, y: 11, w: 1, h: 2 } }

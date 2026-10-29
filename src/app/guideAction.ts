@@ -1,6 +1,7 @@
 import { currentMission, explorationGuide, FIRST_NIGHT_MISSIONS, missionSummary } from '../core/missions'
 import { siteBlueprintVisible, siteById, siteBuilt } from '../core/sites'
 import { DINING_SITE_ID, KITCHEN_SITE_ID } from '../core/meal'
+import { LOUNGE_SITE_ID } from '../core/lounge'
 import { deepGoal, deepReady } from '../core/deep'
 import { hallGoal, hallReady } from '../core/hall'
 import { gardenGoal, gardenReady } from '../core/garden'
@@ -19,6 +20,13 @@ export interface GuideAction {
 /** 前两层保留原有直接操作；蓝图尚未出现时只带路，不替玩家挖土。 */
 function earlyGuideAction(world: WorldState): GuideAction {
   const mission = currentMission(world)
+  if (mission?.id === 'build-lounge') {
+    const site = siteById(LOUNGE_SITE_ID)!
+    return {
+      id: 'site', siteId: LOUNGE_SITE_ID,
+      label: siteBlueprintVisible(world, site) ? `修建${site.name}` : '看看要挖的客厅空间',
+    }
+  }
   if (mission && mission.id !== 'build-sleep-pod') return {
     id: 'focus', label: mission.id === 'repair-energy-core' ? '找到能源核心' : '看看能源石',
   }
@@ -61,14 +69,16 @@ export function resolveGlobalGuide(world: WorldState, resting = true): GlobalGui
   const mission = currentMission(world), summary = missionSummary(world)
   const pendingRest = mission !== null && world.pods.length > 0 && !resting
   if (mission || pendingRest) {
-    const current = pendingRest ? FIRST_NIGHT_MISSIONS[FIRST_NIGHT_MISSIONS.length - 1] : mission!
+    // 刚安好床的那一句永远是"小床安好啦"，不会因为后面多了客厅就改口。
+    const podMission = FIRST_NIGHT_MISSIONS.find(item => item.id === 'build-sleep-pod')!
+    const current = pendingRest ? podMission : mission!
     return { title: current.title, outcome: current.outcome, layer: '第 1 层 · 暖窝', speech: pendingRest ? '小床安好啦！伙伴有住处，也能来帮忙。' : current.speech,
       done: pendingRest ? Math.max(0, summary.done - 1) : summary.done, total: summary.total, finished: false, action: earlyGuideAction(world) }
   }
   const exploration = explorationGuide(world)
   if (!exploration.finished) {
     const action = earlyGuideAction(world)
-    const atHome = action.id === 'pickaxe' || action.id === 'power' || (action.id === 'site' && ['first-nest', 'friends-nest'].includes(action.siteId ?? ''))
+    const atHome = action.id === 'pickaxe' || action.id === 'power' || (action.id === 'site' && ['first-nest', 'friends-nest', LOUNGE_SITE_ID].includes(action.siteId ?? ''))
       || (!world.exploration.entered && action.id === 'focus')
     return { ...exploration, layer: atHome ? '第 1 层 · 暖窝' : '第 2 层 · 泉水', action }
   }
