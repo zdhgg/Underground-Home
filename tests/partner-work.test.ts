@@ -169,6 +169,23 @@ describe('伙伴动作与效果同步', () => {
     friend.view.destroy(); motion.effects.destroy()
   })
 
+  it('浇水同样朝菜槽俯身而不画手臂，特效是落进槽里的水珠', () => {
+    const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), harvestLean: lean } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const drops = vi.spyOn(motion.effects, 'circle')
+    const plan: WorkPlan = { worker: 'xiaoman', target: { kind: 'watering', x: 31, y: 21 }, at: { x: 32, y: 21 }, route: [] }
+    motion.work(friend, plan, hit, done)
+    motion.update(.3)
+    expect(lean).toHaveBeenLastCalledWith(expect.any(Number), -1); expect(lean.mock.lastCall![0]).toBeGreaterThan(0)
+    expect(drops).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    expect(hit).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
   it('设施菜槽的绘制与反馈使用同一偏移，独立菜槽保持原位', () => {
     const w = createInitialWorld()
     w.builtSites.push({ id: 'spring-garden', kind: 'garden' })

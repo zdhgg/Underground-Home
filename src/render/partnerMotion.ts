@@ -55,10 +55,17 @@ export class PartnerMotion {
       const g = this.effects.clear(), color = a.plan.target.kind === 'harvest' ? 0xb7d59a : a.plan.target.kind === 'water' || a.plan.target.kind === 'watering' ? 0xa2dce0 : 0xffdf9d
       const dx = a.plan.target.kind === 'water' ? 18 - a.plan.at.x : a.plan.target.kind === 'nest-warm-lamp' ? (a.plan.facing?.x ?? a.plan.at.x + 1) - a.plan.at.x : a.plan.target.x - a.plan.at.x
       const dir = Math.sign(dx) || 1
-      // 收菜用角色自身的俯身和回身，避免凭空长出一根绿色手臂。
-      if (a.plan.target.kind === 'harvest' && a.plan.worker === 'xiaoman') {
+      // 收菜和浇水都用角色自身的俯身和回身，避免凭空长出一条手臂；浇水另画落进槽里的水珠。
+      if ((a.plan.target.kind === 'harvest' || a.plan.target.kind === 'watering') && a.plan.worker === 'xiaoman') {
         const lean = a.time < .55 ? Math.sin(Math.min(1, a.time / .55) * Math.PI / 2) : Math.max(0, 1 - (a.time - .55) / .4)
         a.friend.visual?.harvestLean?.(lean, dir)
+        if (a.plan.target.kind === 'watering') {
+          const cx = (a.plan.target.x + .5) * T, top = (a.plan.target.y - .1) * T, soil = (a.plan.target.y + .6) * T
+          for (let i = 0; i < 3; i++) {
+            const drop = (a.time * 1.5 + i / 3) % 1
+            g.circle(cx + (i - 1) * 6, top + drop * (soil - top), 1.8).fill({ color: 0x9ed7f2, alpha: .85 })
+          }
+        }
       } else if(a.plan.worker==='lingling'){
         for(let i=0;i<3;i++)g.arc(x+dir*8,y-13,8+i*6+swing*3,dir>0?-Math.PI/3:Math.PI*2/3,dir>0?Math.PI/3:Math.PI*4/3).stroke({width:1.2,color:0xc6b9d5,alpha:.55-i*.1})
       } else if (a.plan.worker === 'taitai') {
