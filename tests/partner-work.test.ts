@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Container, Graphics } from 'pixi.js'
 import { createInitialWorld, TILE, WORLD_VERSION, type Cell, type WorkerId } from '../src/core/world'
-import { initializeWorkers, planPartnerWork, type WorkPlan } from '../src/core/partnerWork'
+import { initializeWorkers, planPartnerWork, takeRest, wakeResting, type WorkPlan } from '../src/core/partnerWork'
 import { PartnerOrders, type WorkUI } from '../src/app/partnerOrders'
 import { PartnerMotion, type MovingPartner } from '../src/render/partnerMotion'
 import { canPlacePod, canRestoreDig, placePod } from '../src/core/build'
@@ -150,6 +150,32 @@ describe('伙伴工作：从真实站位到设施', () => {
       const raw = structuredClone(save); raw.world.workers = positions
       expect(deserialize(raw).ok).toBe(false)
     }
+  })
+
+  it('照顾睡觉：回窝后没有站位且推进进度也不占位，派活自动叫醒；v29 存档往返', () => {
+    const w = ready()
+    // 没有床位的伙伴不能睡；有床的阿灯回窝后退出站位。
+    expect(takeRest(w, 'xiaoman')).toBe(false)
+    expect(takeRest(w, 'adeng')).toBe(true)
+    expect(w.resting).toEqual(['adeng']); expect(w.workers.adeng).toBeUndefined()
+    initializeWorkers(w)
+    expect(w.workers.adeng).toBeUndefined()
+    // 派活自动叫醒：adeng 负责壁灯，站位由 initializeWorkers 重新安排。
+    const plan = planPartnerWork(w, { kind: 'lamp', x: 31 })
+    expect(plan.ok).toBe(true)
+    expect(w.resting).toEqual([]); expect(w.workers.adeng).toBeDefined()
+    // 直接叫醒也恢复站位。
+    takeRest(w, 'adeng'); expect(wakeResting(w, 'adeng')).toBe(true)
+    expect(w.workers.adeng).toBeDefined()
+    // v29 存档往返保留睡觉名单；v28 旧档没有该字段按没人睡觉处理。
+    const back = deserialize(serialize(w))
+    expect(back.ok && back.world.resting).toEqual([])
+    takeRest(w, 'adeng')
+    const saved = deserialize(serialize(w))
+    expect(saved.ok && saved.world.resting).toEqual(['adeng'])
+    const legacy = serialize(w); legacy.version = 28; delete (legacy.world as { resting?: unknown }).resting
+    const old = deserialize(legacy)
+    expect(old.ok && old.world.resting).toEqual([])
   })
 })
 

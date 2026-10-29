@@ -363,6 +363,9 @@ describe('探索会话与存档集成', () => {
 
   it('照顾节奏：伙伴隔一阵子开口点名心心，接现有的开饭；吃完重新攒', async () => {
     const w = secondLayerComplete()
+    // 第二间舱让小满有床：困了的照顾时刻才有"回小窝睡一觉"可回应。
+    for (const x of [9, 10, 11]) for (const y of [9, 10, 11]) if (w.tiles[y]?.[x] === TILE.SOIL) w.tiles[y][x] = TILE.EMPTY
+    expect(placePod(w, 9, 10)).not.toBeNull()
     harness.store.load.mockResolvedValue(serialize(w))
     const conversation = vi.fn()
     const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: conversation })
@@ -384,6 +387,19 @@ describe('探索会话与存档集成', () => {
     vi.advanceTimersByTime(9500)
     session.talkToPartner('xiaoman')
     expect(conversation.mock.calls.at(-1)![0].action).toBeNull()
+    // 第二轮轮到"困了"：伙伴想回小窝，回应后真的睡进床位（退出站位）。
+    for (let n = 0; n < 20; n++) session.prepareNest()
+    session.talkToPartner('xiaoman')
+    const sleepy = conversation.mock.calls.at(-1)![0]
+    expect(sleepy.lines.join(' ')).toContain('困')
+    expect(sleepy.action).toMatchObject({ id: 'take-rest', label: '回小窝睡一觉' })
+    session.partnerAction()
+    expect(world.resting).toEqual(['xiaoman'])
+    expect(world.workers.xiaoman).toBeUndefined()
+    expect(harness.renderer.refreshFriends).toHaveBeenCalled()
+    // 开饭会把睡觉的伙伴都叫醒。
+    session.feed()
+    expect(world.resting).toEqual([])
     session.destroy()
   })
 

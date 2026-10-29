@@ -37,7 +37,7 @@ import type { Inventory } from '../core/world'
 import { bagItems, COLLECTION_SHELF, type BagItem } from '../core/bag'
 import { activateGardens } from '../core/roomConstruction'
 import { PartnerOrders, type WorkUI } from './partnerOrders'
-import { initializeWorkers, type WorkPlan, type WorkTarget } from '../core/partnerWork'
+import { initializeWorkers, takeRest, type WorkPlan, type WorkTarget } from '../core/partnerWork'
 import { atuRoute, initialAtuPosition, routeBeforePod } from '../core/atu'
 import { createWorldHistory } from '../core/history'
 import { canPlacePod, placePod, podAnchorFromPointer, podRect, type BuildFailure } from '../core/build'
@@ -53,7 +53,7 @@ import { availablePartners, canBuildMorePods, partnerBed, waitingPartnerList, wa
 import { SMALL_PICKAXE_ID, upgradePartner } from '../core/partnerAbilities'
 import { wideLampUpgrade } from '../core/partnerAbilities'
 import { canRetrofitLamp, hasWideLampAbility, retrofitLamp, WIDE_LAMP_ID } from '../core/lighting'
-import { partnerConversation, type PartnerConversation } from '../core/partnerInteractions'
+import { partnerConversation, type CareKind, type PartnerConversation } from '../core/partnerInteractions'
 import { canSendPowerDown, sendPowerDown } from '../core/power'
 import { isRelicFound, relicAt, relicSummary, RELICS } from '../core/relics'
 import {
@@ -483,26 +483,46 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   const noteNestInteraction = (): void => { nestInteraction++ }
 
   /**
-   * 暖心照顾节奏：不进存档、不衰减、不阻塞——攒够一小段"亲手做过的事"，
-   * 伙伴就会开口点名"心心"，用现有的开饭动作回应。回应一顿饭就重新攒。
+   * 暖心照顾节奏：不进存档数值、不衰减、不阻塞——"亲手做的事"攒够 12 次，
+   * 或安安静静玩上约 150 秒（时间由渲染帧累计），伙伴就会开口点名"心心"。
+   * 饿了讨饭、困了回窝，两种时刻轮着来；回应一次就重新攒。
    */
   const CARE_EVERY = 12
+  const CARE_SECONDS = 150
   let careClock = 0
+  let careSeconds = 0
   let carePinged = false
-  const careDue = (): boolean => careClock >= CARE_EVERY && world.farm.food > 0
-  const careTick = (): void => {
-    careClock++
+  let nextCareKind: CareKind = 'hungry'
+  const careDue = (): boolean => careClock >= CARE_EVERY || careSeconds >= CARE_SECONDS
+  const careQuiet = (): boolean => !mealing && !traveling && !currentWork && !discovering && !talkingPartnerId
+  const careKind = (): CareKind | false => {
+    if (!careDue()) return false
+    const sleepyOk = availablePartners(world).some(p => p.id !== 'atu' && partnerBed(world, p.id) && !world.resting.includes(p.id))
+    if (nextCareKind === 'hungry' && world.farm.food > 0) return 'hungry'
+    if (nextCareKind === 'sleepy' && sleepyOk) return 'sleepy'
+    if (world.farm.food > 0) return 'hungry'
+    return sleepyOk ? 'sleepy' : false
+  }
+  const resetCare = (): void => { careClock = 0; careSeconds = 0; carePinged = false; nextCareKind = nextCareKind === 'hungry' ? 'sleepy' : 'hungry' }
+  const carePing = (): void => {
     // 注意不能调 mealBusy()：那会把进行中的开饭演出打断，这里只读状态。
-    if (carePinged || !careDue() || mealing || traveling || currentWork || discovering || talkingPartnerId) return
-    const joinable = availablePartners(world)
-    const pick = joinable[Math.floor(Math.random() * joinable.length)]
+    const kind = careKind()
+    if (carePinged || !kind || !careQuiet()) return
+    const pool = availablePartners(world).filter(p => kind === 'sleepy'
+      ? p.id !== 'atu' && partnerBed(world, p.id) && !world.resting.includes(p.id as WorkerId)
+      : !world.resting.includes(p.id as WorkerId))
+    const pick = pool[Math.floor(Math.random() * pool.length)]
     if (!pick) return
-    renderer.playPartnerReaction(pick.id, `${HOME_OWNER}，我肚子有点咕咕叫啦…点点我，一起吃口热饭？`)
+    renderer.playPartnerReaction(pick.id, kind === 'hungry'
+      ? `${HOME_OWNER}，我肚子有点咕咕叫啦…点点我，一起吃口热饭？`
+      : `${HOME_OWNER}，我有点困啦……想回小窝眯一会儿。`)
     carePinged = true
   }
+  const careTick = (): void => { careClock++; carePing() }
+  renderer.onTick = dt => { careSeconds += dt; carePing() }
 
   const pushConversation = (): void => {
-    const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId, careDue()) : null
+    const conversation = talkingPartnerId ? partnerConversation(world, talkingPartnerId, careKind()) : null
     if (!conversation) talkingPartnerId = null
     renderer.setConversationPartner(talkingPartnerId)
     hooks.onPartnerConversation?.(conversation)
@@ -897,7 +917,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
     if (mealBusy()) return
     if (traveling || buildMode !== 'none' || lampMode || renderer.isOverview || roomEditor?.active) return
-    const conversation = partnerConversation(world, id, careDue())
+    const conversation = partnerConversation(world, id, careKind())
     if (!conversation) return
     facilityPanel?.close()
     // 主动聊天也算打过照面，之后下楼不再自动重播相遇对话。
@@ -2025,13 +2045,15 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   /** 开饭：引导按钮、抽屉按钮与设施面板共用这一条唯一结算路径（serveMeal）。 */
   const startMeal = (): void => {
     if (mealing || traveling) return
+    // 开饭叫醒所有在小窝睡觉的伙伴：围坐要人齐，睡饱了再继续玩。
+    if (world.resting.length) { world.resting = []; initializeWorkers(world); renderer.refreshFriends() }
     const result = serveMeal(world)
     if (!result.ok) {
       notify(result.reason === 'no-food' ? '🍽 先收点菜再开饭。' : '🛏 先给伙伴安好小床，再请大家吃饭。')
       return
     }
     mealing = true
-    careClock = 0; carePinged = false
+    resetCare()
     scheduleSave()
     if (!result.shared) {
       // 旧存档 / 还没建灶台餐桌：保留原来的吃饭方式，仍然只结算一次。
@@ -2362,8 +2384,8 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     closePartnerConversation: closeConversation,
     partnerAction: () => {
       if (!talkingPartnerId || traveling || buildMode !== 'none' || lampMode) return
-      // 照顾时刻的对话要按同一状态重算，"一起吃一口"才不会在点击时丢失。
-      const conversation = partnerConversation(world, talkingPartnerId, careDue())
+      // 照顾时刻的对话要按同一状态重算，"一起吃一口"/"回小窝睡一觉"才不会在点击时丢失。
+      const conversation = partnerConversation(world, talkingPartnerId, careKind())
       if (conversation?.action?.id === 'prepare-nest') prepareNest()
       else if (conversation?.action?.id === 'upgrade-pickaxe') upgradeTool()
       else if (conversation?.action?.id === 'learn-wide-lamp' && upgradePartner(world, 'adeng', WIDE_LAMP_ID)) {
@@ -2384,6 +2406,16 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       else if (conversation?.action?.id === 'open-reservoir') { closeConversation(); reservoirChapter?.show(true) }
       else if (conversation?.action?.id === 'open-garden') { closeConversation(); gardenChapter?.show(true) }
       else if (conversation?.action?.id === 'share-meal') { closeConversation(); startMeal() }
+      else if (conversation?.action?.id === 'take-rest' && talkingPartnerId && talkingPartnerId !== 'atu' && takeRest(world, talkingPartnerId)) {
+        const nappingId = talkingPartnerId
+        closeConversation()
+        renderer.refreshFriends()
+        const bed = partnerBed(world, nappingId)
+        if (bed) renderer.focusOn((bed.pod.x + 1.5) * TILE_SIZE, (bed.pod.y + 1) * TILE_SIZE)
+        renderer.playPartnerReaction(nappingId, '呼……小窝真舒服。心心，你也别太累呀。')
+        resetCare()
+        scheduleSave()
+      }
       else if (conversation?.action?.id === 'look-at-clue') { closeConversation(); focusCurrentClue() }
     },
     setBuildMode: (mode) => {

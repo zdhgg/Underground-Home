@@ -28,7 +28,7 @@ export const TILE_SIZE = 32
 export const SURFACE_Y = 4
 
 /** 世界结构版本号，结构变化时递增（存档会校验并迁移） */
-export const WORLD_VERSION = 28
+export const WORLD_VERSION = 29
 
 /** 同一张剖面上的空间分带；两层通过有限的裂纹岩梯道连接。 */
 export const STRATA = {
@@ -322,6 +322,8 @@ export interface WorldState {
   nurseries: Nursery[]
   /** 专业伙伴最近到达的安全站位；不保存半段动画或待执行工作。 */
   workers: WorkerPositions
+  /** 正在小窝里睡觉的伙伴（v29 起）：睡觉时没有站位，派活或开饭会叫醒。 */
+  resting: WorkerId[]
   /** 已学会的专业能力升级ID；设施配置单独保存在灯上。 */
   partnerUpgrades: string[]
   exploration: ExplorationState
@@ -439,6 +441,7 @@ export function createInitialWorld(): WorldState {
     shelves: [],
     nurseries: [],
     workers: {},
+    resting: [],
     partnerUpgrades: [],
     exploration: freshExploration(),
     farm: freshFarm(),

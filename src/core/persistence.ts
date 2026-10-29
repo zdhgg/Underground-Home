@@ -18,6 +18,7 @@ import {
   type ExplorationState,
   type Room,
   type WorkerPositions,
+  type WorkerId,
   type Shelf,
   type Nursery,
   createInitialWorld,
@@ -98,6 +99,8 @@ export interface SavePayload {
     /** 第二层的育苗架（v16 起） */
     nurseries: Nursery[]
     workers: WorkerPositions
+    /** 正在小窝睡觉的伙伴（v29 起）；旧档没有这个字段 */
+    resting?: string[]
     partnerUpgrades: string[]
     exploration: ExplorationState
     /** 引水与种植（v6 起） */
@@ -136,6 +139,7 @@ export function serialize(world: WorldState): SavePayload {
       shelves: world.shelves.map((shelf) => ({ ...shelf })),
       nurseries: world.nurseries.map((nursery) => ({ ...nursery })),
       workers: structuredClone(world.workers),
+      resting: [...world.resting],
       partnerUpgrades: [...world.partnerUpgrades],
       exploration: structuredClone(world.exploration),
       farm: { ...world.farm, planters: world.farm.planters.map((planter) => ({ ...planter })) },
@@ -276,7 +280,7 @@ export function deserialize(raw: unknown): LoadResult {
         version: WORLD_VERSION,
         progress: { crystalFound: found, crystalCollected: false, secondCrystalFound: false, secondCrystalCollected: false, coreLoaded: false, coreRepaired: false },
         pods: [],
-        rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
+        rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, resting: [], partnerUpgrades: [],
         exploration: freshExploration(),
         farm: freshFarm(),
         powerDown: false,
@@ -286,7 +290,7 @@ export function deserialize(raw: unknown): LoadResult {
     }
   }
   const version = payload.version
-  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== 26 && version !== 27 && version !== WORLD_VERSION) {
+  if (version !== 2 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8 && version !== 9 && version !== 10 && version !== 11 && version !== 12 && version !== 13 && version !== 14 && version !== 15 && version !== 16 && version !== 17 && version !== 18 && version !== 19 && version !== 20 && version !== 21 && version !== 22 && version !== 23 && version !== 24 && version !== 25 && version !== 26 && version !== 27 && version !== 28 && version !== WORLD_VERSION) {
     return err(`存档版本不匹配（存档 v${version}，当前 v${WORLD_VERSION}）`)
   }
 
@@ -296,9 +300,14 @@ export function deserialize(raw: unknown): LoadResult {
 
   const world: WorldState = {
     finale:freshFinale(), ruins:freshRuins(), ventilation: freshVentilation(), reservoir: freshReservoir(), garden: freshGarden(), hall: freshHall(), deep: freshDeep(),
-    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, partnerUpgrades: [],
+    ...base.data, version: WORLD_VERSION, progress, pods: [], rooms: [], nextRoomId: 1, shelves: [], nurseries: [], workers: {}, resting: [], partnerUpgrades: [],
     inventory: freshInventory(), builtSites: [],
     exploration: freshExploration(), farm: freshFarm(), powerDown: false, memories: freshMemories(), lounge: freshLounge(),
+  }
+  if (version >= 29) {
+    // 睡觉的伙伴只认真实伙伴ID（阿土随行不参与）；脏数据按没人睡觉处理，不影响其余加载。
+    const rawResting = (payload.world as { resting?: unknown }).resting
+    if (Array.isArray(rawResting)) world.resting = [...new Set(rawResting.filter((id): id is WorkerId => typeof id === 'string' && id !== 'atu' && partnerById(id) !== null))]
   }
   const rawFinale=(payload.world as {finale?:FinaleState}).finale
   if(version>=23)world.finale={...freshFinale(),braced:rawFinale?.braced===true,entered:rawFinale?.entered===true}

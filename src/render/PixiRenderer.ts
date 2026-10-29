@@ -494,6 +494,8 @@ export class PixiWorldRenderer {
   onViewChanged?: (view: DepthView) => void
   onPartnerReveal?: (phase: 'appearing' | 'ready') => void
   onConversationAnchor?: (anchor: ConversationAnchor | null) => void
+  /** 每帧回调（dt 单位秒）：会话层用它累计照顾节奏的安静时长。 */
+  onTick: (dt: number) => void = () => {}
   private conversationPartner: PartnerId | null = null
   private overview = false
   get isOverview(): boolean { return this.overview }
@@ -1567,6 +1569,7 @@ export class PixiWorldRenderer {
 
   private readonly tick = (ticker: Ticker): void => {
     const dt = Math.min(0.1, ticker.deltaMS / 1000)
+    this.onTick(dt)
     this.elapsed += dt
     for (const pod of this.world?.pods ?? []) {
       const lamp = this.podLayer.getChildByLabel(`pod-${pod.id}`)?.getChildByLabel('nest-warm-lamp')
