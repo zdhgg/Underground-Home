@@ -1,6 +1,6 @@
 # v1.3.0 发布准备报告
 
-日期：2026-11-02。状态：**发布候选已就绪，待 PR 合并后打标发布。**
+日期：2026-11-02。状态：**v1.3.0 已正式发布。**
 
 ## 集成
 
@@ -32,4 +32,14 @@
 
 ## 正式发布记录
 
-- 发布日期、发布准备 PR、最终发布提交、标签、GitHub Release、发布包 SHA-256：**待发布完成后补记。**
+- 发布日期：**2026-11-02**。
+- 发布准备 PR：[#6 release: prepare Underground Home v1.3.0](https://github.com/zdhgg/Underground-Home/pull/6)（Create a merge commit）。
+- 最终发布提交（main）：`debf94676fd754a544f871c8fee566d174641892`。
+- 标签：`v1.3.0` → `debf94676fd754a544f871c8fee566d174641892`（Annotated Tag）。
+- GitHub Release：[心心的小家园 v1.3.0｜让家里有等你回来的人，让每一步都知道自己在哪](https://github.com/zdhgg/Underground-Home/releases/tag/v1.3.0)。
+- 发布包：`Underground-Home-v1.3.0-web.zip`，97,515,520 字节，84 个文件；SHA-256：`842b5fe4ab76fd9a06b5c813d7a640fad8922f8f106dcc96d3b5416ebd507cd5`。
+- 注：本次推送与 Release 操作经本机代理 `127.0.0.1:7897` 完成（直连 github.com:443 不通，api.github.com 直连可达）。
+
+## 结论
+
+v1.3.0 已正式发布成功。main 包含 v1.2.0 之后的全部功能与正式版本信息；标签、Release、ZIP 与 SHA-256 均指向最终发布提交。
