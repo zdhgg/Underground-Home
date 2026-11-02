@@ -21,7 +21,7 @@ export interface CharacterVisual {
   readonly view: Container
   readonly nameY?: number
   face(deltaX: number): void
-  harvestLean?(amount: number, direction: number): void
+  lean?(amount: number, direction: number): void
   update(time: number, pose: MolePose, light?: number, hidden?: boolean): void
 }
 
@@ -102,9 +102,8 @@ export class CompanionVisual implements CharacterVisual {
     if (Math.abs(deltaX) > 0.01) this.facing = deltaX < 0 ? -1 : 1
   }
 
-  /** 以脚边为支点轻轻俯身；每帧基础姿势先由 update 重置。 */
-  harvestLean(amount: number, direction: number): void {
-    if (this.id !== 'xiaoman') return
+  /** 以脚边为支点轻轻俯身；每帧基础姿势先由 update 重置。收菜、浇水、接水管共用。 */
+  lean(amount: number, direction: number): void {
     this.figure.position.x = direction * amount * 2
     this.figure.rotation = direction * amount * .16
   }

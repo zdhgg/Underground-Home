@@ -18,6 +18,7 @@ function setup(w = reservoirAvailable()) {
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
     playReservoirFlow: vi.fn(), stopReservoirFlow: vi.fn(), playHallWork: vi.fn((_at: Cell, done: () => void) => done()),
+    playAtuWork: vi.fn((_at: Cell, done: () => void) => done()),
   }
   const chapter = new ReservoirChapter({ world: () => w, view: view as unknown as PixiWorldRenderer, emit: value => { state = value }, prepare: vi.fn(),
     changed: () => { initializeWorkers(w); saves.push(serialize(w)) }, record: change => history.record({ kind: 'reservoir', change }), dig: p => history.record({ kind: 'dig', ...p, tile: TILE.ROCK }), notify, milestone,
@@ -47,7 +48,7 @@ describe('第六层真实水工会话',()=>{
     c.primary();c.primary();expect(w.reservoir.valve).toBe('hall')
     c.primary();expect(w.reservoir.hallDeliveries).toBe(1)
     c.primary();expect(w.reservoir.completed).toBe(true);expect(h.state()).toMatchObject({celebrating:true,busy:false,done:18})
-    expect(w.exploration.explorer).toEqual({x:10,y:70});expect(w.workers.tuantuan).toEqual({x:11,y:70});expect(w.workers.xiaoquan).toEqual({x:12,y:70})
+    expect(w.exploration.explorer).toEqual({x:9,y:70});expect(w.workers.tuantuan).toEqual({x:10,y:70});expect(w.workers.xiaoquan).toEqual({x:11,y:70})
     expect(h.view.playReservoirFlow.mock.calls.map(c=>c[0])).toEqual(['garden','hall'])
     for(const s of h.saves){const r=deserialize(s);expect(r,JSON.stringify(r.ok?{ok:true}:r)).toMatchObject({ok:true})}
     c.primary();expect(h.state().active).toBe(false)

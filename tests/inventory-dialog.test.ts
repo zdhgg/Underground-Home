@@ -52,4 +52,11 @@ describe('背包模态框的实际组件行为', () => {
     expect(host.querySelector('.relic')!.textContent).toContain('已放上收藏架')
     host.querySelector<HTMLButtonElement>('.action')!.click(); expect(collection).toHaveBeenCalledOnce()
   })
+  it('进入第二层后把泉水层材料单独分组展示', async () => {
+    const { host, state } = await mount()
+    const second = createInitialWorld(); second.exploration.entered = true; second.inventory.clay = 2
+    state.items = bagItems(second); await nextTick()
+    expect(host.querySelector('.layer-title')?.textContent).toContain('泉水层收集')
+    expect(host.querySelector('[aria-label="红黏土，2个"]')).not.toBeNull()
+  })
 })

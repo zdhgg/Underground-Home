@@ -16,6 +16,18 @@ describe('背包与收藏架共用世界数据', () => {
     w.inventory.stone = 0; w.inventory.wood = 9
     expect(bagItems(w).slice(0, 2).map(i => i.count)).toEqual([0, 9])
   })
+  it('进入第二层后，红黏土、收成和发光蘑菇都能在物品栏按层看到', () => {
+    const w = createInitialWorld()
+    w.exploration.entered = true
+    w.inventory.clay = 2
+    w.farm.food = 3
+    const items = bagItems(w)
+    expect(items.filter(i => i.origin === 'water').map(i => [i.id, i.count])).toEqual([
+      ['clay', 2], ['garden-food', 3], ['glow-mushroom', 0],
+    ])
+    w.exploration.foundMushroom = true
+    expect(bagItems(w).find(i => i.id === 'glow-mushroom')?.count).toBe(1)
+  })
   it('旧物数量只会是0或1，撤销重挖与刷新读档不会重复获取', () => {
     const w = createInitialWorld(), h = createWorldHistory(), relic = RELICS[0]
     dig(w, relic.x, relic.y); h.record({ kind: 'dig', x: relic.x, y: relic.y, tile: TILE.SOIL })

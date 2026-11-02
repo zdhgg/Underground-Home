@@ -271,6 +271,21 @@ describe('PNG 世界渲染（地形与能源核心）', () => {
     expect(focus).toHaveBeenCalledTimes(1)
   })
 
+  it('第三层现场按目标判层；拖图后的下一段走位与抵达回调都不抢回镜头', () => {
+    const changed = vi.fn(); renderer.onViewChanged = changed
+    renderer.focusDeepOn(30.5 * TILE_SIZE, 32 * TILE_SIZE)
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ displayLayer: 'crystal' }))
+    renderer.panBy(60, -70)
+    const held = { ...view.camera }
+    renderer.playExplorationTravel([{ x: 27, y: 31 }, { x: 27, y: 32 }, { x: 27, y: 33 }], () => {})
+    for (let i = 0; i < 20; i++) view.tick({ deltaMS: 100 } as Ticker)
+    expect(view.camera).toEqual(held)
+    renderer.finishDeepArrival()
+    expect(view.camera).toEqual(held)
+    renderer.focusDeepOn(30.5 * TILE_SIZE, 32 * TILE_SIZE)
+    expect(changed).toHaveBeenLastCalledWith(expect.objectContaining({ displayLayer: 'crystal' }))
+  })
+
   it('初始横屏取景同时容纳风雪地表和第一层地面，返回家园不只看到树根', () => {
     for (const [width, height] of [[1440, 800], [1024, 600], [927, 482], [760, 360]]) {
       view.viewport = { width, height }

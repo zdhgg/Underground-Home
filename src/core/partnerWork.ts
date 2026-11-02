@@ -2,7 +2,7 @@ import { nestWarmLampProblem, nestWarmLampWorkCells } from './nestWarmLamp'
 import { atuCanStand, atuRoute, initialAtuPosition } from './atu'
 import { canPlaceWallLamp } from './exploration'
 import { canSupplyWater, planterAt, RIPE_STAGE } from './farm'
-import { availablePartners, PARTNERS, partnerById } from './partners'
+import { availablePartners, PARTNERS, partnerBed, partnerById } from './partners'
 import { LANDMARKS, type Cell, type WorkerId, type WorldState } from './world'
 import { canRetrofitLamp } from './lighting'
 
@@ -25,17 +25,17 @@ export function workerHomeRoute(w: WorldState, p: Cell, returning?: WorkerId): C
   return null
 }
 
-/** 只在加入或旧档迁移时初始化。已有站位绝不为了接工作换起点。 */
+/** 只在加入或旧档迁移时初始化。已有站位绝不为了接工作换起点；在小窝睡觉的伙伴也不占站位。 */
 export function initializeWorkers(w: WorldState): boolean {
   let changed = false
   const joined = availablePartners(w).filter(p => p.id !== 'atu' && w.progress.coreRepaired)
   // 旧加入条件来自床位/泉水；撤销首床后不能把已离开的伙伴站位写成非法存档。
   for (const id of Object.keys(w.workers) as WorkerId[]) {
-    if (!joined.some(p => p.id === id)) { delete w.workers[id]; changed = true }
+    if (!joined.some(p => p.id === id) || w.resting.includes(id)) { delete w.workers[id]; changed = true }
   }
   if (!w.progress.coreRepaired) return changed
   for (const partner of availablePartners(w)) {
-    if (partner.id === 'atu' || w.workers[partner.id]) continue
+    if (partner.id === 'atu' || w.workers[partner.id] || w.resting.includes(partner.id)) continue
     const id = partner.id
     // 小满先在泉水层的天然洞穴里等玩家；小泉在泉边。两人都不占第一层的大厅。
     const near = id === 'lingling' ? [{x:36,y:82},{x:35,y:82},{x:37,y:82}] : id === 'tuantuan' ? [{ x:12,y:70 }, { x:13,y:70 }, { x:11,y:70 }] : id === 'taitai' ? [{ x: 36, y: 58 }, { x: 35, y: 58 }, { x: 37, y: 58 }] : id === 'ayan' ? [{ x: 36, y: 21 }]
@@ -65,12 +65,29 @@ export function workAvailable(w: WorldState, t: WorkTarget): boolean {
   return t.kind === 'water' ? canSupplyWater(w) : t.kind === 'lamp-retrofit' ? canRetrofitLamp(w, t.x) : canPlaceWallLamp(w, t.x)
 }
 
+/** 照顾时刻：伙伴回小窝睡觉。有床、已加入、没在睡才能睡；睡着的伙伴没有站位。 */
+export function takeRest(w: WorldState, id: WorkerId): boolean {
+  if (w.resting.includes(id) || !partnerBed(w, id) || !partnerById(id)?.joins(w)) return false
+  w.resting = [...w.resting, id]
+  delete w.workers[id]
+  return true
+}
+/** 开饭或派活把睡觉的伙伴叫醒；站位由 initializeWorkers 重新安排。 */
+export function wakeResting(w: WorldState, id: WorkerId): boolean {
+  if (!w.resting.includes(id)) return false
+  w.resting = w.resting.filter(resting => resting !== id)
+  initializeWorkers(w)
+  return true
+}
+
 export function planPartnerWork(w: WorldState, target: WorkTarget): { ok: true; plan: WorkPlan } | { ok: false; message: string } {
   if (target.kind === 'nest-warm-lamp') {
     const problem = nestWarmLampProblem(w, target.podId)
     if (problem) return { ok: false, message: problem }
   }
-  const worker = workOwner(target), from = w.workers[worker]
+  const worker = workOwner(target)
+  if (w.resting.includes(worker)) wakeResting(w, worker)
+  const from = w.workers[worker]
   if (!partnerById(worker)?.joins(w) || !from) return { ok: false, message: `${workerName(worker)}还没准备好，先继续探索吧。` }
   if (!workAvailable(w, target)) return { ok: false, message: '这里还没准备好，看看设施的提示吧。' }
   if (target.kind === 'nest-warm-lamp') {

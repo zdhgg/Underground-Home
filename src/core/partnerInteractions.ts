@@ -3,9 +3,10 @@ import { ripePlanters } from './farm'
 import { pickaxeUpgrade, wideLampUpgrade, type PartnerUpgrade } from './partnerAbilities'
 import { partnerBed, partnerById, type PartnerId } from './partners'
 import { HOME_OWNER } from './personal'
-import type { WorldState } from './world'
+import type { WorkerId, WorldState } from './world'
 
-export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale'
+export type PartnerAction = 'look-at-clue' | 'prepare-nest' | 'upgrade-pickaxe' | 'learn-wide-lamp' | 'place-wide-lamp' | 'open-garden' | 'open-reservoir' | 'open-ventilation' | 'open-ruins' | 'open-finale' | 'share-meal' | 'take-rest'
+export type CareKind = 'hungry' | 'sleepy'
 export interface PartnerConversation {
   partnerId: PartnerId
   name: string
@@ -16,8 +17,31 @@ export interface PartnerConversation {
   action: { id: PartnerAction; label: string } | null
 }
 
+/** 照顾时刻的话：伙伴点名"心心"，孩子用现有的开饭/睡觉动作回应；没有数值、不衰减、不阻塞。 */
+const CARE_LINES: Partial<Record<PartnerId, string[]>> = {
+  atu: ['心心，干了一上午活，肚子咕咕叫啦。', '仓里有新鲜菜，叫大家一起吃口热饭吧！'],
+  adeng: ['心心，饭菜的香味顺着风飘过来啦！', '小灯的肚子也在咕咕叫，一起吃一口？'],
+  xiaoman: ['心心，菜园的菜新鲜极啦！', '我一喊，大家就都到餐桌啦！'],
+  xiaoquan: ['心心，吃饭前喝一口泉水最舒服啦。', '今天的菜是哪道呀？'],
+  ayan: ['心心，凿硬岩最费力气啦。', '吃口热饭，爪子就又有劲了！'],
+  amu: ['心心，做了一上午部件，肚子在打鼓啦。', '一起去餐桌那边吧？'],
+  taitai: ['心心，菌床的新鲜菌伞也想上餐桌。', '大家围坐在一起，比什么都香。'],
+  tuantuan: ['心心，在水边待久了，肚子有点饿啦。', '吃完饭我再去修水路！'],
+  lingling: ['心心，风里都飘着饭菜香啦。', '是开饭的信号吧？'],
+}
+const SLEEPY_LINES: Partial<Record<PartnerId, string[]>> = {
+  adeng: ['心心，萤火虫也有犯困的时候呀。', '我回小窝的小床上待一会儿。'],
+  xiaoman: ['心心，蹦了一整天，好困呀……', '我回小窝打个盹，梦里都是胡萝卜。'],
+  xiaoquan: ['心心，水边的咕噜声好催眠……', '我回小窝睡个午觉啦，拜拜。'],
+  ayan: ['心心，凿岩是个力气活，爪子酸酸的。', '回小窝缩成一团，睡一觉就好啦。'],
+  amu: ['心心，做部件要很专心，我困啦。', '睡饱了才能做出更精密的东西！'],
+  taitai: ['心心，菌床的暖光好舒服……', '我蜷起来睡一小会儿。'],
+  tuantuan: ['心心，听了一下午水声，眼皮沉沉的。', '我回小窝打个盹，别担心。'],
+  lingling: ['心心，蝙蝠白天也要补觉的呀。', '我倒挂在小窝里睡一会儿～'],
+}
+
 /** 根据眼前世界生成简短回应，不领取任务、不修改进度、不新增愿望待办。 */
-export function partnerConversation(world: WorldState, id: string): PartnerConversation | null {
+export function partnerConversation(world: WorldState, id: string, care: CareKind | false = false): PartnerConversation | null {
   const partner = partnerById(id)
   if (!partner?.joins(world)) return null
   const result: PartnerConversation = {
@@ -89,6 +113,15 @@ export function partnerConversation(world: WorldState, id: string): PartnerConve
     result.lines = world.farm.waterSupplied
       ? ['水已经流到菜园啦。', '泉水边能种菜了。']
       : ['哗啦！我是小泉，这口泉水一直在等人听见。', '我能把水送回家……如果你们也给我和小满留个住处。']
+  }
+  // 照顾时刻：伙伴点名"心心"，把现有的开饭/回窝睡觉递到孩子手边。
+  // 有升级或章节指引时不插队；已经睡着或没床的伙伴不再被安排睡觉。
+  if (care === 'hungry' && !result.action && world.farm.food > 0) {
+    result.lines = CARE_LINES[partner.id] ?? ['心心，肚子咕咕叫啦。', '一起吃口热饭吧！']
+    result.action = { id: 'share-meal', label: '一起吃一口' }
+  } else if (care === 'sleepy' && !result.action && !world.resting.includes(partner.id as WorkerId) && partnerBed(world, partner.id)) {
+    result.lines = SLEEPY_LINES[partner.id] ?? ['心心，我困啦……', '回小窝睡一小会儿。']
+    result.action = { id: 'take-rest', label: '回小窝睡一觉' }
   }
   if(world.ventilation.completed&&id==='atu'){result.lines=['旧地脉岩壁上留着灯、水和一起建造的故事。','我们可以把九位伙伴现在的家，也添进旧故事里。'];result.action={id:'open-ruins',label:'去看看旧地脉遗迹'}}
   if(world.ruins.completed&&id==='atu'){result.upgrade=null;result.lines=world.finale.completed?['九层终章已经留进家园相册。','每位伙伴和每一层都还在，继续把家建成你喜欢的样子吧。']:['最深的岩缝里透出温柔的金色。','把大家请到一起，办一次九位伙伴的暖屋日吧。'];result.action={id:'open-finale',label:world.finale.completed?'去看看九层家园':'去迎接地心暖光'}}

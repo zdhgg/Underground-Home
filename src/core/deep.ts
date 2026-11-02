@@ -1,8 +1,9 @@
 /** 第三层的建设、配方和章节规则。没有计时器、镜头或 UI。 */
 import { atuRoute, initialAtuPosition } from './atu'
 import { canAfford, changeMaterials } from './materials'
-import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, deepConnected, deepFrontier, deepSpan } from './deepTopology'
-import { TILE, createInitialWorld, freshDeep, type Cell, type DeepFacility, type DeepFacilityKind, type DeepState, type Inventory, type WorldState } from './world'
+import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, DRILL_SPOT, MOSS_SPOT, deepConnected, deepFrontier, deepSpan } from './deepTopology'
+import { snapFacilityX } from './placement'
+import { stratumAt, TILE, createInitialWorld, freshDeep, type Cell, type DeepFacility, type DeepFacilityKind, type DeepState, type Inventory, type WorldState } from './world'
 
 export const DEEP_SPECS: Record<DeepFacilityKind, { name: string; icon: string; width: number; cost: Inventory; crystals?: number; detail: string }> = {
   collector: { name: '晶簇采集台', icon: '💎', width: 3, cost: { stone: 2, wood: 2 }, detail: '轻轻取下晶尖，晶根留在岩壁上。每次得到晶簇 3、矿石 2。' },
@@ -21,7 +22,7 @@ export const deepFacilityAt = (w: WorldState, p: Cell): DeepFacility | undefined
 export const deepReach = (w: WorldState, p: Cell): Cell[] | null => atuRoute(w, w.exploration.explorer ?? initialAtuPosition(w), p, true)
 const success = (w: WorldState, before: DeepState, inventory: Inventory, message: string): DeepResult => ({ ok: true, message, change: { before, inventory, afterInventory: { ...w.inventory }, after: structuredClone(w.deep) } })
 
-export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
+export function deepSpotProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
   if (!w.deep.entered) return '先沿施工梯到晶簇层。'
   if (kind !== 'lamp' && hasDeep(w, kind)) return '这件设施已经建好啦，点它就能使用。'
   if (!w.deep.foundCrystal) return '先看看岩壁上会发光的晶簇。'
@@ -36,12 +37,66 @@ export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: numbe
     if (deepFacilityAt(w, { x: col, y: DEEP_FOOT })) return '这里放过设施啦，再选别处。'
   }
   if (!deepReach(w, { x, y: DEEP_FOOT })) return '这里还没有连到梯子。'
-  if (!canAfford(w, spec.cost) || w.deep.crystals < (spec.crystals ?? 0)) return `还需要${deepCostText(kind)}，可以先挖土或采晶簇。`
   return null
+}
+export function deepBuildProblem(w: WorldState, kind: DeepFacilityKind, x: number): string | null {
+  const spot = deepSpotProblem(w, kind, x)
+  if (spot) return spot
+  const spec = DEEP_SPECS[kind]
+  if (!canAfford(w, spec.cost) || w.deep.crystals < (spec.crystals ?? 0)) {
+    const need = `还需要${deepCostText(kind)}。`
+    return spec.crystals ? `${need}石料旧木料回上面挖泥土，晶簇去采集台取。` : `${need}回上面几层挖挖泥土就有啦。`
+  }
+  return null
+}
+/**
+ * 推荐建造位：给孩子的引导，只作高亮提示、不限制选址。
+ * 采集台贴着天然晶簇，石炉贴着工坊，其余从梯口向两侧就近找；
+ * 不推荐压住苔藓和旧钻头的发现点。返回设施左格 x，找不到合适位置时为 null。
+ */
+export function deepSuggestion(w: WorldState, kind: DeepFacilityKind): number | null {
+  if (kind !== 'lamp' && hasDeep(w, kind)) return null
+  const spec = DEEP_SPECS[kind], span = deepSpan(w), shaft = w.exploration.shaftX
+  if (!span || shaft === null) return null
+  const clamp = (x: number): number => Math.max(span.left, Math.min(x, span.right - spec.width + 1))
+  const coversAnchor = (x: number): boolean => [MOSS_SPOT.x, DRILL_SPOT.x].some(a => a >= x && a < x + spec.width)
+  const fits = (x: number): boolean => !coversAnchor(x) && deepSpotProblem(w, kind, x) === null
+  const near: number[] = []
+  if (kind === 'collector') near.push(CRYSTAL_SPOT.x - spec.width, CRYSTAL_SPOT.x + 1)
+  const workshop = w.deep.facilities.find(f => f.kind === 'workshop')
+  if (kind === 'furnace' && workshop) near.push(workshop.x - spec.width, workshop.x + DEEP_SPECS.workshop.width)
+  for (const x of near) { const c = clamp(x); if (fits(c)) return c }
+  for (let d = 1; d <= span.right - span.left + 1; d++) {
+    for (const x of [clamp(shaft + d), clamp(shaft - d)]) if (fits(x)) return x
+  }
+  return null
+}
+/**
+ * 把一次点击换算成设施左格：点中推荐位就用推荐位；否则让影子盖住
+ * 点击列、以点击列为中心，向两侧滑到最近能放下的位置。
+ * 哪里都放不下就返回点击列本身，让红框说清还差什么——
+ * 和前两层"点哪里就放哪里附近"的手感一致。
+ */
+export function deepCandidate(w: WorldState, kind: DeepFacilityKind, tapX: number): number {
+  // 和推荐位一致：优先不压住晶苔和旧钻头的发现点，实在没有才让玩家自己看见红框。
+  return snapFacilityX(tapX, DEEP_SPECS[kind].width, x => deepSpotProblem(w, kind, x) === null, { suggested: deepSuggestion(w, kind), avoid: [MOSS_SPOT.x, DRILL_SPOT.x] })
 }
 export function deepCostText(kind: DeepFacilityKind): string {
   const s = DEEP_SPECS[kind]
   return [`石料 ${s.cost.stone}`, s.cost.wood ? `旧木料 ${s.cost.wood}` : '', s.crystals ? `晶簇 ${s.crystals}` : ''].filter(Boolean).join(' · ')
+}
+/**
+ * 建设目录：本章还没建的设施、各自由什么卡着，只作展示与自选入口；
+ * 推荐顺序仍由 deepGoal 给出，锁住的条目把前置原因写在条目上。
+ */
+export interface DeepBuildOption { kind: DeepFacilityKind; name: string; icon: string; cost: string; locked: string | null }
+export function deepBuildOptions(w: WorldState): DeepBuildOption[] {
+  if (!w.deep.entered || !w.deep.foundCrystal) return []
+  const order: DeepFacilityKind[] = ['collector', 'distributor', 'lamp', 'workshop', 'furnace']
+  return order.filter(kind => !hasDeep(w, kind)).map(kind => {
+    const locked = kind !== 'collector' && kind !== 'distributor' && !hasDeep(w, 'distributor') ? '先装稳光配电箱' : null
+    return { kind, name: DEEP_SPECS[kind].name, icon: DEEP_SPECS[kind].icon, cost: deepCostText(kind), locked }
+  })
 }
 export function buildDeep(w: WorldState, kind: DeepFacilityKind, x: number): DeepResult {
   const problem = deepBuildProblem(w, kind, x)
@@ -117,31 +172,66 @@ export function undoDeep(w: WorldState, change: DeepChange): boolean {
   return true
 }
 
-export interface DeepGoal { title: string; speaker: string; speech: string; label: string; action?: DeepAction; build?: DeepFacilityKind; target: Cell; done: number }
+/** 第一层还缺暖灯的小窝：章末把"用部件换暖灯"留在楼上，让电梯立刻派上用场。 */
+function deepWarmLampPod(w: WorldState) {
+  return [...w.pods].filter(p => !p.warmLamp && stratumAt(p.y) === 'home' && stratumAt(p.y + 1) === 'home').sort((a, b) => a.id - b.id)[0]
+}
+export function deepWarmLampPending(w: WorldState): boolean {
+  return !!deepWarmLampPod(w)
+}
+/**
+ * 章内四个里程碑：把 13 个连续小步压成孩子看得懂的"大目标"轨道。
+ * 每一步仍然一次只推一个，但玩家随时看得见自己在往"三层电梯"走。
+ */
+export const DEEP_MILESTONES = [
+  { icon: '🦔', label: '凿开新路' },
+  { icon: '💎', label: '点亮晶簇层' },
+  { icon: '🔧', label: '建起工坊' },
+  { icon: '🛗', label: '连通三层' },
+] as const
+/** 当前小步属于第几个里程碑；返回 4 表示本章全部完成。 */
+export function deepMilestone(done: number): number {
+  return done >= 13 ? 4 : done >= 9 ? 3 : done >= 7 ? 2 : done >= 3 ? 1 : 0
+}
+export interface DeepGoal { title: string; speaker: string; speech: string; label: string; action?: DeepAction; build?: DeepFacilityKind; visitPod?: number; target: Cell; done: number; milestone: number }
 export function deepGoal(w: WorldState): DeepGoal {
-  const d = w.deep, shaft = { x: w.exploration.shaftX ?? 27, y: 22 }
+  const d = w.deep, shaft = { x: w.exploration.shaftX ?? 27, y: DEEP_FOOT }
   const goal = (done: number, title: string, speaker: string, speech: string, label: string, action?: DeepAction, build?: DeepFacilityKind, target: Cell = CRYSTAL_SPOT): DeepGoal => {
     const facility = action === 'collect' ? 'collector' : action === 'smelt' ? 'furnace' : action === 'craft' ? 'workshop' : null
-    return { done: d.supported && done === 9 ? 11 : done, title, speaker, speech, label, action, build, target: w.deep.facilities.find(f => f.kind === facility) ?? target }
+    const suggested = build ? deepSuggestion(w, build) : null
+    const buildTarget = build && suggested !== null ? { x: suggested + DEEP_SPECS[build].width / 2 - .5, y: DEEP_FOOT } : null
+    const step = d.supported && done === 9 ? 11 : done
+    return { done: step, milestone: deepMilestone(step), title, speaker, speech, label, action, build, target: w.deep.facilities.find(f => f.kind === facility) ?? buildTarget ?? target }
   }
-  if (!d.metAyan) return goal(0, '岩壁里有抓挠声', '阿土', '泉水层右边有个小侧洞。有人在里面搬石头！我们去打个招呼吧。', '去见见阿岩', 'meet', undefined, AYAN_SPOT)
-  if (!deepConnected(w)) return goal(1, '请阿岩凿开硬岩', '阿岩', '我的硬岩爪准备好啦！沿着旧梯口往下凿，每凿一段就接好施工梯。', '凿通晶纹盖层', 'excavate', undefined, deepFrontier(w) ?? shaft)
-  if (!d.entered) return goal(2, '沿施工梯下去', '阿岩', '通啦！梯子已经接到洞底。慢慢下去，看看发光的岩壁。', '下到晶簇层', 'enter', undefined, { ...shaft, y: DEEP_FOOT })
-  if (!d.foundCrystal) return goal(3, '岩壁上的小星星', '阿土', '这些晶簇在轻轻发光。只取松动的晶尖，把晶根留在这里。', '看看天然晶簇', 'discover')
-  if (!hasDeep(w, 'collector')) return goal(4, '让晶簇有个采集台', '阿岩', '找一处你喜欢的空洞，搭个低低的采集台。这里的晶簇和矿石都能用起来。', '选地方搭采集台', undefined, 'collector')
+  if (!d.metAyan) return goal(0, '岩壁里有抓挠声', '阿土', '泉水层右边有个小侧洞。有人在里面搬石头！我们去打个招呼吧。', '去侧洞见见阿岩', 'meet', undefined, AYAN_SPOT)
+  if (!deepConnected(w)) return goal(1, '请阿岩凿开硬岩', '阿岩', '我的硬岩爪准备好啦！沿着旧梯口往下凿，每凿一段就接好施工梯。', '去旧梯口凿下一段', 'excavate', undefined, deepFrontier(w) ?? shaft)
+  if (!d.entered) return goal(2, '沿施工梯下去', '阿岩', '通啦！梯子已经接到洞底。慢慢下去，看看发光的岩壁。', '沿施工梯下到晶簇层', 'enter', undefined, { ...shaft, y: DEEP_FOOT })
+  if (!d.foundCrystal) return goal(3, '岩壁上的小星星', '阿土', '这些晶簇在轻轻发光。只取松动的晶尖，把晶根留在这里。', '去看岩壁的天然晶簇', 'discover')
+  if (!hasDeep(w, 'collector')) return goal(4, '让晶簇有个采集台', '阿岩', '告诉你一个大计划：用晶簇的电，造一部不用爬梯子的电梯！先找一处喜欢的空洞，搭个低低的采集台。', '选地方搭采集台', undefined, 'collector')
   if (!hasDeep(w, 'distributor')) return goal(5, '把晶光接成稳稳的电', '阿灯', '晶簇的光一明一暗。加个配电箱，新一层的灯就能稳稳地亮起来。', '选地方装配电箱', undefined, 'distributor')
   if (!hasDeep(w, 'lamp')) return goal(6, '点亮晶簇层', '阿灯', '电送到这里啦！在岩壁上挂盏灯，让伙伴看清脚下的路。', '选一处安晶光灯', undefined, 'lamp')
   if (!amuJoined(w)) return goal(7, '搭起岩壁工坊', '阿岩', '有了光，能做更大的东西啦。搭好工作台，就有会做手工的朋友来帮忙。', '选地方搭工坊', undefined, 'workshop')
   if (!hasDeep(w, 'furnace')) return goal(8, '把矿石做成金属锭', '阿木', '你好，我是阿木！先砌个小石炉。矿石做成金属锭，就能加工电梯部件。', '选地方砌小石炉', undefined, 'furnace')
   if (!d.supported || !d.lift) {
     if (d.parts < (d.supported ? 3 : 1) && d.ore < 2 && d.ingots < 2) return goal(9, '采些晶簇和矿石', '阿岩', '材料用过了也没关系。去采集台取一点，晶根会继续留在岩壁上。', '去采集台取材料', 'collect')
-    if (d.ingots < 2 && d.parts < (d.supported ? 3 : 1)) return goal(9, '小石炉开工', '阿木', '放进两块矿石，做出两块金属锭。加工很快，不用一直等。', '加工两块金属锭', 'smelt')
-    if (d.crystals < 1 && d.parts < (d.supported ? 3 : 1)) return goal(9, '还需要一小簇晶光', '阿灯', '晶簇是部件里的小能源。采集台上还能再取一些。', '取些晶簇和矿石', 'collect')
-    if (d.parts < (d.supported ? 3 : 1)) return goal(9, '阿木来做设施部件', '阿木', '金属锭 2、晶簇 1，做一个部件。也能先给工坊装精密工具，省下重复加工。', '制作电梯部件', 'craft')
-    if (!d.supported) return goal(10, '把竖井支撑牢', '阿岩', '先用一个部件，把上下三层的竖井加固。大家都能安心上下。', '安装竖井支撑', 'support', undefined, shaft)
-    return goal(11, '组装三层电梯', '阿木', '三个部件都齐啦！把安全吊篮装到旧梯道里，梯子也继续保留。', '组装家园电梯', 'lift', undefined, shaft)
+    if (d.ingots < 2 && d.parts < (d.supported ? 3 : 1)) return goal(9, '小石炉开工', '阿木', '放进两块矿石，做出两块金属锭。加工很快，不用一直等。', '去小石炉炼金属锭', 'smelt')
+    if (d.crystals < 1 && d.parts < (d.supported ? 3 : 1)) return goal(9, '还需要一小簇晶光', '阿灯', '晶簇是部件里的小能源。采集台上还能再取一些。', '去采集台取晶簇矿石', 'collect')
+    if (d.parts < (d.supported ? 3 : 1)) return goal(9, '阿木来做设施部件', '阿木', `金属锭 2、晶簇 1，做${d.precision ? '两个' : '一个'}部件。${d.supported ? `电梯还差 ${3 - d.parts} 个部件。` : '先做 1 个，把竖井支撑牢。'}`, '去工坊做电梯部件', 'craft')
+    if (!d.supported) return goal(10, '把竖井支撑牢', '阿岩', '先用一个部件，把上下三层的竖井加固。大家都能安心上下。', '去竖井口安装支撑', 'support', undefined, shaft)
+    return goal(11, '组装三层电梯', '阿木', '三个部件都齐啦！把安全吊篮装到旧梯道里，梯子也继续保留。', '去旧梯道装电梯', 'lift', undefined, shaft)
   }
   if (!d.completed) return goal(12, '第一次坐电梯回家', '阿木', '把刚做好的材料和伙伴一起送上去！这次不用爬长长的梯子啦。', '乘电梯回暖窝层', 'ride-home', undefined, { ...shaft, y: DEEP_FOOT })
+  // 章末尾声落在第一层：先做部件，再乘电梯把晶光带给还黑着的小窝。
+  const pod = deepWarmLampPod(w)
+  if (pod) {
+    if (d.parts < 1) {
+      if (d.crystals < 1 || d.ingots < 2 && d.ore < 2) return goal(13, '为小窝取些材料', '阿岩', '电梯已经通啦！再取一份材料，做一个部件给小窝装暖灯。', '去采集台取暖灯材料', 'collect')
+      if (d.ingots < 2) return goal(13, '炼好暖灯要用的金属锭', '阿木', '先把两块矿石炼成两块金属锭，再做暖灯部件。', '去小石炉炼金属锭', 'smelt')
+      return goal(13, '给小窝做一盏晶光暖灯', '阿木', '金属锭和晶簇齐啦！再做一个部件带回小窝，就能换上晶光暖灯。', '去工坊做暖灯部件', 'craft')
+    }
+    if (w.exploration.explorer?.y === 11) return { ...goal(13, '给小窝添盏暖光灯', '阿土', '部件已经带回家啦！先看看喜欢的小窝，再请阿灯装上暖光灯。', '去小窝看看暖光灯', undefined, undefined, { x: pod.x + 1, y: pod.y + 1 }), visitPod: pod.id }
+    return goal(13, '把晶光带回小窝', '阿土', '部件做好啦！乘电梯回暖窝层，给还黑着的小窝装一盏晶光暖灯。', '乘电梯回暖窝层', 'ride-home', undefined, { ...shaft, y: DEEP_FOOT })
+  }
   return goal(13, '三层家园连起来啦', '阿土', '灯亮了，工坊转起来，电梯也通啦！继续扩挖、升级工具，布置你自己的晶簇层吧。', '回晶簇层看看', 'ride-crystal', undefined, { ...shaft, y: DEEP_FOOT })
 }
 

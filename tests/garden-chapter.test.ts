@@ -18,6 +18,7 @@ function setup(w = gardenAvailable()) {
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
     playHallWork: vi.fn((_at: Cell, done: () => void) => done()),
+    playAtuWork: vi.fn((_at: Cell, done: () => void) => done()),
   }
   const chapter = new GardenChapter({ world: () => w, view: view as unknown as PixiWorldRenderer, emit: value => { state = value }, prepare: vi.fn(),
     changed: () => { initializeWorkers(w); saves.push(serialize(w)) }, record: change => history.record({ kind: 'garden', change }), dig: p => history.record({ kind: 'dig', ...p, tile: TILE.ROCK }), notify, milestone,
@@ -79,7 +80,7 @@ describe('第五层会话与伙伴施工', () => {
     h.chapter.primary(); expect(h.w.farm.food).toBe(food+2); h.chapter.changeVariety(); expect(gardenBed(h.w,28)?.variety).toBe('fan')
   })
   it('可以再摆第二张菌床，逐床铺菌毯、照料和选菌种；不会操作旁边那张', () => {
-    const h=setup(workingGarden()); h.chapter.select('bed',undefined,true); h.chapter.tap({x:34,y:56}); h.chapter.primary()
+    const h=setup(workingGarden()); h.chapter.select('bed',undefined,true); h.chapter.tap({x:35,y:56}); h.chapter.primary()
     h.chapter.select('bed',34); h.chapter.primary(); expect(h.w.garden.trail).toContain(37)
     h.chapter.primary(); expect(gardenBed(h.w,34)?.growth).toBe(1); expect(gardenBed(h.w,28)?.growth).toBe(0)
     expect(deserialize(serialize(h.w))).toMatchObject({ok:true})

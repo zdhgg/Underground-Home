@@ -3,7 +3,8 @@ import { atuRoute, initialAtuPosition } from './atu'
 import { canPlacePod } from './build'
 import { canAfford, changeMaterials } from './materials'
 import { partnerBed } from './partners'
-import { GARDEN_FOOT, GARDEN_TOP, TAITAI_SPOT, gardenClearColumn, gardenConnected, gardenLight, gardenSpan, gardenWidth } from './gardenTopology'
+import { GARDEN_FOOT, GARDEN_TOP, ROOT_SPOT, SPORE_SPOT, TAITAI_SPOT, gardenClearColumn, gardenConnected, gardenLight, gardenSpan, gardenWidth } from './gardenTopology'
+import { snapFacilityX } from './placement'
 import { TILE, createInitialWorld, freshGarden, type Cell, type GardenFacility, type GardenFacilityKind, type GardenState, type Inventory, type SleepPod, type WorldState } from './world'
 
 export const GARDEN_SPECS: Record<GardenFacilityKind, { name: string; cost: Inventory; crystals?: number; detail: string }> = {
@@ -40,6 +41,10 @@ function placementProblem(w: WorldState, kind: GardenFacilityKind, x: number, re
 }
 export function gardenBuildProblem(w: WorldState, kind: GardenFacilityKind, x: number): string | null {
   return placementProblem(w, kind, x) ?? (!canAfford(w, GARDEN_SPECS[kind].cost) || w.deep.crystals < (GARDEN_SPECS[kind].crystals ?? 0) ? `需要${gardenCostText(kind)}。可以继续挖土，或回三层采晶簇。` : null)
+}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住孢子云和根须印。 */
+export function gardenCandidate(w: WorldState, kind: GardenFacilityKind, tapX: number): number {
+  return snapFacilityX(tapX, gardenWidth(kind), x => placementProblem(w, kind, x) === null, { avoid: [SPORE_SPOT.x, ROOT_SPOT.x] })
 }
 function commit(w: WorldState, before: GardenState, message: string, cost: Inventory = { stone: 0, wood: 0 }, parts = 0, crystals = 0, food = 0, pod?: SleepPod, irrigationBefore = w.reservoir.irrigation): GardenResult {
   changeMaterials(w, cost, -1); w.deep.parts -= parts; w.deep.crystals -= crystals; w.farm.food += food

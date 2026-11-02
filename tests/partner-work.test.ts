@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Container, Graphics } from 'pixi.js'
 import { createInitialWorld, TILE, WORLD_VERSION, type Cell, type WorkerId } from '../src/core/world'
-import { initializeWorkers, planPartnerWork, type WorkPlan } from '../src/core/partnerWork'
+import { initializeWorkers, planPartnerWork, takeRest, wakeResting, type WorkPlan } from '../src/core/partnerWork'
 import { PartnerOrders, type WorkUI } from '../src/app/partnerOrders'
 import { PartnerMotion, type MovingPartner } from '../src/render/partnerMotion'
 import { canPlacePod, canRestoreDig, placePod } from '../src/core/build'
@@ -151,12 +151,38 @@ describe('伙伴工作：从真实站位到设施', () => {
       expect(deserialize(raw).ok).toBe(false)
     }
   })
+
+  it('照顾睡觉：回窝后没有站位且推进进度也不占位，派活自动叫醒；v29 存档往返', () => {
+    const w = ready()
+    // 没有床位的伙伴不能睡；有床的阿灯回窝后退出站位。
+    expect(takeRest(w, 'xiaoman')).toBe(false)
+    expect(takeRest(w, 'adeng')).toBe(true)
+    expect(w.resting).toEqual(['adeng']); expect(w.workers.adeng).toBeUndefined()
+    initializeWorkers(w)
+    expect(w.workers.adeng).toBeUndefined()
+    // 派活自动叫醒：adeng 负责壁灯，站位由 initializeWorkers 重新安排。
+    const plan = planPartnerWork(w, { kind: 'lamp', x: 31 })
+    expect(plan.ok).toBe(true)
+    expect(w.resting).toEqual([]); expect(w.workers.adeng).toBeDefined()
+    // 直接叫醒也恢复站位。
+    takeRest(w, 'adeng'); expect(wakeResting(w, 'adeng')).toBe(true)
+    expect(w.workers.adeng).toBeDefined()
+    // v29 存档往返保留睡觉名单；v28 旧档没有该字段按没人睡觉处理。
+    const back = deserialize(serialize(w))
+    expect(back.ok && back.world.resting).toEqual([])
+    takeRest(w, 'adeng')
+    const saved = deserialize(serialize(w))
+    expect(saved.ok && saved.world.resting).toEqual(['adeng'])
+    const legacy = serialize(w); legacy.version = 28; delete (legacy.world as { resting?: unknown }).resting
+    const old = deserialize(legacy)
+    expect(old.ok && old.world.resting).toEqual([])
+  })
 })
 
 describe('伙伴动作与效果同步', () => {
   it('收菜时朝目标俯身，落手后收回；取消也恢复姿势', () => {
     const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
-    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), harvestLean: lean } }
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
     const motion = new PartnerMotion()
     const plan: WorkPlan = { worker: 'xiaoman', target: { kind: 'harvest', x: 31, y: 21 }, at: { x: 32, y: 21 }, route: [] }
     motion.work(friend, plan, hit, done)
@@ -166,6 +192,71 @@ describe('伙伴动作与效果同步', () => {
     motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
     motion.work(friend, plan, hit, done); motion.update(.3); motion.cancel()
     expect(lean).toHaveBeenLastCalledWith(0, 1); expect(hit).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('浇水同样朝菜槽俯身而不画手臂，特效是落进槽里的水珠', () => {
+    const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const drops = vi.spyOn(motion.effects, 'circle')
+    const plan: WorkPlan = { worker: 'xiaoman', target: { kind: 'watering', x: 31, y: 21 }, at: { x: 32, y: 21 }, route: [] }
+    motion.work(friend, plan, hit, done)
+    motion.update(.3)
+    expect(lean).toHaveBeenLastCalledWith(expect.any(Number), -1); expect(lean.mock.lastCall![0]).toBeGreaterThan(0)
+    expect(drops).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    expect(hit).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('接水管朝泉眼俯身，泉面冒水珠而不是凭空手臂', () => {
+    const lean = vi.fn(), hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn(), lean: lean } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const drops = vi.spyOn(motion.effects, 'circle')
+    // 泉眼在 x=18：站在 19 侧要朝左（dir=-1）俯身。
+    motion.work(friend, { worker: 'xiaoquan', target: { kind: 'water' }, at: { x: 19, y: 21 }, route: [] }, hit, done)
+    motion.update(.3)
+    expect(lean).toHaveBeenLastCalledWith(expect.any(Number), -1); expect(lean.mock.lastCall![0]).toBeGreaterThan(0)
+    expect(drops).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.4); expect(lean).toHaveBeenLastCalledWith(0, -1); expect(done).toHaveBeenCalledTimes(1)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('阿灯装壁灯升到灯位迸火花，不再画横伸的手臂', () => {
+    const hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 21.6 * 32, pose: 'idle', inEntrance: false, visual: { face: vi.fn() } }
+    friend.view.y = friend.baseY
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const sparks = vi.spyOn(motion.effects, 'circle')
+    motion.work(friend, { worker: 'adeng', target: { kind: 'lamp', x: 31 }, at: { x: 30, y: 20 }, route: [] }, hit, done)
+    motion.update(.5)
+    expect(friend.view.y).toBe(friend.baseY - 32)
+    expect(sparks).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    motion.update(.3); expect(hit).toHaveBeenCalledTimes(1)
+    motion.update(.2); expect(done).toHaveBeenCalledTimes(1)
+    expect(friend.view.y).toBe(friend.baseY)
+    friend.view.destroy(); motion.effects.destroy()
+  })
+
+  it('给小窝装暖光灯同样只有火花没有手臂，2.4 秒才落手', () => {
+    const hit = vi.fn(), done = vi.fn()
+    const friend: MovingPartner = { view: new Container(), baseY: 0, pose: 'idle', inEntrance: false, visual: { face: vi.fn() } }
+    const motion = new PartnerMotion()
+    const arm = vi.spyOn(motion.effects, 'roundRect')
+    const sparks = vi.spyOn(motion.effects, 'circle')
+    motion.work(friend, { worker: 'adeng', target: { kind: 'nest-warm-lamp', podId: 1 }, at: { x: 30, y: 10 }, route: [], facing: { x: 31, y: 10 } }, hit, done)
+    motion.update(1)
+    expect(friend.view.y).toBe(friend.baseY)
+    expect(sparks).toHaveBeenCalled(); expect(arm).not.toHaveBeenCalled()
+    expect(hit).not.toHaveBeenCalled(); expect(done).not.toHaveBeenCalled()
+    motion.update(1.5); expect(hit).toHaveBeenCalledTimes(1)
     friend.view.destroy(); motion.effects.destroy()
   })
 

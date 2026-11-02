@@ -84,13 +84,13 @@ export function resolveGlobalGuide(world: WorldState, resting = true): GlobalGui
   }
   // 开放只是前置条件，完成标记才决定是否交接；顺序扫描到第一个未完成章节即返回。
   const chapters = [
-    { id: 'deep', ready: deepReady, state: world.deep, goal: deepGoal, layer: '第 3 层 · 晶簇', label: '看看第三层的新线索', total: 13, outcome: '把晶光、工坊和电梯连成新一层家园。' },
-    { id: 'hall', ready: hallReady, state: world.hall, goal: hallGoal, layer: '第 4 层 · 暖光大厅', label: '看看暖光大厅', total: 11, outcome: '把旧岩洞建成六位伙伴相聚的暖光大厅。' },
-    { id: 'garden', ready: gardenReady, state: world.garden, goal: gardenGoal, layer: '第 5 层 · 菌光花园', label: '看看菌光花园', total: 14, outcome: '让水、菌丝和灯光连成新朋友的花园。' },
-    { id: 'reservoir', ready: reservoirReady, state: world.reservoir, goal: reservoirGoal, layer: '第 6 层 · 蓄水回廊', label: '看看蓄水回廊', total: 18, outcome: '让清水沿新回廊送回花园与大厅。' },
-    { id: 'ventilation', ready: ventilationReady, state: world.ventilation, goal: ventilationGoal, layer: '第 7 层 · 听风工区', label: '看看听风工区', total: 19, outcome: '连起风路，把手作送回九位伙伴的家。' },
-    { id: 'ruins', ready: ruinsReady, state: world.ruins, goal: ruinsGoal, layer: '第 8 层 · 旧地脉遗迹', label: '看看旧地脉遗迹', total: 19, outcome: '修复三段旧故事，添上今天的家。' },
-    { id: 'finale', ready: finaleReady, state: world.finale, goal: finaleGoal, layer: '第 9 层 · 地心暖光', label: '看看地心暖光', total: 20, outcome: '把九位伙伴和九层成果聚成一次暖屋日。' },
+    { id: 'deep', ready: deepReady, state: world.deep, goal: deepGoal, layer: '第 3 层 · 晶簇', label: '去看看第三层的新线索', total: 13, outcome: '把晶光、工坊和电梯连成新一层家园。' },
+    { id: 'hall', ready: hallReady, state: world.hall, goal: hallGoal, layer: '第 4 层 · 暖光大厅', label: '去看看暖光大厅', total: 11, outcome: '把旧岩洞建成六位伙伴相聚的暖光大厅。' },
+    { id: 'garden', ready: gardenReady, state: world.garden, goal: gardenGoal, layer: '第 5 层 · 菌光花园', label: '去看看菌光花园', total: 14, outcome: '让水、菌丝和灯光连成新朋友的花园。' },
+    { id: 'reservoir', ready: reservoirReady, state: world.reservoir, goal: reservoirGoal, layer: '第 6 层 · 蓄水回廊', label: '去看看蓄水回廊', total: 18, outcome: '让清水沿新回廊送回花园与大厅。' },
+    { id: 'ventilation', ready: ventilationReady, state: world.ventilation, goal: ventilationGoal, layer: '第 7 层 · 听风工区', label: '去看看听风工区', total: 19, outcome: '连起风路，把手作送回九位伙伴的家。' },
+    { id: 'ruins', ready: ruinsReady, state: world.ruins, goal: ruinsGoal, layer: '第 8 层 · 旧地脉遗迹', label: '去看看旧地脉遗迹', total: 19, outcome: '修复三段旧故事，添上今天的家。' },
+    { id: 'finale', ready: finaleReady, state: world.finale, goal: finaleGoal, layer: '第 9 层 · 地心暖光', label: '去看看地心暖光', total: 20, outcome: '把九位伙伴和九层成果聚成一次暖屋日。' },
   ] as const
   for (const chapter of chapters) {
     if (chapter.state.completed) continue

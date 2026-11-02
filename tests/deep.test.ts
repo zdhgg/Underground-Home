@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDeep, deepActionProblem, deepBuildProblem, deepGoal, performDeep, undoDeep } from '../src/core/deep'
+import { buildDeep, deepActionProblem, deepBuildOptions, deepBuildProblem, deepCandidate, deepGoal, deepSuggestion, deepSpotProblem, performDeep, undoDeep } from '../src/core/deep'
 import { deepConnected, deepFrontier, deepLadderSegments, DEEP_FOOT } from '../src/core/deepTopology'
 import { deepLampCoverage } from '../src/core/lighting'
 import { bagItems } from '../src/core/bag'
@@ -45,6 +45,65 @@ describe('第三层完整建设章节', () => {
     expect(deserialize(serialize(w))).toMatchObject({ ok: true })
   })
 
+  it('大目标轨道：十三个小步归入四个里程碑，晶簇发现后才亮出电梯计划', () => {
+    const w = secondLayerComplete()
+    expect(deepGoal(w).milestone).toBe(0)
+    enterDeep(w)
+    expect(deepGoal(w).milestone).toBe(1)
+    expandDeep(w); performDeep(w, 'discover')
+    expect(deepGoal(w)).toMatchObject({ milestone: 1, build: 'collector' })
+    expect(deepGoal(w).speech).toContain('电梯')
+    for (const [kind, x] of [['collector', 24], ['distributor', 28], ['lamp', 36]] as const) buildDeep(w, kind, x)
+    expect(deepGoal(w).milestone).toBe(2)
+    for (const [kind, x] of [['workshop', 31], ['furnace', 21]] as const) buildDeep(w, kind, x)
+    expect(deepGoal(w).milestone).toBe(3)
+    performDeep(w, 'smelt')
+    expect(deepGoal(w).speech).toContain('先做 1 个，把竖井支撑牢')
+    const done = liftReady()
+    expect(deepGoal(done).milestone).toBe(3)
+    performDeep(done, 'ride-home')
+    expect(deepGoal(done).milestone).toBe(4)
+  })
+
+  it('章末尾声落在楼上：一层还有没暖灯的小窝时，先做部件再乘梯回窝装灯', () => {
+    const w = liftReady()
+    performDeep(w, 'ride-home')
+    expect(w.deep.completed).toBe(true)
+    expect(deepGoal(w)).toMatchObject({ action: 'collect', done: 13 })
+    w.deep.parts = 1
+    expect(deepGoal(w)).toMatchObject({ action: 'ride-home' })
+    w.exploration.explorer = { x: w.exploration.shaftX!, y: 11 }
+    expect(deepGoal(w)).toMatchObject({ action: undefined, visitPod: w.pods[0].id, label: '去小窝看看暖光灯' })
+    w.pods.forEach(p => { p.warmLamp = true })
+    expect(deepGoal(w)).toMatchObject({ action: 'ride-crystal' })
+  })
+
+  it.each([
+    { crystals: 0, ore: 0, ingots: 0, action: 'collect' },
+    { crystals: 0, ore: 3, ingots: 2, action: 'collect' },
+    { crystals: 1, ore: 2, ingots: 0, action: 'smelt' },
+    { crystals: 1, ore: 0, ingots: 2, action: 'craft' },
+  ] as const)('暖灯尾声按真实库存给出可立即执行的 $action', ({ action, ...resources }) => {
+    const w = liftReady(); performDeep(w, 'ride-home')
+    Object.assign(w.deep, resources, { parts: 0 })
+    expect(deepGoal(w).action).toBe(action)
+    expect(deepActionProblem(w, action)).toBeNull()
+  })
+
+  it('建设目录列出还没建的设施和前置原因，建完一件少一件', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w)
+    expect(deepBuildOptions(w)).toEqual([])
+    performDeep(w, 'discover')
+    const options = deepBuildOptions(w)
+    expect(options.map(o => o.kind)).toEqual(['collector', 'distributor', 'lamp', 'workshop', 'furnace'])
+    expect(options.find(o => o.kind === 'workshop')!.locked).toBe('先装稳光配电箱')
+    expect(options.find(o => o.kind === 'distributor')!.locked).toBeNull()
+    buildDeep(w, 'distributor', 28)
+    expect(deepBuildOptions(w).every(o => o.locked === null)).toBe(true)
+    for (const [kind, x] of [['collector', 24], ['lamp', 36], ['workshop', 31], ['furnace', 21]] as const) buildDeep(w, kind, x)
+    expect(deepBuildOptions(w)).toEqual([])
+  })
+
   it('从晶簇到部件、支撑、电梯和首次乘坐构成真实完成态；重复操作不会重复付费', () => {
     const w = liftReady()
     expect(w.deep).toMatchObject({ lift: true, precision: true, supported: true, completed: false, parts: 0 })
@@ -87,6 +146,58 @@ describe('第三层完整建设章节', () => {
     expect(undoDeep(w, result.change)).toBe(true)
     expect(w.inventory).toEqual({ stone: 27, wood: 20 })
     expect(buildDeep(w, 'collector', 31).ok).toBe(true)
+  })
+
+  it('推荐位只作提示不限制选址：采集台贴天然晶簇，建议位真可建且避开梯口和发现点', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const spot = deepSuggestion(w, 'collector')
+    expect(spot).not.toBeNull()
+    if (spot === null) return
+    expect(deepSpotProblem(w, 'collector', spot)).toBeNull()
+    for (let col = spot; col < spot + 3; col++) expect([27, 30, 38, 19]).not.toContain(col)
+    expect(buildDeep(w, 'collector', spot).ok).toBe(true)
+    expect(deepSuggestion(w, 'collector')).toBeNull()
+    const distributor = deepSuggestion(w, 'distributor')
+    expect(distributor).not.toBeNull()
+    if (distributor === null) return
+    expect(buildDeep(w, 'distributor', distributor).ok).toBe(true)
+    expect(deepSuggestion(w, 'lamp')).not.toBeNull()
+  })
+
+  it('石炉优先贴着工坊，放不下时退回梯口就近；材料不足照样给位置（提示交给红框说明）', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    expect(buildDeep(w, 'distributor', 28).ok).toBe(true)
+    expect(buildDeep(w, 'workshop', 31).ok).toBe(true)
+    const spot = deepSuggestion(w, 'furnace')
+    expect(spot).not.toBeNull()
+    if (spot === null) return
+    expect(deepSpotProblem(w, 'furnace', spot)).toBeNull()
+    for (let col = spot; col < spot + 3; col++) expect([27, 30, 38, 19]).not.toContain(col)
+    const adjacent = spot === 28 - 3 || spot === 31 + 5
+    const near = Math.min(Math.abs(spot - 27), Math.abs(spot + 2 - 27))
+    expect(adjacent || near <= 4).toBe(true)
+    // 建议位只看空间：材料不够时依旧给出位置，点下去由红框说明差什么。
+    w.inventory = { stone: 0, wood: 0 }
+    expect(deepSuggestion(w, 'furnace')).toBe(spot)
+    expect(deepBuildProblem(w, 'furnace', spot)).toContain('还需要')
+  })
+
+  it('点击换算吸附到能放下的位置：盖住点击列、点推荐位取推荐位、放不下保留点击列', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    // 点中格想盖住它自己：宽 3 的采集台以点击列居中，不会整件偏到右侧。
+    expect(deepCandidate(w, 'collector', 24)).toBe(23)
+    // 推荐位框内任何一点都落在推荐位本身。
+    const suggested = deepSuggestion(w, 'collector')!
+    expect(deepCandidate(w, 'collector', suggested + 1)).toBe(suggested)
+    expect(deepCandidate(w, 'collector', suggested)).toBe(suggested)
+    // 盖住天然晶簇那一列无处可放：保留点击列，让红框说明原因。
+    expect(deepCandidate(w, 'collector', 30)).toBe(30)
+    // 宽 5 的工坊点在洞口右侧：原样放会越界，滑回最近能盖住点击列、又不压住发现点的位置。
+    expect(buildDeep(w, 'distributor', 28).ok).toBe(true)
+    const workshop = deepCandidate(w, 'workshop', 37)
+    expect(deepSpotProblem(w, 'workshop', workshop)).toBeNull()
+    expect(37).toBeGreaterThanOrEqual(workshop)
+    expect(37).toBeLessThan(workshop + 5)
   })
 
   it('资源循环可以补充，精密工具改变真实产量，升级不重复扣材料', () => {

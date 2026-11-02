@@ -24,4 +24,4 @@ export const ITEM_ART: Record<string, string> = {
   'crystal-energy': crystalRig, 'crystal-cluster': crystalRig, ore: stone, ingot, part,
 }
 
-export const ITEM_EMOJI: Record<string, string> = { 'ruins-seal':'🪨','ruins-footprint':'🐾', 'wind-echo':'🪨','wind-vane':'🎏', 'water-shell': '🐚', 'water-reed': '🌾', 'old-photo': '🖼️', 'old-key': '🗝️', 'crystal-moss': '🌿', 'old-drill': '🔩', 'warm-wick': '🕯️', 'garden-root': '🌿' }
+export const ITEM_EMOJI: Record<string, string> = { clay: '🧱', 'glow-mushroom': '🍄', 'ruins-seal':'🪨','ruins-footprint':'🐾', 'wind-echo':'🪨','wind-vane':'🎏', 'water-shell': '🐚', 'water-reed': '🌾', 'old-photo': '🖼️', 'old-key': '🗝️', 'crystal-moss': '🌿', 'old-drill': '🔩', 'warm-wick': '🕯️', 'garden-root': '🌿' }

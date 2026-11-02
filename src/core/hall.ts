@@ -3,7 +3,8 @@ import { atuRoute, initialAtuPosition } from './atu'
 import { canPlacePod } from './build'
 import { canAfford, changeMaterials } from './materials'
 import { HALL_PARTNERS, settledPartners } from './partners'
-import { HALL_FOOT, HALL_TOP, hallConnected, hallFacilityWidth, hallFrontier, hallSpan } from './hallTopology'
+import { HALL_FOOT, HALL_TOP, MURAL_SPOT, WARM_LIGHT_SPOT, hallConnected, hallFacilityWidth, hallFrontier, hallSpan } from './hallTopology'
+import { snapFacilityX } from './placement'
 import { TILE, createInitialWorld, freshHall, type Cell, type HallFacility, type HallFacilityKind, type HallState, type Inventory, type SleepPod, type WorldState } from './world'
 import type { MealMove } from './meal'
 
@@ -38,6 +39,10 @@ function placementProblem(w: WorldState, kind: HallFacilityKind, x: number, rest
 }
 export function hallBuildProblem(w: WorldState, kind: HallFacilityKind, x: number): string | null {
   return placementProblem(w, kind, x) ?? (!canAfford(w, HALL_SPECS[kind].cost) || w.deep.parts < HALL_SPECS[kind].parts ? `还需要${hallCostText(kind)}。挖土能找到材料，三层工坊可以继续做部件。` : null)
+}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住旧壁画和暖光遗迹。 */
+export function hallCandidate(w: WorldState, kind: HallFacilityKind, tapX: number): number {
+  return snapFacilityX(tapX, HALL_SPECS[kind].width, x => placementProblem(w, kind, x) === null, { avoid: [MURAL_SPOT.x, WARM_LIGHT_SPOT.x] })
 }
 function commit(w: WorldState, before: HallState, message: string, cost: Inventory = { stone: 0, wood: 0 }, parts = 0, crystals = 0, pod?: SleepPod): HallResult {
   changeMaterials(w, cost, -1); w.deep.parts -= parts; w.deep.crystals -= crystals

@@ -1,4 +1,6 @@
 import { warmLampWorld } from './fixtures/nestWarmLampWorld'
+import { enterDeep, expandDeep, liftReady, secondLayerComplete } from './fixtures/deepWorld'
+import { performDeep } from '../src/core/deep'
 import { completedFinale, workingFinale } from './fixtures/finaleWorld'
 import { workingRuins } from './fixtures/ruinsWorld'
 import { workingVentilation } from './fixtures/ventilationWorld'
@@ -47,6 +49,7 @@ const harness = vi.hoisted(() => {
     setLampPreview: vi.fn(), playDigLoot: vi.fn(),
     playPartnerTravel: vi.fn((_id: WorkerId, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, hit: () => void, done: () => void) => { hit(); done() }),
+    playDeepLift: vi.fn((_from: number, _to: number, done: () => void) => done()),
     cancelPartnerWork: vi.fn(),
     playSoilWork: vi.fn((_plan: SoilPlan, strike: () => void, done: () => void) => { strike(); done() }),
     // 累计帧数：看门狗用它判断画面是不是真的冻住了
@@ -183,6 +186,51 @@ describe('探索会话与存档集成', () => {
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
+  it('第三层真实输入：选址点土不挖；明确进入挖掘后只挖一格，并可返回原设施选址', async () => {
+    const saved = secondLayerComplete(); enterDeep(saved); expandDeep(saved); performDeep(saved, 'discover')
+    harness.store.load.mockResolvedValue(serialize(saved))
+    const deep = vi.fn()
+    const game = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onDeep: deep })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.renderer.playExplorationTravel.mockImplementationOnce((route, done, step) => { route.forEach(step); done() })
+    game.openDeep(); game.deepSelect('collector')
+    const before = serialize(w)
+    harness.handlers.onTap({ x: 40, y: 33 })
+    expect(serialize(w)).toEqual(before)
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digAvailable: true, placing: 'collector' })
+    game.deepDig()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digging: true, placing: null })
+    harness.handlers.onTap({ x: 40, y: 33 })
+    expect(w.tiles[33][40]).toBe(TILE.EMPTY)
+    expect(w.tiles[32][40]).toBe(TILE.SOIL)
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digging: false, placing: 'collector', candidate: null })
+    game.destroy()
+  })
+
+
+  it('第三层电梯成果主动交给真实小窝预览，退出不会重新乘梯或自动安装', async () => {
+    const saved = liftReady(); saved.deep.parts = 1
+    harness.store.load.mockResolvedValue(serialize(saved))
+    const deep = vi.fn(), nest = vi.fn(), milestone = vi.fn(), message = vi.fn()
+    const game = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onDeep: deep, onNestWelcome: nest, onMilestone: milestone })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.renderer.playExplorationTravel.mockImplementationOnce((route, done, step) => { route.forEach(step); done() })
+    game.openDeep(); message.mockClear(); milestone.mockClear(); nest.mockClear()
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ active: true, feedback: { title: '三层家园连通啦', nextLabel: '去小窝看看暖光灯' } })
+    expect(nest).not.toHaveBeenCalled(); expect(milestone).not.toHaveBeenCalled(); expect(message).not.toHaveBeenCalled()
+    expect(w.deep.rides).toBe(1)
+    const before = serialize(w)
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ active: false, feedback: null })
+    expect(nest.mock.calls.at(-1)![0]).toMatchObject({ podId: w.pods[0].id, lamp: { installed: false, problem: null } })
+    expect(serialize(w)).toEqual(before)
+    game.closeNestWelcome(); vi.advanceTimersByTime(4000)
+    expect(nest.mock.calls.at(-1)![0]).toBeNull()
+    expect(w.deep.rides).toBe(1); expect(w.deep.parts).toBe(1); expect(w.pods[0].warmLamp).not.toBe(true)
+    game.destroy()
+  })
 
   it('小窝预览不扣款，施工期间物品栏输入门禁不取消，结算保存/撤销与旧回调安全', async () => {
     harness.store.load.mockResolvedValue(serialize(warmLampWorld(true)))
@@ -358,6 +406,48 @@ describe('探索会话与存档集成', () => {
     expect(restoredWork.mock.calls.some(([state]) => state !== null)).toBe(false)
     harness.handlers.onTap({ x: 30, y: 21 }); expect(loaded.farm.food).toBe(food + 1)
     restored.destroy()
+  })
+
+  it('照顾节奏：伙伴隔一阵子开口点名心心，接现有的开饭；吃完重新攒', async () => {
+    const w = secondLayerComplete()
+    // 第二间舱让小满有床：困了的照顾时刻才有"回小窝睡一觉"可回应。
+    for (const x of [9, 10, 11]) for (const y of [9, 10, 11]) if (w.tiles[y]?.[x] === TILE.SOIL) w.tiles[y][x] = TILE.EMPTY
+    expect(placePod(w, 9, 10)).not.toBeNull()
+    harness.store.load.mockResolvedValue(serialize(w))
+    const conversation = vi.fn()
+    const session = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onPartnerConversation: conversation })
+    const world = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    expect(world.farm.food).toBeGreaterThan(0)
+    expect(conversation.mock.calls.some(([c]) => c?.action?.id === 'share-meal')).toBe(false)
+    // 攒够一小段"亲手做过的事"：推进任务若干步，照顾时刻就该到来，伙伴主动点名"心心"。
+    for (let n = 0; n < 20; n++) session.prepareNest()
+    expect(harness.renderer.playPartnerReaction).toHaveBeenCalledWith(expect.any(String), expect.stringContaining('心心'))
+    // 点开说话的伙伴：照顾对话递上现有的开饭动作。
+    session.talkToPartner('xiaoman')
+    const care = conversation.mock.calls.at(-1)![0]
+    expect(care.lines.join(' ')).toContain('心心')
+    expect(care.action).toMatchObject({ id: 'share-meal', label: '一起吃一口' })
+    // 回应开饭：走既有结算（食物 -1），节奏重新攒，对话回到日常。
+    const food = world.farm.food
+    session.partnerAction()
+    expect(world.farm.food).toBe(food - 1)
+    vi.advanceTimersByTime(9500)
+    session.talkToPartner('xiaoman')
+    expect(conversation.mock.calls.at(-1)![0].action).toBeNull()
+    // 第二轮轮到"困了"：伙伴想回小窝，回应后真的睡进床位（退出站位）。
+    for (let n = 0; n < 20; n++) session.prepareNest()
+    session.talkToPartner('xiaoman')
+    const sleepy = conversation.mock.calls.at(-1)![0]
+    expect(sleepy.lines.join(' ')).toContain('困')
+    expect(sleepy.action).toMatchObject({ id: 'take-rest', label: '回小窝睡一觉' })
+    session.partnerAction()
+    expect(world.resting).toEqual(['xiaoman'])
+    expect(world.workers.xiaoman).toBeUndefined()
+    expect(harness.renderer.refreshFriends).toHaveBeenCalled()
+    // 开饭会把睡觉的伙伴都叫醒。
+    session.feed()
+    expect(world.resting).toEqual([])
+    session.destroy()
   })
 
   it('终章与旧层互斥，后台和离页取消搬运不扣料，阿土对话与收藏定位接回九层',async()=>{

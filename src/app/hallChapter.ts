@@ -1,9 +1,11 @@
-import { buildHall, hallActionProblem, hallBuildProblem, hallCostText, hallFacility, hallFacilityAt, hallGoal, hallReady, HALL_SPECS, performHall, planHallGathering, type HallAction, type HallChange } from '../core/hall'
-import { HALL_FOOT, MURAL_SPOT, WARM_LIGHT_SPOT, hallFrontier, hallShaftCell } from '../core/hallTopology'
+import { buildHall, hallActionProblem, hallBuildProblem, hallCandidate, hallCostText, hallFacility, hallFacilityAt, hallGoal, hallReady, HALL_SPECS, performHall, planHallGathering, type HallAction, type HallChange } from '../core/hall'
+import { canDig } from '../core/dig'
+import { HALL_FOOT, HALL_TOP, MURAL_SPOT, WARM_LIGHT_SPOT, hallFacilityWidth, hallFrontier, hallShaftCell } from '../core/hallTopology'
 import { atuRoute, initialAtuPosition } from '../core/atu'
 import { settledPartners } from '../core/partners'
 import { TILE, TILE_SIZE as T, type Cell, type HallFacilityKind, type WorkerId, type WorldState } from '../core/world'
 import type { PixiWorldRenderer } from '../render/PixiRenderer'
+import type { GuideSpot } from '../render/guideFocus'
 import { playHallSound } from '../render/hallSound'
 
 export interface HallUI {
@@ -11,13 +13,14 @@ export interface HallUI {
   ruinsLift?:boolean;
   ventilationLift?:boolean;
   available: boolean; active: boolean; busy: boolean; entered: boolean; completed: boolean; celebrating: boolean
+  header: string; scout: boolean
   title: string; speaker: string; speech: string; label: string; hint: string; done: number
   placing: HallFacilityKind | null; candidate: number | null; valid: boolean; selected: HallFacilityKind | null
   reservoirLift?: boolean; gardenLift?: boolean; beds: number; food: number; lift: boolean; parts: number; crystals: number
   album: { title: string; detail: string }[]; page: number
   buildings: { kind: HallFacilityKind; name: string; built: boolean }[]
 }
-export const emptyHallUI = (): HallUI => ({ available: false, active: false, busy: false, entered: false, completed: false, celebrating: false, title: '', speaker: '', speech: '', label: '', hint: '', done: 0, placing: null, candidate: null, selected: null, valid: false, beds: 0, food: 0, lift: false, parts: 0, crystals: 0, album: [], page: 0, buildings: [] })
+export const emptyHallUI = (): HallUI => ({ available: false, active: false, busy: false, entered: false, completed: false, celebrating: false, header: '', scout: false, title: '', speaker: '', speech: '', label: '', hint: '', done: 0, placing: null, candidate: null, selected: null, valid: false, beds: 0, food: 0, lift: false, parts: 0, crystals: 0, album: [], page: 0, buildings: [] })
 
 /** 单一关注对象：目标／选址／当前设施／施工／庆典依次替换。 */
 export class HallChapter {
@@ -25,20 +28,37 @@ export class HallChapter {
   private placing: HallFacilityKind | null = null
   private selected: HallFacilityKind | null = null
   private candidate: number | null = null
+  private hoverX: number | null = null
   private running = false
   private celebrating = false
+  /** "我自己去地图上找"：面板收起、目标继续在地图上发光，点到目标照常交接回面板。 */
+  private scouting = false
   private page = 0
   private serial = 0
   private timeout: ReturnType<typeof setTimeout> | undefined
   get busy(): boolean { return this.running }
   get active(): boolean { return this.opened }
+  /** 正在选址的设施；指针据此变成"可放置"。 */
+  get placingKind(): HallFacilityKind | null { return this.placing }
+  /** 该格在选址带内且不可挖：光标显示"可放置"，点到泥土仍可挖。 */
+  placingCell(p: Cell | null): boolean {
+    const w = this.ports.world()
+    return this.placing !== null && !!p && p.y >= 42 && p.y <= 47 && !canDig(w, p.x, p.y).ok
+  }
+  /** 桌面悬停：影子跟着指针走到吸附位；点下候选位后交给绿/红框，不再跟手。 */
+  hover(p: Cell | null): void {
+    if (!this.placing || this.running || this.candidate !== null) return
+    const x = this.placingCell(p) ? hallCandidate(this.ports.world(), this.placing, p!.x) : null
+    if (x === this.hoverX) return
+    this.hoverX = x; this.ports.view.setHallPreview?.(this.placing, x)
+  }
   constructor(private ports: { world(): WorldState; view: PixiWorldRenderer; emit(s: HallUI): void; prepare(): void; changed(): void; notify(s: string): void; record(c: HallChange): void; dig(p: Cell): void; milestone(title: string, detail: string): void }) {}
   refresh(): void {
     const w = this.ports.world(), h = w.hall, goal = hallGoal(w)
-    let { title, speaker, speech, label } = goal, hint = ''
-    if (this.selected) { title = HALL_SPECS[this.selected].name; speech = HALL_SPECS[this.selected].detail; speaker = '阿土'; label = '看看下一件事' }
+    let { title, speaker, speech, label } = goal, hint = '', header = '第 4 章 · 暖光大厅'
+    if (this.selected) { title = HALL_SPECS[this.selected].name; speech = HALL_SPECS[this.selected].detail; speaker = '阿土'; label = '看看下一件事'; header = `${speaker}的${HALL_SPECS[this.selected].name} · 第 4 层` }
     if (this.selected === 'hall' && h.tableReady) { label = '邀请大家来暖屋'; hint = hallActionProblem(w, 'feast') ?? '六个座位各不相同，大家会沿真实通路过来。' }
-    if (this.placing) { title = `摆放${HALL_SPECS[this.placing].name}`; speaker = '阿土'; speech = '点岩壁选择位置。绿框能建，红框会告诉你还差什么；拖动只移动地图。'; label = '就在这里建造'; hint = this.candidate === null ? hallCostText(this.placing) : hallBuildProblem(w, this.placing, this.candidate) ?? `${hallCostText(this.placing)} · 这里放得下` }
+    if (this.placing) { title = `摆放${HALL_SPECS[this.placing].name}`; speaker = '阿土'; speech = '点岩壁选择位置。绿框能建，红框会告诉你还差什么；拖动只移动地图。'; label = '就在这里建造'; hint = this.candidate === null ? `${hallCostText(this.placing)} · 点泥土先挖开，点空洞放影子。` : hallBuildProblem(w, this.placing, this.candidate) ?? `${hallCostText(this.placing)} · 这里放得下` }
     if (!this.placing && !this.selected && goal.action) hint = hallActionProblem(w, goal.action) ?? ''
     if (this.celebrating) { title = '六个人，一个暖暖的家'; speaker = '阿土'; speech = '阿灯举起小灯，小满端来蔬菜汤，大家都给自己的新家留了一份回忆。这里是第四章的庆典，九层旅途还在继续。'; label = '继续建设我们的家'; hint = '暖屋宴已记入家园相册，随时可以再聚一桌。' }
     if (this.running) { label = ''; hint = '拖图可以看看现场，点“停下来”会保留已完成的部分。'; speech = '伙伴沿通道走到现场，动手完成后才会扣材料、改变家园。' }
@@ -57,25 +77,42 @@ export class HallChapter {
     if(w.finale.completed)album.push({title:'九层家园的暖屋日',detail:'九位伙伴沿亲手开出的通道到齐，把花园的收成、回廊的清水和工区的风铃聚成一桌。终章完成，家还可以继续建。'})
     this.page = Math.max(0, Math.min(this.page, album.length - 1))
     if(w.ventilation.gifts>0)album.push({title:'听见家园的风',detail:`铃铃与阿木的${w.ventilation.hallArt==='mobile'?'叶片风饰':'铜管风铃'}挂进大厅。风从第七层连回九位伙伴的家。`})
-    this.ports.emit({finaleLift:w.finale.liftExtended, ruinsLift:w.ruins.liftExtended, available: hallReady(w), active: this.opened, busy: this.running, entered: h.entered, completed: h.completed, celebrating: this.celebrating, title, speaker, speech, label, hint, done: goal.done, placing: this.placing, selected: this.selected, candidate: this.candidate, valid: this.placing !== null && this.candidate !== null && !hallBuildProblem(w, this.placing, this.candidate), beds: settledPartners(w), food: w.farm.food, parts: w.deep.parts, crystals: w.deep.crystals, lift: h.liftExtended, gardenLift: w.garden.liftExtended, ventilationLift:w.ventilation.liftExtended,reservoirLift: w.reservoir.liftExtended, album, page: this.page, buildings: (Object.keys(HALL_SPECS) as HallFacilityKind[]).map(kind => ({ kind, name: HALL_SPECS[kind].name, built: !!hallFacility(w, kind) })) })
+    this.ports.view.setHallPreview?.(this.placing, this.candidate ?? this.hoverX)
+    // 行动类小步在地图上亮出发生地点：目标是已建设施就框整座，其余框目标格。
+    let focusSpot: GuideSpot | null = null
+    if ((this.opened || this.scouting) && !this.running && !this.placing && !this.selected && !this.celebrating && !goal.build && goal.target) {
+      const f = hallFacilityAt(w, goal.target)
+      focusSpot = f ? { x: f.x, y: HALL_TOP, w: hallFacilityWidth(f.kind), h: HALL_FOOT - HALL_TOP + 1 } : { x: goal.target.x, y: goal.target.y, w: 1, h: 1 }
+    }
+    this.ports.view.setGuideFocus?.(this, focusSpot)
+    this.ports.emit({finaleLift:w.finale.liftExtended, ruinsLift:w.ruins.liftExtended, available: hallReady(w), active: this.opened, busy: this.running, header, scout: !this.running && !this.placing && !this.selected && !this.celebrating && !goal.build && !!goal.target, entered: h.entered, completed: h.completed, celebrating: this.celebrating, title, speaker, speech, label, hint, done: goal.done, placing: this.placing, selected: this.selected, candidate: this.candidate, valid: this.placing !== null && this.candidate !== null && !hallBuildProblem(w, this.placing, this.candidate), beds: settledPartners(w), food: w.farm.food, parts: w.deep.parts, crystals: w.deep.crystals, lift: h.liftExtended, gardenLift: w.garden.liftExtended, ventilationLift:w.ventilation.liftExtended,reservoirLift: w.reservoir.liftExtended, album, page: this.page, buildings: (Object.keys(HALL_SPECS) as HallFacilityKind[]).map(kind => ({ kind, name: HALL_SPECS[kind].name, built: !!hallFacility(w, kind) })) })
   }
   show(focus = false): void {
     if (this.running || !hallReady(this.ports.world())) return
-    this.ports.prepare(); this.opened = true; this.selected = null; this.placing = null; this.candidate = null
+    this.ports.prepare(); this.opened = true; this.scouting = false; this.selected = null; this.placing = null; this.candidate = null; this.hoverX = null
     this.ports.view.setHallPreview?.(null, null)
     if (focus) { const p = hallGoal(this.ports.world()).target; this.ports.view.focusOn((p.x + .5) * T, (p.y - 1) * T, 'building') }
     this.refresh()
   }
   close(): void {
     if (this.running) this.cancel()
-    this.opened = false; this.placing = null; this.selected = null; this.candidate = null; this.celebrating = false
+    this.opened = false; this.scouting = false; this.placing = null; this.selected = null; this.candidate = null; this.hoverX = null; this.celebrating = false
     this.ports.view.setHallPreview?.(null, null); this.ports.view.releaseDeepCamera?.(); this.ports.view.finishMealGather?.(); this.refresh()
+  }
+  /** "我自己去地图上找"：收起面板，镜头指到这一步发生的地方，目标继续发光等孩子来点。 */
+  scout(): void {
+    if (this.running || this.placing || this.selected || this.celebrating) return
+    const goal = hallGoal(this.ports.world())
+    if (goal.build || !goal.target) return
+    this.opened = false; this.scouting = true
+    this.ports.view.focusOn((goal.target.x + .5) * T, (goal.target.y - 1) * T, 'building')
+    this.refresh()
   }
   albumPage(delta: number): void { this.page += delta; this.refresh() }
   select(kind: HallFacilityKind): void {
     if (this.running) return
     this.show(); const w = this.ports.world(), f = kind === 'nest' && settledPartners(w) < 6 ? undefined : hallFacility(w, kind)
-    this.selected = f ? kind : null; this.placing = f ? null : kind; this.candidate = null
+    this.selected = f ? kind : null; this.placing = f ? null : kind; this.candidate = null; this.hoverX = null
     const p = f ?? { x: w.exploration.shaftX ?? 27, y: HALL_FOOT }
     this.ports.view.focusOn((p.x + (f ? HALL_SPECS[kind].width / 2 : .5)) * T, (HALL_FOOT - 1) * T, 'building'); this.refresh()
   }
@@ -85,7 +122,10 @@ export class HallChapter {
     if (this.running) return true
     if (this.placing) {
       if (p.y < 42 || p.y > 47) { this.ports.notify('在第 4 层的岩壁上选择位置吧。'); return true }
-      this.candidate = p.x; this.ports.view.setHallPreview?.(this.placing, p.x); this.refresh(); return true
+      // 点到还盖着的泥土或矿脉：照旧挖开（可撤销），影子留着，挖完再点空洞放置。
+      if (canDig(w, p.x, p.y).ok) return false
+      this.candidate = hallCandidate(w, this.placing, p.x); this.hoverX = null
+      this.ports.view.setHallPreview?.(this.placing, this.candidate); this.refresh(); return true
     }
     if (!w.hall.entered && hallShaftCell(w, p.x, p.y)) { this.show(); return true }
     if (w.hall.entered) {
@@ -109,7 +149,7 @@ export class HallChapter {
       if (problem) { this.ports.notify(problem); return }
       this.walk({ x, y: HALL_FOOT }, () => this.work('atu', { x, y: HALL_FOOT }, () => {
         const result = buildHall(w, kind, x)
-        if (result.ok) { this.ports.record(result.change); this.placing = null; this.candidate = null; this.ports.view.setHallPreview?.(null, null); this.ports.view.refresh(); playHallSound('build') }
+        if (result.ok) { this.ports.record(result.change); this.placing = null; this.candidate = null; this.hoverX = null; this.ports.view.setHallPreview?.(null, null); this.ports.view.refresh(); playHallSound('build') }
         this.ports.notify(result.message); this.finish()
       })); return
     }
@@ -140,16 +180,37 @@ export class HallChapter {
     const w = this.ports.world(), route = atuRoute(w, w.exploration.explorer ?? initialAtuPosition(w), to, true)
     if (!route) { this.ports.notify('先挖通两格高的通道。'); return }
     const token = this.begin()
+    this.travelAtu(to, route, token, done)
+  }
+  private travelAtu(to: Cell, route: Cell[], token: number, done: () => void): void {
+    const w = this.ports.world()
     this.ports.view.playExplorationTravel(route, () => { if (token === this.serial) { w.exploration.explorer = { ...to }; done() } }, p => { if (token === this.serial) { w.exploration.explorer = { ...p }; this.ports.changed() } })
+  }
+  private travelPartner(id: WorkerId, route: Cell[], token: number, done: () => void): void {
+    const w = this.ports.world()
+    this.ports.view.playPartnerTravel(id, route, p => { if (token === this.serial) { w.workers[id] = { ...p }; this.ports.changed() } }, () => { if (token === this.serial) done() })
+  }
+  private partnerWorks(id: WorkerId, at: Cell, route: Cell[], token: number, done: () => void): void {
+    this.ports.view.playPartnerWork({ worker: id, at, route, target: { kind: 'deep-rock', x: at.x, y: at.y + 1 } }, () => {}, () => { if (token === this.serial) done() })
   }
   private work(id: 'atu' | WorkerId, at: Cell, done: () => void): void {
     const w = this.ports.world(), token = this.serial
-    if (id === 'atu') { this.ports.view.playHallWork(at, () => { if (token === this.serial) done() }); return }
+    if (id === 'atu') { this.ports.view.playAtuWork(at, () => { if (token === this.serial) done() }); return }
     const from = w.workers[id], route = from && atuRoute(w, from, at, true)
     if (!route) { this.ports.notify('伙伴还走不到施工点，先接通梯口。'); this.finish(); return }
-    this.ports.view.playPartnerTravel(id, route, p => { if (token === this.serial) { w.workers[id] = { ...p }; this.ports.changed() } }, () => {
-      if (token === this.serial) this.ports.view.playPartnerWork({ worker: id, at, route, target: { kind: 'deep-rock', x: at.x, y: at.y + 1 } }, () => {}, () => { if (token === this.serial) done() })
-    })
+    this.travelPartner(id, route, token, () => this.partnerWorks(id, at, route, token, done))
+  }
+  /** 阿土和动手的伙伴同时走向施工点，都到了伙伴才动手。 */
+  private walkTogether(id: WorkerId, at: Cell, done: () => void): void {
+    const w = this.ports.world(), atuPath = atuRoute(w, w.exploration.explorer ?? initialAtuPosition(w), at, true)
+    if (!atuPath) { this.ports.notify('先挖通两格高的通道。'); return }
+    const from = w.workers[id], partnerPath = from && atuRoute(w, from, at, true)
+    if (!partnerPath) { this.ports.notify('伙伴还走不到施工点，先接通梯口。'); return }
+    const token = this.begin()
+    let arrived = 0
+    const both = (): void => { if (token === this.serial && ++arrived === 2) this.partnerWorks(id, at, partnerPath, token, done) }
+    this.travelAtu(at, atuPath, token, both)
+    this.travelPartner(id, partnerPath, token, both)
   }
   perform(action: HallAction): void {
     if (this.running) return
@@ -159,11 +220,15 @@ export class HallChapter {
     if (action === 'feast') { this.feast(); return }
     const at = action === 'table' ? hallFacility(w, 'hall')! : { x: w.exploration.shaftX!, y: ['inspect', 'brace'].includes(action) ? 33 : HALL_FOOT }
     this.ports.view.beginDeepCamera?.(); this.ports.view.focusOn((at.x + .5) * T, (at.y - 1) * T, 'building')
-    this.walk(at, () => this.work(action === 'brace' ? 'ayan' : action === 'extend' || action === 'table' ? 'amu' : action === 'power' ? 'adeng' : 'atu', at, () => {
+    const actor = action === 'brace' ? 'ayan' : action === 'extend' || action === 'table' ? 'amu' : action === 'power' ? 'adeng' : 'atu'
+    const settle = (): void => {
       const result = performHall(w, action)
       if (result.ok) { if (!['inspect', 'enter'].includes(action)) this.ports.record(result.change); playHallSound(action === 'inspect' ? 'creak' : action === 'brace' ? 'brace' : action === 'power' ? 'light' : 'build'); if (action === 'enter') this.ports.milestone('第 4 层 · 暖光大厅', '自由选择大厅位置，给六位伙伴留一个相聚的地方') }
       this.ports.notify(result.message); this.finish()
-    }))
+    }
+    // 阿土自己动手才串行；交给伙伴的活，两个人一起走过去。
+    if (actor === 'atu') this.walk(at, () => this.work('atu', at, settle))
+    else this.walkTogether(actor, at, settle)
   }
   private excavate(): void {
     const w = this.ports.world(), token = this.begin()

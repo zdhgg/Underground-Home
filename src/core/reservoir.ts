@@ -2,7 +2,8 @@ import { atuRoute, initialAtuPosition } from './atu'
 import { canPlacePod } from './build'
 import { canAfford, changeMaterials } from './materials'
 import { partnerBed } from './partners'
-import { RESERVOIR_FOOT, TUANTUAN_SPOT, reservoirCanalPath, reservoirClear, reservoirConnected, reservoirNetwork, reservoirSpan, reservoirWidth } from './reservoirTopology'
+import { RESERVOIR_FOOT, REED_SPOT, SHELL_SPOT, TUANTUAN_SPOT, reservoirCanalPath, reservoirClear, reservoirConnected, reservoirNetwork, reservoirSpan, reservoirWidth } from './reservoirTopology'
+import { snapFacilityX } from './placement'
 import { TILE, createInitialWorld, freshReservoir, type Cell, type Inventory, type ReservoirFacilityKind, type ReservoirState, type SleepPod, type WaterRoute, type WorldState } from './world'
 export const RESERVOIR_SPECS: Record<ReservoirFacilityKind, { name: string; cost: Inventory; parts: number; detail: string }> = {
   intake: { name: '卵石滤水口', cost: { stone: 3, wood: 1 }, parts: 0, detail: '小泉把清水接进卵石层。过滤后的水送入后侧管渠，不占大家走路的地方。' },
@@ -36,6 +37,10 @@ function placementProblem(w: WorldState, kind: ReservoirFacilityKind, x: number,
 }
 export function reservoirBuildProblem(w: WorldState, kind: ReservoirFacilityKind, x: number): string | null {
   return placementProblem(w, kind, x) ?? (!canAfford(w, RESERVOIR_SPECS[kind].cost) || w.deep.parts < RESERVOIR_SPECS[kind].parts ? `需要${reservoirCostText(kind)}。可继续挖土，或回三层工坊加工部件。` : null)
+}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住水纹贝印和芦苇小穗。 */
+export function reservoirCandidate(w: WorldState, kind: ReservoirFacilityKind, tapX: number): number {
+  return snapFacilityX(tapX, reservoirWidth(kind), x => placementProblem(w, kind, x) === null, { avoid: [SHELL_SPOT.x, REED_SPOT.x] })
 }
 function commit(w: WorldState, before: ReservoirState, message: string, cost: Inventory = { stone: 0, wood: 0 }, parts = 0, crystals = 0, pod?: SleepPod): ReservoirResult {
   changeMaterials(w, cost, -1); w.deep.parts -= parts; w.deep.crystals -= crystals

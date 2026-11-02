@@ -1,20 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, ref } from 'vue'
 import GuidePanel from './GuidePanel.vue'
-import DepthNavigation from './DepthNavigation.vue'
 import { HOME_WISH_LIMIT, type HomeWish, type HomeWishId } from '../app/homeWishes'
-import type { DepthView } from '../render/camera'
 import atuPortraitUrl from '../assets/art/characters/atu-portrait-v1.png'
 
 const props = defineProps<{
   open: boolean
-  /** 没有别的面板抢注意力时才显示主线；否则只剩楼层导航。 */
+  /** 没有别的面板抢注意力时才显示主线；否则只剩一句安静提示（楼层导航在右侧常驻条）。 */
   guideVisible: boolean
-  /** 左侧已有章节/建筑面板：小本子停到旁边，不压住它。 */
+  /** 左侧已有建筑/对话面板：小本子停到旁边，不压住它。 */
   docked?: boolean
-  /** 窄屏章节面板在底部；楼层换成从上方展开，避免压住面板。 */
-  dockTop?: boolean
+  /** 章节页翻进本子顶部：主线让位，本子保持展开显示当前章节。 */
+  chapterOpen?: boolean
+  deepChapter?: boolean
   layerLabel?: string
+  /** 当前镜头所在的空间，和主线目标分开写清，避免跨层视野让孩子误以为目标就在眼前。 */
+  viewLayerLabel?: string
   title: string
   done: number
   total: number
@@ -23,18 +24,9 @@ const props = defineProps<{
   primaryDisabled?: boolean
   /** 可选的家园活动；最多显示两条，没有时整个栏目不出现。 */
   wishes?: HomeWish[]
-  view: DepthView
-  crystalAvailable?: boolean
-  hallAvailable?: boolean
-  gardenAvailable?: boolean
-  finaleAvailable?: boolean
-  ruinsAvailable?: boolean
-  ventilationAvailable?: boolean
-  reservoirAvailable?: boolean
 }>()
 const emit = defineEmits<{
   open: []; close: []; primary: []; wish: [id: HomeWishId]
-  home: []; water: []; crystal: []; hall: []; garden: []; reservoir: []; finale: []; ruins: []; ventilation: []; overview: []; locked: [reason: string]
 }>()
 const tab = ref<HTMLButtonElement | null>(null)
 const closeButton = ref<HTMLButtonElement | null>(null)
@@ -43,6 +35,7 @@ const portraitFailed = ref(false)
 const wishes = computed(() => (props.wishes ?? []).slice(0, HOME_WISH_LIMIT))
 /** 窄屏只缩短标题，不缩短含义；按钮的无障碍名称仍用完整操作文案。 */
 const SHORT_WISH_TITLES: Partial<Record<HomeWishId, string>> = {
+  'tired-climb': '梯子好长呀',
   'nest-warm-lamp': '小窝添盏暖光灯',
   'ripe-planter': '菜长熟啦！',
 }
@@ -61,7 +54,7 @@ async function openNotebook(): Promise<void> {
 </script>
 
 <template>
-  <aside class="notebook" :class="{ 'is-open': props.open, 'is-docked': props.docked, 'is-floors-only': props.open && !props.guideVisible, 'dock-top': props.dockTop }" aria-label="阿土的探索小本子">
+  <aside class="notebook" :class="{ 'is-open': props.open, 'is-docked': props.docked, 'is-deep': props.deepChapter }" aria-label="阿土的探索小本子">
     <button v-show="!props.open" ref="tab" class="notebook-tab" type="button" aria-expanded="false" aria-controls="explorer-notebook" @click="openNotebook">
       <span class="notebook-face" aria-hidden="true">
         <img v-if="!portraitFailed" :src="atuPortraitUrl" alt="" @error="portraitFailed = true" />
@@ -78,14 +71,17 @@ async function openNotebook(): Promise<void> {
         </span>
         <div class="notebook-title">
           <strong>阿土的探索小本子</strong>
-          <small>{{ props.guideVisible ? '先看看现在要做什么' : '先做完眼前这件事，楼层随时能换' }}</small>
+          <small>{{ props.guideVisible ? (props.viewLayerLabel ? `正在看：${props.viewLayerLabel}` : '先看看现在要做什么') : '先做完眼前这件事，楼层在右边' }}</small>
         </div>
         <button ref="closeButton" class="notebook-close" type="button" aria-label="收起探索小本子" @click="closeNotebook">
           <span aria-hidden="true">‹</span>
         </button>
       </header>
       <div class="notebook-body">
-        <section v-if="props.open && props.guideVisible" class="notebook-mission" aria-labelledby="explorer-mission-heading">
+        <section v-if="props.open && props.chapterOpen" class="notebook-chapter" aria-label="当前这一章">
+          <slot name="chapter" />
+        </section>
+        <section v-else-if="props.open && props.guideVisible" class="notebook-mission" aria-labelledby="explorer-mission-heading">
           <h2 id="explorer-mission-heading">⭐ 现在要做什么？</h2>
           <GuidePanel embedded :layer-label="layerLabel" :title="title" :done="done" :total="total" :finished="finished">
             <template #quick-action>
@@ -113,10 +109,6 @@ async function openNotebook(): Promise<void> {
             </li>
           </ul>
         </section>
-        <section class="notebook-floors" aria-labelledby="explorer-floors-heading">
-          <h2 id="explorer-floors-heading">🗺️ 去哪里？</h2>
-          <DepthNavigation :view="view" :crystal-available="crystalAvailable" :hall-available="hallAvailable" :garden-available="gardenAvailable" :reservoir-available="reservoirAvailable" :ventilation-available="ventilationAvailable" :ruins-available="ruinsAvailable" :finale-available="finaleAvailable" @home="$emit('home')" @water="$emit('water')" @crystal="$emit('crystal')" @hall="$emit('hall')" @garden="$emit('garden')" @reservoir="$emit('reservoir')" @ventilation="$emit('ventilation')" @ruins="$emit('ruins')" @finale="$emit('finale')" @overview="$emit('overview')" @locked="$emit('locked', $event)" />
-        </section>
       </div>
     </section>
   </aside>
@@ -139,12 +131,13 @@ async function openNotebook(): Promise<void> {
 .notebook-title { min-width: 0; flex: 1; line-height: 1.25; }
 .notebook-title strong { display: block; font-size: 14px; color: #2f5a45; overflow-wrap: anywhere; }
 .notebook-title small { display: block; margin-top: 2px; color: #7b8d7f; font-size: 11px; }
+.notebook.is-deep .notebook-sheet { height:100%; }.notebook.is-deep .notebook-head { display:none; }.notebook.is-deep .notebook-body { display:flex; flex-direction:column; flex:1; overflow:hidden; }.notebook.is-deep .notebook-chapter { display:flex; flex-direction:column; flex:1; min-height:0; }
 .notebook-close { width: 44px; height: 44px; flex: none; margin: -6px -4px -6px 0; border-radius: 10px; background: transparent; color: #4c6b59; font-size: 24px; line-height: 1; }
 .notebook-close:hover { background: #e7efe2; }
 .notebook-close span { display: block; transform: translateY(-2px); }
 .notebook-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 12px; display: grid; gap: 12px; align-content: start; }
-.notebook-mission, .notebook-wishes, .notebook-floors { display: grid; gap: 8px; }
-.notebook-mission, .notebook-wishes { padding-bottom: 12px; border-bottom: 1px dashed #dbe5d3; }
+.notebook-mission, .notebook-wishes, .notebook-chapter { display: grid; gap: 8px; }
+.notebook-body > section:not(:last-child) { padding-bottom: 12px; border-bottom: 1px dashed #dbe5d3; }
 .notebook-body h2 { margin: 0; font-size: 12px; font-weight: 700; color: #6d8474; letter-spacing: .3px; }
 .notebook-wishes { gap: 6px; }
 .wish-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
@@ -162,15 +155,15 @@ async function openNotebook(): Promise<void> {
 .notebook-primary:disabled { opacity: .55; cursor: default; }
 .notebook-quiet { margin: 0; padding: 10px 12px; border-radius: 10px; background: #f2f6ec; color: #637a6b; font-size: 12px; line-height: 1.6; }
 @media (max-width: 720px) {
+  .notebook.is-deep { top:auto; bottom:62px; width:calc(100% - 16px); height:48%; max-height:380px; }.notebook.is-deep .notebook-sheet { max-height:100%; }.notebook.is-deep .notebook-body { padding:10px 12px; }
   .notebook { top: 8px; left: 8px; width: min(280px, calc(100% - 16px)); }
-  /* 楼上/施工面板占着左上角时，楼层从底部展开；章节面板占底部时，从上方展开。 */
+  /* 建筑/对话面板占着左上角时，楼层从底部展开，不压住面板。 */
   .notebook.is-docked.is-open { top: auto; bottom: 60px; left: 8px; height: auto; max-height: 34%; }
-  .notebook.is-docked.is-open.dock-top { top: 8px; bottom: auto; max-height: calc(52% - 74px); }
   .notebook-head { padding: 6px 6px 6px 10px; }
   .notebook-tab { padding-right: 10px; }
   .notebook-sheet { max-height: 66%; }
   .notebook-body { padding: 8px; gap: 5px; }
-  .notebook-mission, .notebook-wishes { padding-bottom: 6px; }
+  .notebook-body > section:not(:last-child) { padding-bottom: 6px; }
   /* 窄屏心愿改成“图标＋短名称＋去看看”的横向条目；完整说明留在桌面端。 */
   .notebook-wishes { gap: 4px; }
   .wish-list { gap: 2px; }

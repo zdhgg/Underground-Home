@@ -403,6 +403,19 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('选择位置放置晶簇采集台')
     expect(stage.querySelector('.facilities')).toBeNull()
     expect(stage.querySelectorAll('[data-primary-action]')).toHaveLength(1)
+    hooks.onDeep?.({ ...deep, plan: true, milestone: 1 }); await nextTick()
+    expect(stage.querySelector('.big-goal')?.textContent).toContain('电梯')
+    expect(stage.querySelectorAll('.milestones li')).toHaveLength(4)
+    expect(stage.querySelectorAll('.milestones [data-primary-action]')).toHaveLength(0)
+    assertAttention(stage, 'deep')
+    hooks.onDeep?.({ ...deep, plan: true, milestone: 2, builds: [
+      { kind: 'workshop', name: '岩壁工坊', icon: '🔧', cost: '石料 3 · 旧木料 3', locked: '先装稳光配电箱' },
+      { kind: 'furnace', name: '小石炉', icon: '🔥', cost: '石料 3 · 旧木料 1', locked: null },
+    ] }); await nextTick()
+    expect(stage.querySelectorAll('.builds button')).toHaveLength(2)
+    expect(stage.querySelector<HTMLButtonElement>('.builds button')?.disabled).toBe(true)
+    expect(stage.querySelectorAll('.builds [data-primary-action]')).toHaveLength(0)
+    assertAttention(stage, 'deep')
     hooks.onDeep?.({ ...deep, placing: 'collector', title: '摆放晶簇采集台', speech: '采集台建 1 台就够了。', hint: '石料 2 · 旧木料 2 · 本章只需 1 台', label: '就在这里建造', candidate: 31, valid: false }); await nextTick()
     assertAttention(stage, 'deep'); expect(stage.querySelector<HTMLButtonElement>('[data-primary-action]')?.disabled).toBe(true)
     hooks.onDeep?.({ ...deep, placing: 'workshop', candidate: 31, valid: true, label: '就在这里建造' }); await nextTick(); assertAttention(stage, 'deep')
@@ -411,10 +424,56 @@ describe('后续内容必须遵守的单一主要关注对象契约', () => {
     hooks.onDeep?.({ ...deep, selected: 'workshop', title: '岩壁工坊', label: '制作部件' }); await nextTick(); assertAttention(stage, 'deep')
     hooks.onPartnerConversation?.({ ...conversation, partnerId: 'amu', name: '阿木' }); await nextTick(); assertAttention(stage, 'conversation')
     hooks.onPartnerConversation?.(null); await nextTick(); assertAttention(stage, 'deep')
+    hooks.onDeep?.({ ...deep, feedback: { icon: '💎', title: '采集台建好啦', detail: '以后还能再来取。' } }); await nextTick(); assertAttention(stage, 'deep-result')
+    expect(stage.querySelector('[data-effect-feedback]')?.textContent).toContain('采集台建好啦')
+    expect(stage.querySelector('.speech')).toBeNull()
+    expect(stage.querySelector('.materials')).toBeNull()
+    expect(stage.querySelector('.builds')).toBeNull()
+    expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('看看下一步')
+    hooks.onDeep?.({ ...deep, placing: 'collector', digAvailable: true, candidate: null, valid: false, label: '就在这里建造' }); await nextTick(); assertAttention(stage, 'deep')
+    expect(stage.querySelector('.dig-here')?.textContent).toContain('先挖开这里')
+    expect(stage.querySelector('.dig-here')?.hasAttribute('data-primary-action')).toBe(true)
+    expect(stage.querySelector<HTMLButtonElement>('[data-primary-action]')?.disabled).toBe(false)
+    expect(stage.querySelectorAll('[data-primary-action]')).toHaveLength(1)
+    hooks.onDeep?.({ ...deep, digging: true, label: '挖好了，继续摆放晶簇采集台' }); await nextTick(); assertAttention(stage, 'deep-digging')
+    expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('继续摆放')
     hooks.onFacility?.(facilityState()); await nextTick(); assertAttention(stage, 'facility')
     hooks.onFacility?.(emptyFacilityUI()); hooks.onDeep?.({ ...deep, title: '精密工具', label: '确认这次改进' }); await nextTick(); assertAttention(stage, 'deep')
     hooks.onView?.({ layer: 'crystal', overview: true }); await nextTick(); assertAttention(stage, null)
     hooks.onDeep?.({ ...emptyDeepUI(), available: true }); hooks.onView?.({ layer: 'water', overview: false }); await nextTick(); assertAttention(stage, 'guide')
+  })
+
+  it('第三层只在换关注对象时收起材料说明，库存刷新保留孩子正在看的内容', async () => {
+    const { stage, hooks } = await mountGame()
+    const deep = { ...emptyDeepUI(), active: true, available: true, entered: true, title: '小石炉开工', label: '去小石炉炼金属锭' }
+    hooks.onDeep?.(deep); await nextTick(); await nextTick()
+    const details = stage.querySelector<HTMLDetailsElement>('.materials-tools')!
+    const content = stage.querySelector<HTMLElement>('.deep-content')!
+    details.open = true; content.scrollTop = 90
+    hooks.onDeep?.({ ...deep, resources: { crystals: 3, ore: 4, ingots: 0, parts: 0 } }); await nextTick(); await nextTick()
+    expect(details.open).toBe(true); expect(content.scrollTop).toBe(90)
+    hooks.onDeep?.({ ...deep, title: '阿木来做设施部件', label: '去工坊做电梯部件' }); await nextTick(); await nextTick()
+    expect(details.open).toBe(false); expect(content.scrollTop).toBe(0)
+    assertAttention(stage, 'deep')
+  })
+
+  it('第三层到站成果独占关注区；小窝预览接管后只有装灯操作，退出恢复全局引导', async () => {
+    const { stage, hooks } = await mountGame()
+    hooks.onMilestone?.({ emoji: '✨', title: '旧庆祝', detail: '前一项成果' })
+    hooks.onMessage('旧提示')
+    const result = { ...emptyDeepUI(), active: true, available: true, entered: true, completed: true, feedback: { icon: '🛗', title: '三层家园连通啦', detail: '伙伴到家啦。', nextLabel: '去小窝看看暖光灯' } }
+    hooks.onDeep?.(result); hooks.onView?.({ layer: 'home', overview: false }); await nextTick()
+    assertAttention(stage, 'deep-result')
+    expect(stage.querySelector('[data-primary-action]')?.textContent).toContain('去小窝看看暖光灯')
+    expect(stage.querySelector('.milestone')).toBeNull(); expect(stage.querySelector('.toast')).toBeNull()
+    hooks.onMilestone?.({ emoji: '🛗', title: '另一张庆祝', detail: '不能与成果争抢关注' }); await nextTick()
+    expect(stage.querySelector('.milestone')).toBeNull()
+    hooks.onDeep?.({ ...emptyDeepUI(), available: true, completed: true })
+    hooks.onNestWelcome?.({ podId: 1, anchor: { x: 300, y: 200, width: 800, height: 600 }, speech: '', lampAvailable: true, lamp: { installed: false, problem: null } })
+    await nextTick(); assertAttention(stage, 'nest-warm-lamp')
+    expect(stage.querySelector('[data-effect-feedback]')).toBeNull()
+    expect(stage.querySelector('[data-primary-action]')?.textContent).toBe('请阿灯装灯')
+    hooks.onNestWelcome?.(null); await nextTick(); assertAttention(stage, 'guide')
   })
 
   it('第三层收起详情后恢复全局引导，楼层导航保持辅助入口', async () => {

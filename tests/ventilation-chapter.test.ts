@@ -18,6 +18,7 @@ function setup(w = ventilationAvailable()) {
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
     playHallWork: vi.fn((_at: Cell, done: () => void) => done()),
+    playAtuWork: vi.fn((_at: Cell, done: () => void) => done()),
   }
   const chapter = new VentilationChapter({ world: () => w, view: view as unknown as PixiWorldRenderer, emit: value => { state = value }, prepare: vi.fn(),
     changed: () => { initializeWorkers(w); saves.push(serialize(w)) }, record: change => history.record({ kind: 'ventilation', change }), dig: p => history.record({ kind: 'dig', ...p, tile: TILE.ROCK }), notify,

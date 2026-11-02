@@ -4,6 +4,7 @@ import { canAfford,changeMaterials } from './materials'
 import { PARTNERS,partnerBed } from './partners'
 import { HOME_OWNER, WARM_CRYSTAL } from './personal'
 import { WARMTH_SPOT,finaleClear,finaleConnected,finaleSpan,finaleWidth } from './finaleTopology'
+import { snapFacilityX } from './placement'
 import { TILE,createInitialWorld,type Cell,type Inventory,type FinaleState,type FinaleFacilityKind,type FinaleTheme,type WorldState } from './world'
 export const FINALE_PARTNERS=PARTNERS.map(p=>p.id)
 export const FINALE_MEMORIES=[
@@ -49,6 +50,10 @@ function placementProblem(w:WorldState,kind:FinaleFacilityKind,x:number):string|
  return finaleReach(w,{x,y:106})?null:'这里还没有连到梯口。'
 }
 export function finaleBuildProblem(w:WorldState,kind:FinaleFacilityKind,x:number):string|null{const s=FINALE_SPECS[kind];return placementProblem(w,kind,x)??(!canAfford(w,s.cost)||w.deep.parts<s.parts||w.deep.crystals<s.crystals?`需要${finaleCostText(kind)}。可继续挖土，或回三层工坊加工。`:null)}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住心形暖晶。 */
+export function finaleCandidate(w:WorldState,kind:FinaleFacilityKind,tapX:number):number{
+ return snapFacilityX(tapX,finaleWidth(kind),x=>placementProblem(w,kind,x)===null,{avoid:[WARMTH_SPOT.x]})
+}
 function commit(w:WorldState,before:FinaleState,message:string,cost:Inventory={stone:0,wood:0},parts=0,crystals=0,food=0,water=0):FinaleResult{
  changeMaterials(w,cost,-1);w.deep.parts-=parts;w.deep.crystals-=crystals;w.farm.food-=food;w.reservoir.water-=water
  return{ok:true,message,change:{before,after:structuredClone(w.finale),cost,parts,crystals,food,water,rides:w.deep.rides}}
