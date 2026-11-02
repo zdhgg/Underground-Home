@@ -4,6 +4,8 @@ import { dig } from '../src/core/dig'
 import { advancePlanters, harvestPlanter, RIPE_STAGE } from '../src/core/farm'
 import { deserialize, serialize } from '../src/core/persistence'
 import { warmLampWorld } from './fixtures/nestWarmLampWorld'
+import { secondLayerComplete } from './fixtures/deepWorld'
+import { AYAN_SPOT } from '../src/core/deepTopology'
 import {
   firstFloorPodsWithoutWarmLamp,
   homeWishes,
@@ -32,6 +34,18 @@ const lampWish = (list: HomeWish[]) => list.find(wish => wish.id === 'nest-warm-
 const ripeWish = (list: HomeWish[]) => list.find(wish => wish.id === 'ripe-planter')
 
 describe('家园心愿：只从真实世界状态生成', () => {
+  it('第三层开放还没见阿岩时，先演出"爬梯子太累"的动机心愿，指向侧洞', () => {
+    const world = secondLayerComplete()
+    const wish = homeWishes(world)[0]
+    expect(wish).toMatchObject({
+      id: 'tired-climb', emoji: '🪜', title: '梯子好长，爬得好累',
+      actionLabel: '去看看抓挠声', target: { kind: 'point', x: AYAN_SPOT.x, y: AYAN_SPOT.y },
+    })
+    expect(homeWishTarget(world, 'tired-climb')).toEqual({ kind: 'point', x: AYAN_SPOT.x, y: AYAN_SPOT.y })
+    world.deep.metAyan = true
+    expect(homeWishes(world).find(item => item.id === 'tired-climb')).toBeUndefined()
+    expect(homeWishUnavailableReason(world, 'tired-climb')).toContain('阿岩')
+  })
   it('第三层未完成时，即使第一层有小窝且没装灯，也不显示暖光灯心愿', () => {
     const world = wishWorld()
     world.deep.completed = false

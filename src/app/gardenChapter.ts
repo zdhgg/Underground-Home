@@ -1,9 +1,11 @@
 import { ChapterJourney } from './chapterJourney'
-import { buildGarden, changeGardenVariety, gardenActionProblem, gardenBed, gardenBedProblem, gardenBuildProblem, gardenCostText, gardenFacility, gardenFacilityAt, gardenGoal, gardenReady, gardenWeavePath, GARDEN_SPECS, performGarden, type GardenAction, type GardenChange } from '../core/garden'
-import { GARDEN_FOOT, ROOT_SPOT, SPORE_SPOT, TAITAI_SPOT, gardenFrontier, gardenShaftCell } from '../core/gardenTopology'
+import { buildGarden, changeGardenVariety, gardenActionProblem, gardenBed, gardenBedProblem, gardenBuildProblem, gardenCandidate, gardenCostText, gardenFacility, gardenFacilityAt, gardenGoal, gardenReady, gardenWeavePath, GARDEN_SPECS, performGarden, type GardenAction, type GardenChange } from '../core/garden'
+import { canDig } from '../core/dig'
+import { GARDEN_FOOT, GARDEN_TOP, ROOT_SPOT, SPORE_SPOT, TAITAI_SPOT, gardenFrontier, gardenShaftCell, gardenWidth } from '../core/gardenTopology'
 import { partnerBed } from '../core/partners'
 import { TILE, TILE_SIZE as T, type Cell, type GardenFacilityKind, type WorldState } from '../core/world'
 import type { PixiWorldRenderer } from '../render/PixiRenderer'
+import type { GuideSpot } from '../render/guideFocus'
 import { playGardenSound } from '../render/gardenSound'
 
 export interface GardenUI {
@@ -12,39 +14,63 @@ export interface GardenUI {
   ventilationLift?:boolean;
   available: boolean; active: boolean; entered: boolean; busy: boolean; completed: boolean; celebrating: boolean; joined: boolean
   title: string; speaker: string; speech: string; label: string; hint: string; done: number
+  header: string; scout: boolean
   placing: GardenFacilityKind | null; selected: GardenFacilityKind | null; candidate: number | null; valid: boolean
   selectedX: number | null; growth: number; variety: 'bell' | 'fan'; canChangeVariety: boolean; needsWeave: boolean
   reservoirLift?:boolean; irrigation?:number; food: number; harvests: number; trail: number; lift: boolean; bedded: boolean
   buildings: { kind: GardenFacilityKind; name: string; count: number }[]
 }
-export const emptyGardenUI = (): GardenUI => ({ available: false, active: false, entered: false, busy: false, completed: false, celebrating: false, joined: false, title: '', speaker: '', speech: '', label: '', hint: '', done: 0, placing: null, selected: null, candidate: null, selectedX: null, valid: false, growth: 0, variety: 'bell', canChangeVariety: false, needsWeave: false, food: 0, harvests: 0, trail: 0, lift: false, bedded: false, buildings: [] })
+export const emptyGardenUI = (): GardenUI => ({ available: false, active: false, entered: false, busy: false, completed: false, celebrating: false, joined: false, header: '', scout: false, title: '', speaker: '', speech: '', label: '', hint: '', done: 0, placing: null, selected: null, candidate: null, selectedX: null, valid: false, growth: 0, variety: 'bell', canChangeVariety: false, needsWeave: false, food: 0, harvests: 0, trail: 0, lift: false, bedded: false, buildings: [] })
 export class GardenChapter {
   private opened = false
   private placing: GardenFacilityKind | null = null
   private selected: GardenFacilityKind | null = null
   private selectedX: number | null = null
   private candidate: number | null = null
+  private hoverX: number | null = null
   private celebrating = false
+  /** "我自己去地图上找"：面板收起、目标继续在地图上发光，点到目标照常交接回面板。 */
+  private scouting = false
   private readonly journey: ChapterJourney
   get busy(): boolean { return this.journey.busy }
   get active(): boolean { return this.opened }
+  get placingKind(): GardenFacilityKind | null { return this.placing }
+  placingCell(p: Cell | null): boolean {
+    const w = this.p.world()
+    return this.placing !== null && !!p && p.y >= 55 && p.y <= 59 && !canDig(w, p.x, p.y).ok
+  }
+  hover(p: Cell | null): void {
+    if (!this.placing || this.busy || this.candidate !== null) return
+    const x = this.placingCell(p) ? gardenCandidate(this.p.world(), this.placing, p!.x) : null
+    if (x === this.hoverX) return
+    this.hoverX = x; this.p.view.setGardenPreview?.(this.placing, x)
+  }
   constructor(private p: { world(): WorldState; view: PixiWorldRenderer; emit(s: GardenUI): void; changed(): void; prepare(): void; notify(s: string): void; record(c: GardenChange): void; dig(p: Cell): void; milestone(title: string, detail: string): void }) {
     this.journey = new ChapterJourney({ ...p, refresh: () => this.refresh() })
   }
   refresh(): void {
     const w = this.p.world(), g = w.garden, goal = gardenGoal(w), bed = this.selected === 'bed' ? gardenBed(w, this.selectedX ?? undefined) : gardenBed(w)
-    let { title, speaker, speech, label } = goal, hint = goal.action ? gardenActionProblem(w, goal.action) ?? '' : ''
+    let { title, speaker, speech, label } = goal, hint = goal.action ? gardenActionProblem(w, goal.action) ?? '' : '', header = '第 5 章 · 菌光花园'
     const path = bed && gardenWeavePath(w, bed), needsWeave = !!bed && (!path || !path.every(x => g.trail.includes(x)))
     if (this.selected) {
       title = GARDEN_SPECS[this.selected].name; speech = GARDEN_SPECS[this.selected].detail; speaker = this.selected === 'rill' ? '小泉' : this.selected === 'bed' ? '小满' : this.selected === 'lamp' ? '阿灯' : '苔苔'; label = '看看下一件事'; hint = ''
+      header = `${speaker}的${GARDEN_SPECS[this.selected].name} · 第 5 层`
       if (this.selected === 'bed' && bed) { label = needsWeave ? '请苔苔铺菌毯' : bed.growth === 2 ? '请小满收获菌伞' : '请小满照料一次'; hint = needsWeave ? gardenActionProblem(w, 'weave', bed.x) ?? '菌毯会沿实际空洞连到这张菌床。' : gardenBedProblem(w, bed) ?? ['菌苗等着照料', '小芽长出来啦', '菌伞展开，可以收获啦'][bed.growth ?? 0] }
       if (this.selected === 'bench') label = '到长椅边歇一歇'
     }
     if (this.selected==='bed'&&w.reservoir.irrigation>0&&bed?.growth!==2) hint += ` · 回廊清水还有 ${w.reservoir.irrigation} 次，本次照料能直接展开。`
-    if (this.placing) { title = `摆放${GARDEN_SPECS[this.placing].name}`; speaker = '阿土'; speech = '点一处喜欢的岩壁选位置。绿框能建，红框会说明原因。拖动只移动地图。'; label = '就在这里建造'; hint = this.candidate === null ? gardenCostText(this.placing) : gardenBuildProblem(w, this.placing, this.candidate) ?? `${gardenCostText(this.placing)} · 可以建在这里` }
+    if (this.placing) { title = `摆放${GARDEN_SPECS[this.placing].name}`; speaker = '阿土'; speech = '点一处喜欢的岩壁选位置。绿框能建，红框会说明原因。拖动只移动地图。'; label = '就在这里建造'; hint = this.candidate === null ? `${gardenCostText(this.placing)} · 点泥土先挖开，点空洞放影子。` : gardenBuildProblem(w, this.placing, this.candidate) ?? `${gardenCostText(this.placing)} · 可以建在这里` }
     if (this.celebrating) { title = '一条菌光路，一个新朋友'; speaker = '苔苔'; speech = '小满留下菌根，小泉引来清水，阿灯点亮小灯，我们用菌丝把它们连成了花园。楼上的家也能吃到这里的收成啦！'; label = '继续布置菌光花园'; hint = '第五章完成；可以继续种菌、扩建和回家聚餐。' }
     if (this.busy) { label = ''; speech = '伙伴沿真实通道到现场，完成动作后才改变花园。'; hint = '可以拖图看看；停下来会保留已经完成的部分。' }
-    this.p.emit({ available: gardenReady(w), active: this.opened, entered: g.entered, busy: this.busy, completed: g.completed, celebrating: this.celebrating, joined: g.metTaitai, title, speaker, speech, label, hint, done: goal.done,
+    this.p.view.setGardenPreview?.(this.placing, this.candidate ?? this.hoverX)
+    // 行动类小步在地图上亮出发生地点：目标是已建设施就框整座，其余框目标格。
+    let focusSpot: GuideSpot | null = null
+    if ((this.opened || this.scouting) && !this.busy && !this.placing && !this.selected && !this.celebrating && !goal.build && goal.target) {
+      const f = gardenFacilityAt(w, goal.target)
+      focusSpot = f ? { x: f.x, y: GARDEN_TOP, w: gardenWidth(f.kind), h: GARDEN_FOOT - GARDEN_TOP + 1 } : { x: goal.target.x, y: goal.target.y, w: 1, h: 1 }
+    }
+    this.p.view.setGuideFocus?.(this, focusSpot)
+    this.p.emit({ available: gardenReady(w), active: this.opened, entered: g.entered, busy: this.busy, header, scout: !this.busy && !this.placing && !this.selected && !this.celebrating && !goal.build && !!goal.target, completed: g.completed, celebrating: this.celebrating, joined: g.metTaitai, title, speaker, speech, label, hint, done: goal.done,
       placing: this.placing, selected: this.selected, candidate: this.candidate, selectedX: this.selectedX, valid: this.placing !== null && this.candidate !== null && !gardenBuildProblem(w, this.placing, this.candidate),
       growth: bed?.growth ?? 0, variety: bed?.variety ?? 'bell', canChangeVariety: this.selected === 'bed' && !!g.harvests && bed?.growth === 0, needsWeave, ventilationLift:w.ventilation.liftExtended,reservoirLift:w.reservoir.liftExtended,irrigation:w.reservoir.irrigation,food: w.farm.food, harvests: g.harvests, trail: g.trail.length, lift: g.liftExtended, bedded: !!partnerBed(w, 'taitai'),
       buildings: (Object.keys(GARDEN_SPECS) as GardenFacilityKind[]).map(kind => ({ kind, name: GARDEN_SPECS[kind].name, count: g.facilities.filter(f => f.kind === kind).length })),
@@ -52,20 +78,29 @@ export class GardenChapter {
   }
   show(focus = false): void {
     if (this.busy || !gardenReady(this.p.world())) return
-    this.p.prepare(); this.opened = true; this.placing = null; this.selected = null; this.selectedX = null; this.candidate = null; this.celebrating = false; this.p.view.setGardenPreview?.(null, null)
+    this.p.prepare(); this.opened = true; this.scouting = false; this.placing = null; this.selected = null; this.selectedX = null; this.candidate = null; this.hoverX = null; this.celebrating = false; this.p.view.setGardenPreview?.(null, null)
     if (focus) { const target = gardenGoal(this.p.world()).target; this.p.view.focusOn((target.x + .5) * T, (target.y - 1) * T, 'building') }
     this.refresh()
   }
   close(): void {
     if (this.busy) this.journey.cancel()
-    this.opened = false; this.placing = null; this.selected = null; this.selectedX = null; this.candidate = null; this.celebrating = false
+    this.opened = false; this.scouting = false; this.placing = null; this.selected = null; this.selectedX = null; this.candidate = null; this.hoverX = null; this.celebrating = false
     this.p.view.setGardenPreview?.(null, null); this.p.view.releaseDeepCamera?.(); this.refresh()
+  }
+  /** "我自己去地图上找"：收起面板，镜头指到这一步发生的地方，目标继续发光等孩子来点。 */
+  scout(): void {
+    if (this.busy || this.placing || this.selected || this.celebrating) return
+    const goal = gardenGoal(this.p.world())
+    if (goal.build || !goal.target) return
+    this.opened = false; this.scouting = true
+    this.p.view.focusOn((goal.target.x + .5) * T, (goal.target.y - 1) * T, 'building')
+    this.refresh()
   }
   cancel(): void { this.journey.cancel() }
   select(kind: GardenFacilityKind, x?: number, add = false): void {
     if (this.busy) return
     this.show(); const w = this.p.world(), f = add ? undefined : w.garden.facilities.find(f => f.kind === kind && (x === undefined || f.x === x))
-    this.selected = f ? kind : null; this.selectedX = f?.x ?? null; this.placing = f ? null : kind
+    this.selected = f ? kind : null; this.selectedX = f?.x ?? null; this.placing = f ? null : kind; this.candidate = null; this.hoverX = null
     const target = f ?? { x: w.exploration.shaftX ?? 27, y: GARDEN_FOOT }
     this.p.view.focusOn((target.x + 1.5) * T, 57 * T, 'building'); this.refresh()
   }
@@ -73,7 +108,13 @@ export class GardenChapter {
     const w = this.p.world()
     if (!gardenReady(w)) return false
     if (this.busy) return true
-    if (this.placing) { if (cell.y < 55 || cell.y > 59) { this.p.notify('在第 5 层的岩壁上选位置吧。'); return true }; this.candidate = cell.x; this.p.view.setGardenPreview?.(this.placing, cell.x); this.refresh(); return true }
+    if (this.placing) {
+      if (cell.y < 55 || cell.y > 59) { this.p.notify('在第 5 层的岩壁上选位置吧。'); return true }
+      // 点到还盖着的泥土或矿脉：照旧挖开（可撤销），影子留着，挖完再点空洞放置。
+      if (canDig(w, cell.x, cell.y).ok) return false
+      this.candidate = gardenCandidate(w, this.placing, cell.x); this.hoverX = null
+      this.p.view.setGardenPreview?.(this.placing, this.candidate); this.refresh(); return true
+    }
     if (!w.garden.entered && gardenShaftCell(w, cell.x, cell.y) || w.garden.entered && !w.garden.metTaitai && cell.y >= 56 && cell.y <= 58 && Math.abs(cell.x - TAITAI_SPOT.x) <= 1) { this.show(); return true }
     const f = gardenFacilityAt(w, cell)
     if (f) { this.select(f.kind, f.x); return true }
@@ -94,7 +135,7 @@ export class GardenChapter {
       if (problem) { this.p.notify(problem); return }
       this.journey.run({ x, y: GARDEN_FOOT }, kind === 'rill' ? 'xiaoquan' : kind === 'lamp' ? 'adeng' : 'atu', () => {
         const r = buildGarden(w, kind, x)
-        if (r.ok) { this.p.record(r.change); this.placing = null; this.candidate = null; this.p.view.setGardenPreview?.(null, null); this.p.view.refresh(); playGardenSound('build') }
+        if (r.ok) { this.p.record(r.change); this.placing = null; this.candidate = null; this.hoverX = null; this.p.view.setGardenPreview?.(null, null); this.p.view.refresh(); playGardenSound('build') }
         this.p.notify(r.message); this.journey.finish()
       }); return
     }
@@ -135,11 +176,11 @@ export class GardenChapter {
     }
     if (action === 'walk') {
       const rill = gardenFacility(w, 'rill')!
-      this.journey.begin(); this.journey.moveAtu(rill, () => this.journey.moveAtu(at, () => this.journey.moveWorker('taitai', { x: at.x + 1, y: 58 }, () => this.journey.moveWorker('xiaoman', { x: at.x + 2, y: 58 }, finish)))); return
+      this.journey.begin(); this.journey.moveParty([rill, at], [{ id: 'taitai', to: { x: at.x + 1, y: 58 } }, { id: 'xiaoman', to: { x: at.x + 2, y: 58 } }], finish); return
     }
     if (action === 'weave') {
       const path = gardenWeavePath(w, gardenBed(w, x)!)!
-      this.journey.begin(); this.journey.moveAtu(at, () => this.journey.moveWorker('taitai', { x: path[0], y: 58 }, () => this.journey.work('taitai', { x: path.at(-1)!, y: 58 }, finish))); return
+      this.journey.begin(); this.journey.moveParty([at], [{ id: 'taitai', to: { x: path[0], y: 58 } }], () => this.journey.work('taitai', { x: path.at(-1)!, y: 58 }, finish)); return
     }
     this.journey.run(at, action === 'drain' ? 'xiaoquan' : action === 'extend' ? 'amu' : action === 'care' || action === 'harvest' ? 'xiaoman' : 'atu', finish)
   }

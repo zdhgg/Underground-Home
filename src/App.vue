@@ -5,6 +5,7 @@ import type { HomeWish } from './app/homeWishes'
 import NestWelcome from './components/NestWelcome.vue'
 import type { DepthView } from './render/camera'
 import ExplorerNotebook from './components/ExplorerNotebook.vue'
+import DepthNavigation from './components/DepthNavigation.vue'
 import PartnerConversationPanel from './components/PartnerConversation.vue'
 import type { PartnerConversation } from './core/partnerInteractions'
 import RoomTools from './components/RoomTools.vue'
@@ -18,6 +19,7 @@ import type { RoomUI } from './app/roomEditor'
 import { ROOM_MAX_WIDTH } from './core/rooms'
 import type { WorkUI } from './app/partnerOrders'
 import type { WorkerId } from './core/world'
+import { STRATA } from './core/world'
 import { createIndexedDbStore, type SaveStore } from './core/persistence'
 import type { SaveStatus } from './app/saveSummary'
 import StartScreen from './components/StartScreen.vue'
@@ -114,6 +116,8 @@ const progress = ref<SessionProgress>({
 })
 const build = ref<BuildState>({ digging: false, podAvailable: false, planterAvailable: false, shelfAvailable: false, nurseryAvailable: false, mode: 'none', selected: false, valid: false, message: '', podCount: 0, planterCount: 0, shelfCount: 0, nurseryCount: 0 })
 const view = ref<DepthView>({ layer: 'home', overview: false })
+/** 左上小本子同时说明“主线要去哪”和“镜头现在看到哪”，避免跨层画面造成误读。 */
+const currentViewLayerLabel = computed(() => STRATA[view.value.displayLayer ?? view.value.layer].name)
 const farm = ref<FarmUI>({ canSupplyWater: false, supplying: false, unlocked: false, planterCount: 0, ripe: 0, food: 0, harvested: false, canSendPower: false, powering: false, powerDown: false, kitchen: false, dining: false, mealReady: false, mealActive: false })
 /** 家园心愿：由会话从世界状态重算，不在界面里保存任务进度。 */
 const wishes = ref<HomeWish[]>([])
@@ -127,11 +131,29 @@ const milestone = ref<Milestone | null>(null)
  */
 const notebookOpen = ref(typeof window === 'undefined' || window.innerWidth > 720)
 let notebookRestore = false
+/** 章节接管时若本子是合着的，就替玩家翻开；玩家自己开合时不留标记。 */
+let notebookAutoOpened = false
+/** 合上本子＝收起当前章节页：交回会话收尾，地图上的设施再点一次还能把这一页翻出来。 */
+function closeActiveChapter(): void {
+  const game = session.value
+  if (!game) return
+  switch (activeChapter.value) {
+    case 'finale': game.closeFinale(); break
+    case 'ruins': game.closeRuins(); break
+    case 'ventilation': game.closeVentilation(); break
+    case 'reservoir': game.closeReservoir(); break
+    case 'garden': game.closeGarden(); break
+    case 'hall': game.closeHall(); break
+    case 'deep': game.closeDeep(); break
+  }
+}
 function setNotebook(open: boolean): void {
+  if (!open && activeChapter.value) closeActiveChapter()
   notebookOpen.value = open
   notebookRestore = false
+  notebookAutoOpened = false
 }
-/** 选好楼层就把小本子收起来，让出画面；未开放提示保留在 TOAST 里，不收起。 */
+/** 点小本子里的心愿后收起本子，让出画面；楼层导航已搬到右侧常驻条，不再经这里。 */
 function navigateFromNotebook(action: () => void): void {
   setNotebook(false)
   action()
@@ -144,6 +166,23 @@ const chapterPanelOpen = computed(() => build.value.mode === 'none' && !explorat
   || garden.value.active || garden.value.busy || hall.value.active || hall.value.busy
   || deep.value.active || deep.value.busy
 ))
+/**
+ * 章节页翻进小本子：返回当前应显示在小本子顶部的章节。
+ * 与原来舞台 v-else-if 链一致——巢穴/工地/房间/伙伴工作/发现/对话/设施在场，或全景、建造、挂灯中，章节都让位。
+ */
+const activeChapter = computed((): 'finale' | 'ruins' | 'ventilation' | 'reservoir' | 'garden' | 'hall' | 'deep' | null => {
+  if (view.value.overview || build.value.mode !== 'none' || exploration.value.lampMode) return null
+  if (nestWelcome.value || sites.value.active || rooms.value.active || work.value || discovering.value
+    || conversation.value || facility.value.active) return null
+  if (finale.value.active || finale.value.busy) return 'finale'
+  if (ruins.value.active || ruins.value.busy) return 'ruins'
+  if (ventilation.value.active || ventilation.value.busy) return 'ventilation'
+  if (reservoir.value.active || reservoir.value.busy) return 'reservoir'
+  if (garden.value.active || garden.value.busy) return 'garden'
+  if (hall.value.active || hall.value.busy) return 'hall'
+  if (deep.value.active || deep.value.busy) return 'deep'
+  return null
+})
 const panelOpen = computed(() => !view.value.overview && (
   !!nestWelcome.value || sites.value.active || rooms.value.active || !!work.value || discovering.value
   || !!conversation.value || facility.value.active || chapterPanelOpen.value
@@ -152,10 +191,18 @@ const guideVisible = computed(() => !panelOpen.value && !view.value.overview && 
   && !farm.value.mealActive && build.value.mode === 'none' && !exploration.value.lampMode)
 watch(guideVisible, visible => {
   if (!visible) {
-    if (notebookOpen.value) { notebookRestore = true; notebookOpen.value = false }
+    if (notebookOpen.value && !activeChapter.value) { notebookRestore = true; notebookOpen.value = false }
     return
   }
   if (notebookRestore) { notebookRestore = false; notebookOpen.value = true }
+})
+/** 章节页出现时小本子自动翻开；章节收走且刚才是替玩家翻开的，就合回去。 */
+watch(activeChapter, (chapter, previous) => {
+  if (chapter) {
+    if (!notebookOpen.value) { notebookAutoOpened = true; notebookOpen.value = true }
+    return
+  }
+  if (previous && notebookAutoOpened) { notebookAutoOpened = false; notebookOpen.value = false }
 })
 
 /** 底部状态栏的一行提示：跟着当前能做的事走 */
@@ -185,6 +232,8 @@ const legendHint = computed(() => {
   if (hall.value.active) return `♧ ${hall.value.title} · 随时收起，自由建设`
   if (view.value.layer === 'hall') return '暖光大厅 · 点设施使用，点泥土扩建 · 九层故事仍在继续'
   if (deep.value.busy) return '🔧 伙伴正在晶簇层施工 · 拖动看地图，随时可以停下来'
+  if (deep.value.digging) return '⛏ 先挖出设施的空间 · 点一下挖一块 · 挖好后回卡片继续摆放'
+  if (deep.value.feedback) return `✓ ${deep.value.feedback.title} · 看看刚刚改变的家园`
   if (deep.value.placing) return '◇ 点岩壁选位置 · 绿框能建 · 拖动只移动地图 · Esc 取消'
   if (deep.value.active) return `◇ ${deep.value.title} · 可以随时收起面板，自由建设`
   if (view.value.layer === 'crystal') return '◇ 晶簇层 · 点设施使用，点泥土扩建 · 工坊和电梯把三层连起来'
@@ -302,8 +351,8 @@ function showMessage(text: string, warning = false, duration = 2600): void {
 }
 
 function showMilestone(card: Milestone): void {
-  // 第六章的相遇和庆典在当前情境面板内交接，避免中央弹卡同时抢注意力。
-  if (finale.value.active || finale.value.busy || ruins.value.active || ruins.value.busy || ventilation.value.active || ventilation.value.busy || reservoir.value.active || reservoir.value.busy) { milestone.value = null; return }
+  // 第三层成果及后续章节的相遇、庆典在情境面板内交接，避免中央弹卡同时抢注意力。
+  if (deep.value.active || deep.value.busy || finale.value.active || finale.value.busy || ruins.value.active || ruins.value.busy || ventilation.value.active || ventilation.value.busy || reservoir.value.active || reservoir.value.busy) { milestone.value = null; return }
   milestone.value = card
   window.clearTimeout(milestoneTimer)
   milestoneTimer = window.setTimeout(() => {
@@ -378,7 +427,7 @@ onMounted(async () => {
       onReservoir:next=>{const opened=next.active&&!reservoir.value.active;reservoir.value=next;if(opened){toastVisible.value=false;partnerMenu.value=false;milestone.value=null}},
       onGarden: next => { const opened = next.active && !garden.value.active; garden.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
       onHall: next => { const opened = next.active && !hall.value.active; hall.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
-      onDeep: next => { const opened = next.active && !deep.value.active; deep.value = next; if (opened) { toastVisible.value = false; partnerMenu.value = false } },
+      onDeep: next => { const opened = next.active && !deep.value.active; deep.value = next; if (opened || next.feedback && !next.busy) { toastVisible.value = false; partnerMenu.value = false; milestone.value = null } },
       onInventory: next => { inventory.value = next },
       onBag: next => { bag.value = next },
       onMemories: next => { memories.value = next },
@@ -441,9 +490,11 @@ onBeforeUnmount(() => {
       <ExplorerNotebook
         :open="notebookOpen"
         :guide-visible="guideVisible"
-        :docked="panelOpen"
-        :dock-top="chapterPanelOpen"
+        :chapter-open="activeChapter !== null"
+        :deep-chapter="activeChapter === 'deep'"
+        :docked="panelOpen && activeChapter === null"
         :layer-label="progress.layer"
+        :view-layer-label="currentViewLayerLabel"
         :title="progress.title"
         :done="progress.done"
         :total="progress.total"
@@ -451,19 +502,18 @@ onBeforeUnmount(() => {
         :primary-label="progress.action?.label ?? '看看能源石'"
         :primary-disabled="exploration.traveling"
         :wishes="wishes"
-        :view="view"
-        :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available"
-        :reservoir-available="reservoir.available" :ventilation-available="ventilation.available"
-        :ruins-available="ruins.available" :finale-available="finale.available"
         @open="setNotebook(true)" @close="setNotebook(false)" @primary="performGuide"
         @wish="navigateFromNotebook(() => session?.focusHomeWish($event))"
-        @home="navigateFromNotebook(() => session?.centerOnHome())" @water="navigateFromNotebook(() => session?.lookDown())"
-        @crystal="navigateFromNotebook(() => session?.lookCrystal())" @hall="navigateFromNotebook(() => session?.openHall())"
-        @garden="navigateFromNotebook(() => session?.openGarden())" @reservoir="navigateFromNotebook(() => session?.openReservoir())"
-        @ventilation="navigateFromNotebook(() => session?.openVentilation())" @ruins="navigateFromNotebook(() => session?.openRuins())"
-        @finale="navigateFromNotebook(() => session?.openFinale())" @overview="navigateFromNotebook(() => session?.showOverview())"
-        @locked="showMessage($event, false, 6000)"
       >
+        <template #chapter>
+          <FinalePanel v-if="activeChapter === 'finale'" embedded :state="finale" :traveling="exploration.traveling" @close="session?.closeFinale()" @stop="session?.cancelAction()" @primary="session?.finalePrimary()" @select="session?.finaleSelect($event)" @theme="session?.finaleTheme($event)" @ride="session?.deepRide($event)" @review="session?.finalePanorama()" @scout="session?.finaleScout()" />
+          <RuinsPanel v-else-if="activeChapter === 'ruins'" embedded :state="ruins" :traveling="exploration.traveling" @close="session?.closeRuins()" @stop="session?.cancelAction()" @primary="session?.ruinsPrimary()" @select="session?.ruinsSelect($event)" @motif="session?.ruinsMotif($event)" @edition="session?.ruinsEdition($event)" @ride="session?.deepRide($event)" @scout="session?.ruinsScout()" />
+          <VentilationPanel v-else-if="activeChapter === 'ventilation'" embedded :state="ventilation" :traveling="exploration.traveling" @close="session?.closeVentilation()" @stop="session?.cancelAction()" @primary="session?.ventilationPrimary()" @select="session?.ventilationSelect($event)" @mode="session?.ventilationMode($event)" @variety="session?.ventilationVariety()" @ride="session?.deepRide($event)" @scout="session?.ventilationScout()" />
+          <ReservoirPanel v-else-if="activeChapter === 'reservoir'" embedded :state="reservoir" :traveling="exploration.traveling" @close="session?.closeReservoir()" @stop="session?.cancelAction()" @primary="session?.reservoirPrimary()" @select="session?.reservoirSelect($event)" @route="session?.reservoirRoute($event)" @ride="session?.deepRide($event)" @scout="session?.reservoirScout()" />
+          <GardenPanel v-else-if="activeChapter === 'garden'" embedded :state="garden" :traveling="exploration.traveling" @close="session?.closeGarden()" @stop="session?.cancelAction()" @primary="session?.gardenPrimary()" @select="session?.gardenSelect($event)" @add="session?.gardenAdd($event)" @variety="session?.gardenVariety()" @ride="session?.deepRide($event)" @scout="session?.gardenScout()" />
+          <HallPanel v-else-if="activeChapter === 'hall'" embedded :state="hall" :traveling="exploration.traveling" @close="session?.closeHall()" @stop="session?.cancelAction()" @primary="session?.hallPrimary()" @select="session?.hallSelect($event)" @page="session?.hallAlbumPage($event)" @ride="session?.deepRide($event)" @scout="session?.hallScout()" />
+          <DeepPanel v-else-if="activeChapter === 'deep'" embedded :state="deep" :traveling="exploration.traveling" @close="session?.closeDeep()" @stop="session?.cancelAction()" @primary="session?.deepPrimary()" @dig="session?.deepDig()" @select="session?.deepSelect($event)" @lamp="session?.deepPlaceLamp()" @upgrade="(action, label) => session?.deepUpgrade(action, label)" @ride="session?.deepRide($event)" @scout="session?.deepScout()" />
+        </template>
         <p class="mole-speech">{{ progress.speech }}</p>
         <p v-if="!progress.finished" class="mole-outcome">{{ progress.outcome }}</p>
       </ExplorerNotebook>
@@ -499,18 +549,21 @@ onBeforeUnmount(() => {
         @look="session?.facilityLook()"
         @upgrade="session?.facilityUpgrade()"
       />
-      <FinalePanel v-else-if="(finale.active||finale.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="finale" :traveling="exploration.traveling" @close="session?.closeFinale()" @stop="session?.cancelAction()" @primary="session?.finalePrimary()" @select="session?.finaleSelect($event)" @theme="session?.finaleTheme($event)" @ride="session?.deepRide($event)" @review="session?.finalePanorama()" />
-      <RuinsPanel v-else-if="(ruins.active||ruins.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="ruins" :traveling="exploration.traveling" @close="session?.closeRuins()" @stop="session?.cancelAction()" @primary="session?.ruinsPrimary()" @select="session?.ruinsSelect($event)" @motif="session?.ruinsMotif($event)" @edition="session?.ruinsEdition($event)" @ride="session?.deepRide($event)" />
-      <VentilationPanel v-else-if="(ventilation.active||ventilation.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="ventilation" :traveling="exploration.traveling" @close="session?.closeVentilation()" @stop="session?.cancelAction()" @primary="session?.ventilationPrimary()" @select="session?.ventilationSelect($event)" @mode="session?.ventilationMode($event)" @variety="session?.ventilationVariety()" @ride="session?.deepRide($event)" />
-      <ReservoirPanel v-else-if="(reservoir.active||reservoir.busy)&&!view.overview&&build.mode==='none'&&!exploration.lampMode" :state="reservoir" :traveling="exploration.traveling" @close="session?.closeReservoir()" @stop="session?.cancelAction()" @primary="session?.reservoirPrimary()" @select="session?.reservoirSelect($event)" @route="session?.reservoirRoute($event)" @ride="session?.deepRide($event)" />
-      <GardenPanel v-else-if="(garden.active || garden.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="garden" :traveling="exploration.traveling" @close="session?.closeGarden()" @stop="session?.cancelAction()" @primary="session?.gardenPrimary()" @select="session?.gardenSelect($event)" @add="session?.gardenAdd($event)" @variety="session?.gardenVariety()" @ride="session?.deepRide($event)" />
-      <HallPanel v-else-if="(hall.active || hall.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="hall" :traveling="exploration.traveling" @close="session?.closeHall()" @stop="session?.cancelAction()" @primary="session?.hallPrimary()" @select="session?.hallSelect($event)" @page="session?.hallAlbumPage($event)" @ride="session?.deepRide($event)" />
-      <DeepPanel v-else-if="(deep.active || deep.busy) && !view.overview && build.mode === 'none' && !exploration.lampMode" :state="deep" :traveling="exploration.traveling" @close="session?.closeDeep()" @stop="session?.cancelAction()" @primary="session?.deepPrimary()" @select="session?.deepSelect($event)" @lamp="session?.deepPlaceLamp()" @upgrade="(action, label) => session?.deepUpgrade(action, label)" @ride="session?.deepRide($event)" />
-
       <div class="zoom">
         <button type="button" aria-label="放大" @click="session?.zoomBy(0.12)">＋</button>
         <button type="button" aria-label="缩小" @click="session?.zoomBy(-0.12)">－</button>
       </div>
+
+      <DepthNavigation
+        :view="view"
+        :crystal-available="deep.available" :hall-available="hall.available" :garden-available="garden.available"
+        :reservoir-available="reservoir.available" :ventilation-available="ventilation.available"
+        :ruins-available="ruins.available" :finale-available="finale.available"
+        @home="session?.centerOnHome()" @water="session?.lookDown()" @crystal="session?.lookCrystal()"
+        @hall="session?.openHall()" @garden="session?.openGarden()" @reservoir="session?.openReservoir()"
+        @ventilation="session?.openVentilation()" @ruins="session?.openRuins()" @finale="session?.openFinale()"
+        @overview="session?.showOverview()" @locked="showMessage($event, false, 6000)"
+      />
 
       <button type="button" class="undo" v-if="!discovering && !conversation" @click="session?.undo()">↶ 撤销</button>
       <div v-if="!discovering && !conversation" class="atu-controls">

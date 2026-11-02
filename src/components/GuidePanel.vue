@@ -31,7 +31,7 @@ function onEscape(event: KeyboardEvent): void {
       </span>
       <div class="goal" aria-live="polite">
         <small>
-          <span class="layer">{{ finished ? '自由建设' : `${layerLabel ?? '当前家园'}` }}</span>
+          <span class="layer">{{ finished ? '自由建设' : `任务在：${layerLabel ?? '当前家园'}` }}</span>
           <span v-if="!finished" class="mission-tag">主线 · {{ done }}/{{ total }}</span>
         </small>
         <strong>{{ title }}</strong>

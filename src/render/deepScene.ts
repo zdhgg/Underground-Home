@@ -4,6 +4,7 @@ import { AYAN_SPOT, CRYSTAL_SPOT, DEEP_FOOT, DRILL_SPOT, MOSS_SPOT, deepFrontier
 import { TILE, TILE_SIZE as T, type DeepFacilityKind, type WorldState } from '../core/world'
 import type { DeepTextures } from './deepArt'
 import { deepLampCoverage } from '../core/lighting'
+import type { GuideSpot } from './guideFocus'
 
 /** 深层的岩壁设施、光场和电梯。规则与位置只读世界数据。 */
 export class DeepScene {
@@ -19,12 +20,29 @@ export class DeepScene {
   private readonly light = new Graphics()
   private readonly shimmer = new Graphics()
   private readonly cabin = new Container()
+  private readonly result = new Container({ label: 'deep-result' })
+  private resultTime = 0
   private trip: { from: number; to: number; time: number; done(): void; position(y: number): void } | null = null
   constructor(private art: DeepTextures = {}) {
     this.view.addChild(this.light, this.scenery)
     this.foreground.addChild(this.shimmer, this.cabin, this.suggestion, this.suggestionGhost, this.previewGhost, this.preview)
+    this.foreground.addChild(this.result)
   }
   setArt(art: DeepTextures): void { this.art = art }
+  clearResult(): void {
+    this.resultTime = 0
+    for (const child of this.result.removeChildren()) child.destroy({ children: true })
+  }
+  /** 结果贴在刚完成的设施上方；不移动镜头，不覆盖角色。 */
+  showResult(spot: GuideSpot, text: string): void {
+    this.clearResult()
+    const label = new Text({ text: `✓ ${text}`, style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: 13, fontWeight: '700', fill: 0xe7ffeb } })
+    label.anchor.set(.5, 1)
+    const bg = new Graphics().roundRect(-label.width / 2 - 10, -label.height - 10, label.width + 20, label.height + 14, 8).fill({ color: 0x234b39, alpha: .96 })
+    this.result.addChild(bg, label)
+    this.result.position.set((spot.x + spot.w / 2) * T, spot.y * T - 28)
+    this.result.alpha = 1; this.resultTime = 2.4
+  }
   private label(text: string, x: number, y: number, size = 11, color = 0xc8ddd9): void {
     const label = new Text({ text, style: { fontFamily: 'Microsoft YaHei, sans-serif', fontSize: size, fill: color, stroke: { color: 0x1a2933, width: 3 } } })
     label.anchor.set(.5, 1); label.position.set(x * T, y * T); this.scenery.addChild(label)
@@ -62,8 +80,15 @@ export class DeepScene {
       if (col % 3 === 0 && w.tiles[31][col] === TILE.EMPTY) g.moveTo((col + .1) * T, 31.15 * T).lineTo((col + .4) * T, 31.45 * T).lineTo((col + .8) * T, 31.2 * T).stroke({ width: 1, color: 0x9dadcc, alpha: .38 })
     }
     if (span && CRYSTAL_SPOT.x >= span.left && CRYSTAL_SPOT.x <= span.right) {
-      this.sprite('collector', (CRYSTAL_SPOT.x + .5) * T, 34 * T, 64, 70, .85)
+      const cx = (CRYSTAL_SPOT.x + .5) * T
+      this.sprite('natural', cx, 34 * T, 78, 60)
+      // 晶根埋进碎石：天然晶簇是长在岩层里的发现，不是建成的设施。
+      const rubble = new Graphics()
+      rubble.ellipse(cx - 22, 33.97 * T, 9, 3).ellipse(cx - 4, 33.93 * T, 11, 4).ellipse(cx + 12, 33.97 * T, 10, 3.5).ellipse(cx + 26, 33.98 * T, 7, 2.5)
+        .fill({ color: 0x3f4a5c }).stroke({ width: 1, color: 0x5d6a80 })
+      this.scenery.addChild(rubble)
       if (!w.deep.foundCrystal) this.label('点点岩壁上的晶光', CRYSTAL_SPOT.x + .5, 30.5, 12, 0xc4deef)
+      else this.label('天然晶簇', CRYSTAL_SPOT.x + .5, 30.85, 10, 0xa8d8e8)
     }
     for (const f of w.deep.facilities) {
       const spec = DEEP_SPECS[f.kind], left = f.x * T, width = spec.width * T
@@ -123,6 +148,11 @@ export class DeepScene {
   cancel(): void { this.trip = null }
   update(w: WorldState | null, time: number, dt: number): void {
     if (!w) return
+    if (this.resultTime > 0) {
+      this.resultTime = Math.max(0, this.resultTime - dt)
+      this.result.alpha = Math.min(1, this.resultTime / .4)
+      if (this.resultTime === 0) this.clearResult()
+    }
     this.shimmer.clear()
     if (w.deep.entered) {
       for (let i = 0; i < 7; i++) {

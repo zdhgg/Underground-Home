@@ -85,6 +85,15 @@ export function centerOn(
   return clampCamera({ x: worldX - viewport.width / z / 2, y: worldY - viewport.height / z / 2, zoom: z }, viewport)
 }
 
+/** 第三层现场留出左侧任务卡/右侧导航；手机把现场放在下方卡片的上面。 */
+export function deepFocusCamera(worldX: number, worldY: number, viewport: Viewport, zoom = 1): Camera {
+  const z = clampZoom(Math.max(1, zoom))
+  const narrow = viewport.width <= 720
+  const screenX = narrow ? (viewport.width - 80) / 2 : (296 + viewport.width - 124) / 2
+  const screenY = viewport.height * (narrow ? .23 : .48)
+  return clampCamera({ x: worldX - screenX / z, y: worldY - screenY / z, zoom: z }, viewport)
+}
+
 /** 全景为观察模式，可低于操作缩放下限；返回楼层后恢复可点击尺寸。 */
 export function overviewCamera(viewport: Viewport): Camera {
   const zoom = Math.min(viewport.width / (WORLD_PIXEL_WIDTH + 80), viewport.height / (WORLD_PIXEL_HEIGHT + 64), 0.85)

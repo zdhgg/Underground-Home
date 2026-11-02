@@ -1,5 +1,7 @@
 import { podRect } from '../core/build'
 import { ripePlanters } from '../core/farm'
+import { deepReady } from '../core/deep'
+import { AYAN_SPOT } from '../core/deepTopology'
 import { stratumAt, type SleepPod, type WorldState } from '../core/world'
 
 /**
@@ -10,9 +12,10 @@ import { stratumAt, type SleepPod, type WorldState } from '../core/world'
  */
 export const HOME_WISH_LIMIT = 2
 
-export type HomeWishId = 'nest-warm-lamp' | 'ripe-planter'
+export type HomeWishId = 'tired-climb' | 'nest-warm-lamp' | 'ripe-planter'
 
 export type HomeWishTarget =
+  | { kind: 'point'; x: number; y: number }
   | { kind: 'pod'; podId: number }
   | { kind: 'planter'; planterId: number; x: number; y: number }
 
@@ -57,6 +60,18 @@ export function firstRipePlanter(world: WorldState) {
 export function homeWishes(world: WorldState): HomeWish[] {
   const wishes: HomeWish[] = []
 
+  // 第三层开放、还没见阿岩时先演出"为什么需要电梯"：抓挠声就是章节入口。
+  if (deepReady(world) && !world.deep.metAyan) {
+    wishes.push({
+      id: 'tired-climb',
+      emoji: '🪜',
+      title: '梯子好长，爬得好累',
+      detail: '小满背着菜直喘气：要是能快一点上下楼就好了……泉水层右边好像还有抓挠声？',
+      actionLabel: '去看看抓挠声',
+      target: { kind: 'point', x: AYAN_SPOT.x, y: AYAN_SPOT.y },
+    })
+  }
+
   if (world.deep.completed) {
     const pending = firstFloorPodsWithoutWarmLamp(world)[0]
     if (pending) {
@@ -94,6 +109,7 @@ export function homeWishTarget(world: WorldState, id: HomeWishId): HomeWishTarge
 
 /** 心愿已经不再成立时，给孩子一句简短解释。 */
 export function homeWishUnavailableReason(world: WorldState, id: HomeWishId): string {
+  if (id === 'tired-climb') return world.deep.metAyan ? '已经和阿岩打招呼啦，他的硬岩爪能凿开晶纹盖层。' : '先去泉水层右边的小侧洞看看。'
   if (id === 'nest-warm-lamp') {
     if (!world.deep.completed) return '第三层的工坊还没完成，暖光灯还做不出来。'
     if (firstFloorPods(world).length === 0) return '第一层还没有小窝，先安一间小窝吧。'

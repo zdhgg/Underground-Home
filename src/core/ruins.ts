@@ -1,7 +1,8 @@
 import { atuRoute,initialAtuPosition } from './atu'
 import { canAfford,changeMaterials } from './materials'
 import { foundRelics } from './relics'
-import { RUINS_FOOT,RUINS_MOTIF_SPOTS,ruinsClear,ruinsConnected,ruinsSpan,ruinsWidth } from './ruinsTopology'
+import { RUINS_FOOT,FOOTPRINT_SPOT,RUINS_MOTIF_SPOTS,SEAL_SPOT,ruinsClear,ruinsConnected,ruinsSpan,ruinsWidth } from './ruinsTopology'
+import { snapFacilityX } from './placement'
 import { TILE,createInitialWorld,type Cell,type Inventory,type RuinsState,type RuinsMotif,type RuinsEdition,type RuinsFacilityKind,type WorldState } from './world'
 export const RUINS_MOTIFS:readonly RuinsMotif[]=['lamp','spring','tools']
 export const RUINS_STORIES:Record<RuinsMotif,{name:string;speaker:string;old:string;now:string}>={
@@ -43,6 +44,10 @@ function placementProblem(w:WorldState,kind:RuinsFacilityKind,x:number):string|n
 export function ruinsBuildProblem(w:WorldState,kind:RuinsFacilityKind,x:number):string|null{
  const s=RUINS_SPECS[kind]
  return placementProblem(w,kind,x)??(!canAfford(w,s.cost)||w.deep.parts<s.parts||w.deep.crystals<s.crystals?`需要${ruinsCostText(kind)}。可继续挖土，或回三层工坊加工。`:null)
+}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住发现点和岩画故事位。 */
+export function ruinsCandidate(w:WorldState,kind:RuinsFacilityKind,tapX:number):number{
+ return snapFacilityX(tapX,ruinsWidth(kind),x=>placementProblem(w,kind,x)===null,{avoid:[SEAL_SPOT.x,FOOTPRINT_SPOT.x,...Object.values(RUINS_MOTIF_SPOTS).map(s=>s.x)]})
 }
 function commit(w:WorldState,before:RuinsState,message:string,cost:Inventory={stone:0,wood:0},parts=0,crystals=0):RuinsResult{
  changeMaterials(w,cost,-1);w.deep.parts-=parts;w.deep.crystals-=crystals

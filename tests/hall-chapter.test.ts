@@ -16,6 +16,7 @@ function setup(w = hallAvailable()) {
     focusOn: vi.fn(), setHallPreview: vi.fn(), refresh: vi.fn(), releaseDeepCamera: vi.fn(), beginDeepCamera: vi.fn(), cancelDeepAnimation: vi.fn(),
     playExplorationTravel: vi.fn((route: Cell[], done: () => void, step: (p: Cell) => void) => { route.forEach(step); done() }),
     playHallWork: vi.fn((_at: Cell, done: () => void) => done()),
+    playAtuWork: vi.fn((_at: Cell, done: () => void) => done()),
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
     playMealGather: vi.fn((_moves: MealMove[], done: () => void) => done()), finishMealGather: vi.fn(), cancelMealGather: vi.fn(), playMealCelebration: vi.fn(),
@@ -31,7 +32,7 @@ describe('暖光大厅的真实会话流程', () => {
   it('发现、加固、逐段凿岩、下楼、自由选址与六人到场按次序交接，全部中间存档可恢复', () => {
     const h = setup(), { w, chapter } = h
     chapter.show(true); expect(h.state()).toMatchObject({ done: 0, active: true })
-    chapter.primary(); expect(w.hall.inspected).toBe(true); expect(h.view.playHallWork).toHaveBeenCalled()
+    chapter.primary(); expect(w.hall.inspected).toBe(true); expect(h.view.playAtuWork).toHaveBeenCalled()
     chapter.primary(); expect(w.hall.braced).toBe(true)
     chapter.primary(); expect(hallFrontier(w)).toBeNull(); expect(h.view.playPartnerWork).toHaveBeenCalledTimes(9)
     chapter.primary(); expect(w.hall.entered).toBe(true); expect(w.exploration.explorer?.y).toBe(46)
@@ -51,8 +52,8 @@ describe('暖光大厅的真实会话流程', () => {
   })
   it('重复操作不并行，落手前取消不付费；旧回调不可补建或结束新动作', () => {
     const h = setup(); h.chapter.show(); let done = () => {}
-    h.view.playHallWork.mockImplementationOnce((_at, end) => { done = end })
-    h.chapter.primary(); h.chapter.primary(); expect(h.view.playHallWork).toHaveBeenCalledTimes(1); expect(h.w.hall.inspected).toBe(false)
+    h.view.playAtuWork.mockImplementationOnce((_at, end) => { done = end })
+    h.chapter.primary(); h.chapter.primary(); expect(h.view.playAtuWork).toHaveBeenCalledTimes(1); expect(h.w.hall.inspected).toBe(false)
     h.chapter.cancel(); done(); expect(h.w.hall.inspected).toBe(false)
     h.chapter.primary(); expect(h.w.hall.inspected).toBe(true)
     const before = structuredClone(h.w)

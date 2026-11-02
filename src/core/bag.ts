@@ -5,7 +5,7 @@ import type { WorldState } from './world'
 
 export interface BagItem {
   id: string; kind: 'material' | 'relic'; name: string; count: number; description: string
-  origin?: 'crystal' | 'hall' | 'garden' | 'reservoir' | 'ventilation' | 'ruins' | 'finale'
+  origin?: 'water' | 'crystal' | 'hall' | 'garden' | 'reservoir' | 'ventilation' | 'ruins' | 'finale'
 }
 const STORIES: Record<string, string> = {
   'seed-pouch': '小布袋里装着干种子。以前住在这里的伙伴，也盼着有一天能种出新鲜蔬菜。先把它好好收藏起来。',
@@ -21,6 +21,10 @@ export function bagItems(w: WorldState): BagItem[] {
   return [
     { id: 'stone', kind: 'material', name: '石料', count: w.inventory.stone, description: '修建洞室和菜槽时会用到。挖开泥土或裂纹岩，就有机会找到；建造时自动使用。' },
     { id: 'wood', kind: 'material', name: '旧木料', count: w.inventory.wood, description: '可以修床、做座椅和菜槽。挖土时能找到，建造时会自动从物品栏取用。' },
+    ...(w.exploration.entered ? [
+      { id: 'clay', origin: 'water' as const, kind: 'material' as const, name: '红黏土', count: w.inventory.clay ?? 0, description: '泉水层的红土。先收好，之后可以做陶罐和装饰。' },
+      { id: 'garden-food', origin: 'water' as const, kind: 'material' as const, name: '家园食物', count: w.farm.food, description: '在泉水层菜园收好的食物。可以请伙伴吃饭，也能带到更深的家园。' },
+    ] : []),
     ...RELICS.map(r => ({ id: r.id, kind: 'relic' as const, name: r.name, count: found.has(r.id) ? 1 : 0,
       description: found.has(r.id) ? STORIES[r.id]! : '还藏在第一层的泥土里。挖一挖，也许会有小发现！' })),
     ...(w.finale.entered?[{id:'earth-warmth',origin:'finale' as const,kind:'relic' as const,name:WARM_CRYSTAL,count:w.finale.foundWarmth?1:0,description:'最深处的心形暖晶散发的温柔金色。晶体留在原岩层，我们在旁边建九位伙伴的家。终章之后也可以回来看看。'}]:[]),
@@ -37,8 +41,13 @@ export function bagItems(w: WorldState): BagItem[] {
       { id: 'water-shell', origin: 'reservoir' as const, kind: 'relic' as const, name: '水纹贝印', count: w.reservoir.foundShell ? 1 : 0, description: '岩壁里留下从前的小贝壳。水曾在这里走过很久很久，贝印留在原处，故事记进物品栏。' },
       { id: 'water-reed', origin: 'reservoir' as const, kind: 'relic' as const, name: '芦苇小穗', count: w.reservoir.foundReed ? 1 : 0, description: '细细的根贴着潮湿岩壁生长。团团说，水路旁的小生命也有自己的家。' },
     ] : []),
+    ...(w.garden.entered && !w.exploration.entered ? [
+      { id: 'garden-food', origin: 'garden' as const, kind: 'material' as const, name: '家园食物', count: w.farm.food, description: '蔬菜和培育的菌伞放在同一个粮仓。菌床每次收获添两份，回暖光大厅就能请老朋友吃饭。' },
+    ] : []),
+    ...(w.exploration.entered ? [
+      { id: 'glow-mushroom', origin: 'water' as const, kind: 'relic' as const, name: '发光蘑菇', count: w.exploration.foundMushroom ? 1 : 0, description: '泉水层洞壁上的小蘑菇。采好后，原地就能空出来继续建设。' },
+    ] : []),
     ...(w.garden.entered ? [
-      { id: 'garden-food', kind: 'material' as const, name: '家园食物', count: w.farm.food, description: '蔬菜和培育的菌伞放在同一个粮仓。菌床每次收获添两份，回暖光大厅就能请老朋友吃饭。' },
       { id: 'garden-spores', origin: 'garden' as const, kind: 'relic' as const, name: '孢子云', count: w.garden.foundSpores ? 1 : 0, description: '细小光点围着菌伞打转，像岩洞里的星尘。发现留在原地，故事记进物品栏。' },
       { id: 'garden-root', origin: 'garden' as const, kind: 'relic' as const, name: '根须印', count: w.garden.foundRoot ? 1 : 0, description: '旧岩壁里留下根须的印痕。苔苔说，细细的根也能把很远的地方连起来。' },
     ] : []),

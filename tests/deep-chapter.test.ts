@@ -14,24 +14,25 @@ import { completedReservoir } from './fixtures/reservoirWorld'
 import { completedGarden } from './fixtures/gardenWorld'
 import { furnishedHall } from './fixtures/hallWorld'
 import { enterDeep, expandDeep, liftReady, secondLayerComplete, workingDeep } from './fixtures/deepWorld'
-import { buildDeep, performDeep } from '../src/core/deep'
+import { buildDeep, deepSuggestion, performDeep } from '../src/core/deep'
 
-function setup(w = secondLayerComplete()) {
+function setup(w = secondLayerComplete(), nextMainline?: () => { label: string; open(): void } | null) {
   let state: DeepUI | undefined
-  const history = createWorldHistory(), saves: unknown[] = [], notify = vi.fn(), milestone = vi.fn()
+  const history = createWorldHistory(), saves: unknown[] = [], notify = vi.fn(), milestone = vi.fn(), visitHome = vi.fn()
   const view = {
     focusOn: vi.fn(), focusCrystal: vi.fn(), setDeepPreview: vi.fn(), cancelDeepAnimation: vi.fn(), releaseDeepCamera: vi.fn(),
-    setDeepSuggestion: vi.fn(),
+    setDeepSuggestion: vi.fn(), setGuideFocus: vi.fn(), showDeepResult: vi.fn(), clearDeepResult: vi.fn(),
     playExplorationTravel: vi.fn((route: Cell[], done: () => void, step: (p: Cell) => void) => { route.forEach(step); done() }),
+    playAtuWork: vi.fn((_at: Cell, done: () => void) => done()),
     playPartnerTravel: vi.fn((_id: string, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, strike: () => void, done: () => void) => { strike(); done() }),
     playDeepLift: vi.fn((_from: number, _to: number, done: () => void) => done()),
   }
   const chapter = new DeepChapter({ world: () => w, view: view as unknown as PixiWorldRenderer,
     emit: value => { state = value }, prepare: vi.fn(), changed: () => { initializeWorkers(w); saves.push(serialize(w)) },
-    record: change => history.record({ kind: 'deep', change }), dig: (p, tile) => history.record({ kind: 'dig', ...p, tile }), notify, milestone,
+    record: change => history.record({ kind: 'deep', change }), dig: (p, tile) => history.record({ kind: 'dig', ...p, tile }), notify, milestone, visitHome, nextMainline,
   })
-  return { w, chapter, view, notify, milestone, history, saves, state: () => state! }
+  return { w, chapter, view, notify, milestone, visitHome, history, saves, state: () => state! }
 }
 afterEach(() => vi.useRealTimers())
 
@@ -89,8 +90,8 @@ describe('晶簇层真实会话切换和施工', () => {
     expect(h.state().speech).toContain('采集台建 1 台就够了')
     expect(h.state().hint).toContain('本章只需 1 台')
     h.chapter.tap({ x: 24, y: 32 })
-    expect(h.state()).toMatchObject({ placing: 'collector', candidate: 24, valid: true, label: '就在这里建造' })
-    expect(h.view.setDeepPreview).toHaveBeenLastCalledWith('collector', 24)
+    expect(h.state()).toMatchObject({ placing: 'collector', candidate: 23, valid: true, label: '就在这里建造' })
+    expect(h.view.setDeepPreview).toHaveBeenLastCalledWith('collector', 23)
   })
 
   it('选址前后地图都亮金色推荐位，点了候选位就让位给绿框，关面板即收起', () => {
@@ -107,6 +108,47 @@ describe('晶簇层真实会话切换和施工', () => {
     expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith(null, null)
   })
 
+  it('行动类小步的按钮写出地点，地图亮出发生位置；进设施视图或收起面板就撤掉', () => {
+    // 当前小步是炼金属锭：按钮写出"小石炉"，地图框住整座炉。
+    const h = setup(workingDeep())
+    h.chapter.show()
+    expect(h.state().label).toBe('去小石炉炼金属锭')
+    expect(h.state().hint).toContain('小石炉在发光')
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, { x: 21, y: 31, w: 3, h: 3 })
+    h.chapter.select('furnace')
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, null)
+    expect(h.state().header).toBe('阿木的小石炉 · 第 3 层')
+    h.chapter.close()
+    // 缺材料时指向采集台；目标不是设施时（竖井口）亮目标格。
+    const short = setup(workingDeep()); short.w.deep.ore = 0; short.w.deep.ingots = 0
+    short.chapter.show()
+    expect(short.state().label).toBe('去采集台取材料')
+    expect(short.view.setGuideFocus).toHaveBeenLastCalledWith(short.chapter, { x: 24, y: 31, w: 3, h: 3 })
+    const propped = setup(workingDeep()); propped.w.deep.parts = 1
+    propped.chapter.show()
+    expect(propped.state().label).toBe('去竖井口安装支撑')
+    expect(propped.view.setGuideFocus).toHaveBeenLastCalledWith(propped.chapter, { x: 27, y: 33, w: 1, h: 1 })
+  })
+
+  it('"我自己去地图上找"收起面板、镜头指向目标、金光继续亮；点到发光设施照常交接', () => {
+    const h = setup(workingDeep())
+    h.chapter.show()
+    expect(h.state().scout).toBe(true)
+    h.chapter.scout()
+    // 面板收起，目标地点仍然亮着；其他章节的关注点不会被误清。
+    expect(h.state().active).toBe(false)
+    expect(h.view.focusOn).toHaveBeenCalled()
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, { x: 21, y: 31, w: 3, h: 3 })
+    // 点到发光的小石炉：照常打开设施卡片并撤掉引导高亮。
+    h.chapter.tap({ x: 22, y: 32 })
+    expect(h.state()).toMatchObject({ active: true, selected: 'furnace' })
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, null)
+    // 建造类小步不提供"自己去找"入口（推荐位金框已经指了地点）。
+    const build = setup(workingDeep()); build.w.deep.facilities = build.w.deep.facilities.filter(f => f.kind !== 'furnace')
+    build.chapter.show()
+    expect(build.state().scout).toBe(false)
+  })
+
   it('面板开着时点泥土照旧交给挖掘，不会被选址吞掉', () => {
     const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
     w.tiles[32][38] = TILE.SOIL; w.tiles[31][38] = TILE.SOIL
@@ -114,6 +156,52 @@ describe('晶簇层真实会话切换和施工', () => {
     h.chapter.show()
     expect(h.chapter.tap({ x: 38, y: 32 })).toBe(false)
     expect(h.state().placing).toBeNull()
+  })
+
+  it('选址点土不挖掘；明确切到挖掘后可返回同一设施，再自由换位置', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const h = setup(w)
+    h.chapter.show(); h.chapter.primary()
+    expect(h.state().placing).toBe('collector')
+    // x=40 是扩建口袋边缘的泥土：选址中点只留下明确的“先去挖”出口，不暗中改地形。
+    expect(w.tiles[33][40]).toBe(TILE.SOIL)
+    expect(h.chapter.tap({ x: 40, y: 33 })).toBe(true)
+    expect(h.state().candidate).toBeNull()
+    expect(h.state().digAvailable).toBe(true)
+    expect(h.state().hint).toContain('先挖开')
+    expect(h.chapter.dig()).toEqual({ x: 40, y: 33 })
+    expect(w.tiles[33][40]).toBe(TILE.SOIL)
+    expect(h.state()).toMatchObject({ active: true, digging: true, placing: null })
+    expect(h.chapter.tap({ x: 40, y: 33 })).toBe(false)
+    h.chapter.primary()
+    expect(h.state()).toMatchObject({ digging: false, placing: 'collector' })
+    // 点推荐框中间：影子落在推荐位本身，不会偏移成新左边缘。
+    const suggested = deepSuggestion(w, 'collector')!
+    h.chapter.tap({ x: suggested + 1, y: 32 })
+    expect(h.state()).toMatchObject({ candidate: suggested, valid: true })
+    // 想盖住天然晶簇那一列：没有能放下的位置，保留点击列让红框说清原因。
+    h.chapter.tap({ x: 30, y: 32 })
+    expect(h.state()).toMatchObject({ candidate: 30, valid: false })
+    expect(h.state().hint).toContain('晶簇')
+  })
+
+  it('采集台建好后先试用一次，并在下一目标卡上保留动作结果', () => {
+    const w = secondLayerComplete(); enterDeep(w); expandDeep(w); performDeep(w, 'discover')
+    const h = setup(w)
+    h.chapter.show(); h.chapter.primary()
+    const suggested = deepSuggestion(w, 'collector')!
+    h.chapter.tap({ x: suggested + 1, y: 32 }); h.chapter.primary()
+    expect(h.state()).toMatchObject({ feedback: { title: '采集台建好啦', nextLabel: '试试采集台，取一份材料' } })
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, { x: suggested, y: 31, w: 3, h: 3, label: null })
+    expect(h.view.setDeepSuggestion).toHaveBeenLastCalledWith(null, null)
+    h.chapter.primary()
+    expect(h.state()).toMatchObject({ feedback: { title: '材料到手啦' } })
+    expect(w.deep.crystals).toBe(6)
+    expect(w.deep.ore).toBe(5)
+    const after = structuredClone(w)
+    h.chapter.primary()
+    expect(h.state()).toMatchObject({ feedback: null, placing: null, label: '选择位置放置稳光配电箱' })
+    expect(w).toEqual(after) // 查看下一步不暗中开工或扣材料。
   })
 
   it('点已经建好的设施仍是看用法，不会被下一件设施的选址抢走', () => {
@@ -235,6 +323,106 @@ describe('晶簇层真实会话切换和施工', () => {
     expect(h.w.deep.completed).toBe(true); expect(h.w.deep.rides).toBe(1)
     expect(h.w.exploration.explorer).toEqual({ x: 27, y: 11 }); expect(h.w.workers.amu).toEqual({ x: 26, y: 11 })
     expect(deserialize(serialize(h.w))).toMatchObject({ ok: true })
-    expect(h.milestone).toHaveBeenCalledWith('第 3 层 · 完成啦！', expect.any(String))
+    expect(h.state().feedback?.title).toBe('三层家园连通啦')
+    expect(h.milestone).not.toHaveBeenCalled()
+  })
+
+  it('面板一直带着大目标：里程碑推进、发现晶簇亮出计划、工坊后给出部件配方链', () => {
+    const h = setup(), { chapter, w } = h
+    chapter.show(true)
+    expect(h.state()).toMatchObject({ milestone: 0, plan: false, chain: false })
+    chapter.primary(); chapter.primary(); chapter.primary()
+    expect(w.deep.entered).toBe(true); expect(h.state()).toMatchObject({ plan: false, milestone: 1 })
+    chapter.primary()
+    expect(w.deep.foundCrystal).toBe(true)
+    expect(h.state().feedback?.title).toBe('晶光找到啦')
+    expect(h.milestone).not.toHaveBeenCalledWith('大计划：三层电梯！', expect.any(String))
+    chapter.primary() // 看完发现结果后才交接到建造目标。
+    expect(h.state()).toMatchObject({ plan: true, milestone: 1, chain: false })
+    expect(h.state().builds.map(b => b.kind)).toEqual(['distributor', 'lamp', 'workshop', 'furnace'])
+    expect(h.state().builds.find(b => b.kind === 'workshop')!.locked).toBe('先装稳光配电箱')
+    expandDeep(w)
+    for (const [kind, x] of [['collector', 24], ['distributor', 28], ['lamp', 36], ['workshop', 31], ['furnace', 21]] as [DeepFacilityKind, number][]) buildDeep(w, kind, x)
+    chapter.refresh()
+    expect(h.state().builds).toEqual([])
+    expect(h.state()).toMatchObject({ milestone: 3, chain: true, partsNeed: 1, partsFor: '支撑竖井' })
+    for (const a of ['collect', 'collect', 'smelt', 'craft', 'support'] as const) performDeep(w, a)
+    chapter.refresh()
+    expect(h.state()).toMatchObject({ milestone: 3, chain: true, partsNeed: 3, partsFor: '组装电梯' })
+  })
+
+  it('到站先看电梯成果，主动继续才交给小窝；不并列弹庆祝、提示或抢镜头', () => {
+    const h = setup(liftReady())
+    h.w.deep.parts = 1
+    h.chapter.show(); h.chapter.primary()
+    expect(h.w.deep.rides).toBe(1)
+    expect(h.state().feedback).toMatchObject({ title: '三层家园连通啦', nextLabel: '去小窝看看暖光灯' })
+    expect(h.view.setGuideFocus).toHaveBeenLastCalledWith(h.chapter, { x: 27, y: 9, w: 1, h: 3, label: null })
+    expect(h.visitHome).not.toHaveBeenCalled()
+    expect(h.notify).not.toHaveBeenCalled(); expect(h.milestone).not.toHaveBeenCalled()
+    const focusCount = h.view.focusOn.mock.calls.length, before = structuredClone(h.w)
+    h.chapter.refresh(); h.chapter.refresh()
+    expect(h.view.focusOn).toHaveBeenCalledTimes(focusCount)
+    h.chapter.primary()
+    expect(h.visitHome).toHaveBeenCalledExactlyOnceWith(h.w.pods[0].id)
+    expect(h.state()).toMatchObject({ active: false, feedback: null })
+    expect(h.w).toEqual(before) // 查看小窝不安装、不扣部件，也不再乘一次电梯。
+  })
+
+  it('关闭到站成果即放弃交接，刷新不自动打开小窝；重新打开仍可主动查看', () => {
+    const h = setup(liftReady()); h.w.deep.parts = 1
+    h.chapter.show(); h.chapter.primary(); h.chapter.close(); h.chapter.refresh()
+    expect(h.visitHome).not.toHaveBeenCalled()
+    expect(h.state()).toMatchObject({ active: false, feedback: null })
+    h.chapter.show()
+    expect(h.state().label).toBe('去小窝看看暖光灯')
+    h.chapter.primary()
+    expect(h.visitHome).toHaveBeenCalledExactlyOnceWith(h.w.pods[0].id)
+  })
+
+  it('电梯耗尽材料后，尾声继续给出可执行的采集、炼锭、做部件和回家交接', () => {
+    const h = setup(liftReady())
+    Object.assign(h.w.deep, { crystals: 0, ore: 0, ingots: 0, parts: 0 })
+    h.chapter.show(); h.chapter.primary()
+    expect(h.state().feedback?.nextLabel).toContain('取些材料')
+    for (const label of ['去采集台取暖灯材料', '去小石炉炼金属锭', '去工坊做暖灯部件', '乘电梯回暖窝层']) {
+      h.chapter.primary() // 上一步成果 → 本步目标，不自动开工。
+      expect(h.state().label).toBe(label)
+      expect(h.state().feedback).toBeNull()
+      h.chapter.primary()
+      expect(h.state().feedback).not.toBeNull()
+    }
+    h.chapter.primary()
+    expect(h.visitHome).toHaveBeenCalledExactlyOnceWith(h.w.pods[0].id)
+    expect(h.w.deep.parts).toBe(2) // 精密工具的真实产出仍保留；查看小窝不扣料。
+    expect(h.w.deep.rides).toBe(2)
+    expect(deserialize(serialize(h.w))).toMatchObject({ ok: true })
+  })
+
+  it('暖灯尾声全部完成后，到站的"下一步"交给真实主线，不再指回已完成的目标', () => {
+    const open = vi.fn()
+    const h = setup(liftReady(), () => ({ label: '去看看暖光大厅', open }))
+    h.w.deep.parts = 1
+    h.chapter.show(); h.chapter.primary()
+    expect(h.w.deep.completed).toBe(true)
+    expect(h.state().feedback).toMatchObject({ title: '三层家园连通啦', nextLabel: '去小窝看看暖光灯' })
+    h.w.pods.forEach(p => { p.warmLamp = true }) // 暖灯尾声完成 → 主线已在下一章
+    h.chapter.perform('ride-crystal')
+    expect(h.state().feedback).toMatchObject({ title: '到站啦', nextLabel: '去看看暖光大厅' })
+    h.chapter.primary()
+    expect(open).toHaveBeenCalledTimes(1)
+    expect(h.state().feedback).toBeNull()
+    expect(deserialize(serialize(h.w))).toMatchObject({ ok: true })
+  })
+
+  it('没有可移交的主线目标时，到站成果仍回退到本章尾声卡', () => {
+    const h = setup(liftReady(), () => null)
+    h.chapter.show(); h.chapter.primary()
+    h.w.pods.forEach(p => { p.warmLamp = true })
+    h.chapter.perform('ride-crystal')
+    expect(h.state().feedback).toMatchObject({ title: '到站啦', nextLabel: '下一步：三层家园连起来啦' })
+    h.chapter.primary()
+    expect(h.state().feedback).toBeNull()
+    expect(h.state().label).toBe('回晶簇层看看')
   })
 })

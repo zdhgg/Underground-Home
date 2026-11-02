@@ -2,7 +2,8 @@ import { atuRoute, initialAtuPosition } from './atu'
 import { canPlacePod } from './build'
 import { canAfford, changeMaterials } from './materials'
 import { partnerBed } from './partners'
-import { VENTILATION_FOOT, LINGLING_SPOT, ventilationDuctPath, ventilationClear, ventilationConnected, ventilationNetwork, ventilationSpan, ventilationWidth } from './ventilationTopology'
+import { VENTILATION_FOOT, ECHO_SPOT, LINGLING_SPOT, VANE_SPOT, ventilationDuctPath, ventilationClear, ventilationConnected, ventilationNetwork, ventilationSpan, ventilationWidth } from './ventilationTopology'
+import { snapFacilityX } from './placement'
 import { TILE, createInitialWorld, type Cell, type Inventory, type VentilationFacilityKind, type VentilationState, type SleepPod, type AirMode, type WindCraft, type WorldState } from './world'
 export const VENTILATION_SPECS: Record<VentilationFacilityKind, { name:string; cost:Inventory; parts:number; detail:string }> = {
   inlet:{name:'岩缝进风口',cost:{stone:3,wood:1},parts:0,detail:'嵌在后侧洞壁的旧风口。先清开洞壁，再让新鲜的风沿风管进来。'},
@@ -36,6 +37,10 @@ function placementProblem(w: WorldState, kind: VentilationFacilityKind, x: numbe
 }
 export function ventilationBuildProblem(w: WorldState, kind: VentilationFacilityKind, x: number): string | null {
   return placementProblem(w, kind, x) ?? (!canAfford(w, VENTILATION_SPECS[kind].cost) || w.deep.parts < VENTILATION_SPECS[kind].parts ? `需要${ventilationCostText(kind)}。可继续挖土，或回三层工坊加工部件。` : null)
+}
+/** 点击列 → 设施左格：影子尽量盖住点中的位置，优先不压住回声石和旧风标。 */
+export function ventilationCandidate(w: WorldState, kind: VentilationFacilityKind, tapX: number): number {
+  return snapFacilityX(tapX, ventilationWidth(kind), x => placementProblem(w, kind, x) === null, { avoid: [ECHO_SPOT.x, VANE_SPOT.x] })
 }
 function commit(w: WorldState, before: VentilationState, message: string, cost: Inventory = { stone: 0, wood: 0 }, parts = 0, crystals = 0, pod?: SleepPod): VentilationResult {
   changeMaterials(w, cost, -1); w.deep.parts -= parts; w.deep.crystals -= crystals

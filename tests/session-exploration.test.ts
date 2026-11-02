@@ -1,5 +1,6 @@
 import { warmLampWorld } from './fixtures/nestWarmLampWorld'
-import { secondLayerComplete } from './fixtures/deepWorld'
+import { enterDeep, expandDeep, liftReady, secondLayerComplete } from './fixtures/deepWorld'
+import { performDeep } from '../src/core/deep'
 import { completedFinale, workingFinale } from './fixtures/finaleWorld'
 import { workingRuins } from './fixtures/ruinsWorld'
 import { workingVentilation } from './fixtures/ventilationWorld'
@@ -48,6 +49,7 @@ const harness = vi.hoisted(() => {
     setLampPreview: vi.fn(), playDigLoot: vi.fn(),
     playPartnerTravel: vi.fn((_id: WorkerId, route: Cell[], step: (p: Cell) => void, done: () => void) => { route.forEach(step); done() }),
     playPartnerWork: vi.fn((_plan: WorkPlan, hit: () => void, done: () => void) => { hit(); done() }),
+    playDeepLift: vi.fn((_from: number, _to: number, done: () => void) => done()),
     cancelPartnerWork: vi.fn(),
     playSoilWork: vi.fn((_plan: SoilPlan, strike: () => void, done: () => void) => { strike(); done() }),
     // 累计帧数：看门狗用它判断画面是不是真的冻住了
@@ -184,6 +186,51 @@ describe('探索会话与存档集成', () => {
   })
   afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
+  it('第三层真实输入：选址点土不挖；明确进入挖掘后只挖一格，并可返回原设施选址', async () => {
+    const saved = secondLayerComplete(); enterDeep(saved); expandDeep(saved); performDeep(saved, 'discover')
+    harness.store.load.mockResolvedValue(serialize(saved))
+    const deep = vi.fn()
+    const game = await createGameSession({} as HTMLElement, { onMessage: vi.fn(), onProgress: vi.fn(), onDeep: deep })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.renderer.playExplorationTravel.mockImplementationOnce((route, done, step) => { route.forEach(step); done() })
+    game.openDeep(); game.deepSelect('collector')
+    const before = serialize(w)
+    harness.handlers.onTap({ x: 40, y: 33 })
+    expect(serialize(w)).toEqual(before)
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digAvailable: true, placing: 'collector' })
+    game.deepDig()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digging: true, placing: null })
+    harness.handlers.onTap({ x: 40, y: 33 })
+    expect(w.tiles[33][40]).toBe(TILE.EMPTY)
+    expect(w.tiles[32][40]).toBe(TILE.SOIL)
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ digging: false, placing: 'collector', candidate: null })
+    game.destroy()
+  })
+
+
+  it('第三层电梯成果主动交给真实小窝预览，退出不会重新乘梯或自动安装', async () => {
+    const saved = liftReady(); saved.deep.parts = 1
+    harness.store.load.mockResolvedValue(serialize(saved))
+    const deep = vi.fn(), nest = vi.fn(), milestone = vi.fn(), message = vi.fn()
+    const game = await createGameSession({} as HTMLElement, { onMessage: message, onProgress: vi.fn(), onDeep: deep, onNestWelcome: nest, onMilestone: milestone })
+    const w = harness.renderer.setWorld.mock.calls[0][0] as WorldState
+    harness.renderer.playExplorationTravel.mockImplementationOnce((route, done, step) => { route.forEach(step); done() })
+    game.openDeep(); message.mockClear(); milestone.mockClear(); nest.mockClear()
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ active: true, feedback: { title: '三层家园连通啦', nextLabel: '去小窝看看暖光灯' } })
+    expect(nest).not.toHaveBeenCalled(); expect(milestone).not.toHaveBeenCalled(); expect(message).not.toHaveBeenCalled()
+    expect(w.deep.rides).toBe(1)
+    const before = serialize(w)
+    game.deepPrimary()
+    expect(deep.mock.calls.at(-1)![0]).toMatchObject({ active: false, feedback: null })
+    expect(nest.mock.calls.at(-1)![0]).toMatchObject({ podId: w.pods[0].id, lamp: { installed: false, problem: null } })
+    expect(serialize(w)).toEqual(before)
+    game.closeNestWelcome(); vi.advanceTimersByTime(4000)
+    expect(nest.mock.calls.at(-1)![0]).toBeNull()
+    expect(w.deep.rides).toBe(1); expect(w.deep.parts).toBe(1); expect(w.pods[0].warmLamp).not.toBe(true)
+    game.destroy()
+  })
 
   it('小窝预览不扣款，施工期间物品栏输入门禁不取消，结算保存/撤销与旧回调安全', async () => {
     harness.store.load.mockResolvedValue(serialize(warmLampWorld(true)))

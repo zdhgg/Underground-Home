@@ -15,7 +15,7 @@ function setup(w=finaleAvailable()){
  const view={focusOn:vi.fn(),setFinalePreview:vi.fn(),refresh:vi.fn(),beginDeepCamera:vi.fn(),releaseDeepCamera:vi.fn(),cancelDeepAnimation:vi.fn(),finishChapterArrival:vi.fn(),showFinalePanorama:vi.fn(),
   playExplorationTravel:vi.fn((route:Cell[],done:()=>void,step:(p:Cell)=>void)=>{route.forEach(step);done()}),
   playPartnerTravel:vi.fn((_id:string,route:Cell[],step:(p:Cell)=>void,done:()=>void)=>{route.forEach(step);done()}),
-  playPartnerWork:vi.fn((_plan:WorkPlan,strike:()=>void,done:()=>void)=>{strike();done()}),playHallWork:vi.fn((_at:Cell,done:()=>void)=>done()),
+  playPartnerWork:vi.fn((_plan:WorkPlan,strike:()=>void,done:()=>void)=>{strike();done()}),playHallWork:vi.fn((_at:Cell,done:()=>void)=>done()),playAtuWork:vi.fn((_at:Cell,done:()=>void)=>done()),
  }
  const chapter=new FinaleChapter({world:()=>w,view:view as unknown as PixiWorldRenderer,emit:v=>{state=v},prepare:vi.fn(),
   changed:()=>{initializeWorkers(w);const stamp=JSON.stringify([w.finale,w.dugCount,w.farm.food,w.reservoir.water,w.exploration.explorer&&stratumAt(w.exploration.explorer.y),Object.entries(w.workers).map(([id,p])=>[id,stratumAt(p!.y)])]);if(stamp!==lastStamp){lastStamp=stamp;saves.push(serialize(w))}},

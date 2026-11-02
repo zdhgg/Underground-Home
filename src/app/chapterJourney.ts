@@ -40,14 +40,54 @@ export class ChapterJourney {
   work(id: 'atu' | WorkerId, at: Cell, done: () => void): void {
     const token = this.serial
     let arrived = false
-    if (id === 'atu') { this.p.view.playHallWork(at, () => { if (!arrived && this.live(token)) { arrived = true; done() } }); return }
+    if (id === 'atu') { this.p.view.playAtuWork(at, () => { if (!arrived && this.live(token)) { arrived = true; done() } }); return }
     const w = this.p.world(), atu = w.exploration.explorer
     if (atu?.x === at.x && atu.y === at.y) at = [{ x: at.x + 1, y: at.y }, { x: at.x - 1, y: at.y }].find(p => w.workers[id] && atuRoute(w, w.workers[id]!, p, true)) ?? at
     this.moveWorker(id, at, () => {
       this.p.view.playPartnerWork({ worker: id, at, route: [at], target: { kind: 'deep-rock', x: at.x, y: at.y + 1 } }, () => {}, () => { if (!arrived && this.live(token)) { arrived = true; done() } })
     })
   }
-  run(to: Cell, actor: 'atu' | WorkerId, done: () => void): void { this.begin(); this.moveAtu(to, () => this.work(actor, to, done)) }
+  /** 阿土和动手的伙伴同时走向现场：阿土站目标格，伙伴优先进相邻格，都到了伙伴才动手。 */
+  moveTogether(to: Cell, id: WorkerId, done: () => void): void {
+    const w = this.p.world()
+    if (!atuRoute(w, w.exploration.explorer ?? initialAtuPosition(w), to, true)) { this.p.notify('先挖通两格高、有地面的通道。'); this.finish(); return }
+    const from = w.workers[id]
+    const stand = from ? [{ x: to.x + 1, y: to.y }, { x: to.x - 1, y: to.y }].find(p => atuRoute(w, from, p, true)) ?? to : to
+    if (!from || !atuRoute(w, from, stand, true)) { this.p.notify('伙伴还走不到这里，先接通通道。'); this.finish(); return }
+    const token = this.serial
+    let arrived = 0
+    const both = (): void => {
+      if (!this.live(token) || ++arrived !== 2) return
+      this.p.view.playPartnerWork({ worker: id, at: stand, route: [stand], target: { kind: 'deep-rock', x: stand.x, y: stand.y + 1 } }, () => {}, () => { if (this.live(token)) done() })
+    }
+    this.moveAtu(to, both)
+    this.moveWorker(id, stand, both)
+  }
+  /** 大家一起走：阿土沿自己的路线，伙伴们同时走向各自的位置，全部到了才继续。 */
+  moveParty(atuLegs: Cell[], workers: { id: WorkerId; to: Cell }[], done: () => void): void {
+    const w = this.p.world()
+    let from = w.exploration.explorer ?? initialAtuPosition(w)
+    for (const leg of atuLegs) {
+      if (!atuRoute(w, from, leg, true)) { this.p.notify('先挖通两格高、有地面的通道。'); this.finish(); return }
+      from = leg
+    }
+    for (const m of workers) {
+      const pos = w.workers[m.id]
+      if (!pos || !atuRoute(w, pos, m.to, true)) { this.p.notify('伙伴还走不到这里，先接通通道。'); this.finish(); return }
+    }
+    const token = this.serial, total = 1 + workers.length
+    let arrived = 0
+    const both = (): void => { if (this.live(token) && ++arrived === total) done() }
+    const atuNext = (i: number): void => { i >= atuLegs.length ? both() : this.moveAtu(atuLegs[i], () => atuNext(i + 1)) }
+    atuNext(0)
+    for (const m of workers) this.moveWorker(m.id, m.to, both)
+  }
+  run(to: Cell, actor: 'atu' | WorkerId, done: () => void): void {
+    this.begin()
+    // 阿土自己动手才串行；交给伙伴的活，两个人一起走过去。
+    if (actor === 'atu') { this.moveAtu(to, () => this.work(actor, to, done)); return }
+    this.moveTogether(to, actor, done)
+  }
   excavate(frontier: () => Cell | null, dug: (p: Cell) => void, done: () => void): void {
     const w = this.p.world(), token = this.begin()
     const next = () => {

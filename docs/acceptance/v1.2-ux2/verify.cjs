@@ -228,12 +228,12 @@ async function runChapterHandoff(browser, fixtures, results, errors) {
   const { context, page } = await openGame(browser, 1440, 900, fixtures.lamp, errors)
   await openNotebook(page)
   await page.locator('.depth-nav .crystal').click()
-  await page.locator('.deep-panel').waitFor()
-  assert.equal(await page.locator('.notebook-sheet').isVisible(), false)
-  await openNotebook(page)
+  // 章节页翻进小本子：本子保持翻开，主线与心愿让位，只剩一个主要操作。
+  await page.locator('.notebook-sheet .deep-panel').waitFor()
+  assert.equal(await page.locator('.notebook-sheet').isVisible(), true)
   assert.equal(await page.locator('.notebook-wishes').count(), 0)
   assert.equal(await page.locator('.notebook-mission').count(), 0)
-  assert.equal(await page.locator('.notebook-quiet').count(), 1)
+  assert.equal(await page.locator('.notebook-quiet').count(), 0)
   assert.equal(await page.locator('.stage [data-primary-action]').count(), 1)
   await shot(page, '1440-G-chapter')
   results.at(-1).scenarioGChapter = { wishHidden: true, primaryActions: 1, deepPanelOpen: true }

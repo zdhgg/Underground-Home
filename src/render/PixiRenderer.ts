@@ -12,8 +12,10 @@ import { HallScene, loadHallTextures } from './hallScene'
 import type { HallFacilityKind } from '../core/world'
 import { playCoreStarted } from './waterSound'
 import { DeepScene } from './deepScene'
+import { GuideFocus, type GuideSpot } from './guideFocus'
 import { loadDeepTextures } from './deepArt'
 import type { DeepFacilityKind } from '../core/world'
+import { CRYSTAL_SPOT } from '../core/deepTopology'
 import { gameAudio } from './gameAudio'
 import { Application, Container, Graphics, Sprite, Text, Texture, TilingSprite, type Ticker } from 'pixi.js'
 import {
@@ -25,6 +27,8 @@ import {
   TILE,
   TILE_SIZE,
   isInside,
+  stratumAt,
+  type StratumId,
   type Cell,
   type SleepPod,
   type TileType,
@@ -79,6 +83,7 @@ import {
   WORLD_PIXEL_HEIGHT,
   WORLD_PIXEL_WIDTH,
   centerOn,
+  deepFocusCamera,
   clampCamera,
   clampZoom,
   panCamera,
@@ -540,6 +545,8 @@ export class PixiWorldRenderer {
   private readonly gardenScene = new GardenScene()
   private readonly hallScene = new HallScene()
   private readonly deepScene = new DeepScene()
+  private readonly guideFocus = new GuideFocus()
+  private focusOwner: object | null = null
   private roomPreview: RoomPreview | null = null
   private readonly explorationScene: ExplorationScene
   private readonly openingScene: OpeningScene
@@ -686,6 +693,7 @@ export class PixiWorldRenderer {
       this.ventilationScene.foreground,
       this.ruinsScene.foreground,
       this.finaleScene.foreground,
+      this.guideFocus.view,
       this.openingScene.view,
       this.lamps,
       this.farmFlow,
@@ -921,12 +929,26 @@ export class PixiWorldRenderer {
   stopReservoirFlow():void{this.reservoirScene.stopFlow()}
   setGardenPreview(kind: GardenFacilityKind | null, x: number | null): void { if (this.world) this.gardenScene.placePreview(this.world, kind, x) }
   setHallPreview(kind: HallFacilityKind | null, x: number | null): void { if (this.world) this.hallScene.placePreview(this.world, kind, x) }
-  playHallWork(at: Cell, done: () => void): void { this.explorationScene.work({ x: at.x, y: at.y + 1 }, () => {}, done) }
+  playAtuWork(at: Cell, done: () => void): void { this.explorationScene.work({ x: at.x, y: at.y + 1 }, () => {}, done) }
+  playHallWork(at: Cell, done: () => void): void { this.playAtuWork(at, done) }
   setDeepPreview(kind: DeepFacilityKind | null, x: number | null): void { if (this.world) this.deepScene.placePreview(this.world, kind, x) }
   setDeepSuggestion(kind: DeepFacilityKind | null, x: number | null): void { if (this.world) this.deepScene.placeSuggestion(this.world, kind, x) }
-  focusCrystal(): void { this.focusOn(25 * TILE_SIZE, 32 * TILE_SIZE, 'building') }
-  beginDeepCamera(): void { this.manualCamera = false }
-  releaseDeepCamera(): void { this.manualCamera = true }
+  showDeepResult(spot: GuideSpot, text: string): void { this.deepScene.showResult(spot, text) }
+  clearDeepResult(): void { this.deepScene.clearResult() }
+  /** 引导高亮同一时间只属于一个面板：认领者亮出目标，也只有认领者能撤掉。 */
+  setGuideFocus(owner: object, spot: GuideSpot | null): void {
+    if (spot) { this.focusOwner = owner; this.guideFocus.place(spot) }
+    else if (this.focusOwner === owner) { this.focusOwner = null; this.guideFocus.place(null) }
+  }
+  focusCrystal(): void { this.focusDeepOn((CRYSTAL_SPOT.x + .5) * TILE_SIZE, 32 * TILE_SIZE) }
+  beginDeepCamera(): void { this.deepCameraOwned = true; this.manualCamera = false }
+  releaseDeepCamera(): void { this.deepCameraOwned = false; this.manualCamera = true }
+  focusDeepOn(x: number, y: number): void {
+    this.overview = false; this.cancelCameraTween(); this.beginDeepCamera()
+    this.focusLayer = stratumAt(y / TILE_SIZE)
+    this.camera = deepFocusCamera(x, y, this.viewport, this.camera.zoom)
+    this.applyCamera()
+  }
   finishChapterArrival(at:Cell):void{if(!this.manualCamera&&!this.overview)this.focusOn((at.x+.5)*TILE_SIZE,(at.y-1)*TILE_SIZE,'building')}
   finishDeepArrival(): void { if (!this.manualCamera) this.focusCrystal() }
   playDeepLift(from: number, to: number, done: () => void): void {
@@ -936,7 +958,6 @@ export class PixiWorldRenderer {
     const passenger = this.friends.find(f => f.partnerId === 'amu')
     this.explorationScene.setRiding(true)
     if (passenger) passenger.view.scale.set(.7)
-    this.manualCamera = false
     this.deepScene.travelLift(w, from, to, () => {
       this.explorationScene.setRiding(false)
       if (passenger) passenger.view.scale.set(1)
@@ -945,7 +966,8 @@ export class PixiWorldRenderer {
       this.explorationScene.positionLift({ x: x - .18, y })
       if (passenger) { passenger.inEntrance = true; passenger.view.position.set((x + .5) * TILE_SIZE + 7, (y + .6) * TILE_SIZE); passenger.baseY = passenger.view.y }
       if (!this.manualCamera && !this.overview) {
-        this.camera = centerOn((x + .5) * TILE_SIZE, (y - 1) * TILE_SIZE, this.viewport, this.camera.zoom)
+        this.focusLayer = stratumAt((y - 1) / TILE_SIZE)
+        this.camera = deepFocusCamera((x + .5) * TILE_SIZE, (y - 1) * TILE_SIZE, this.viewport, this.camera.zoom)
         this.applyCamera()
       }
     })
@@ -969,6 +991,8 @@ export class PixiWorldRenderer {
   setAtuTarget(target: Cell | null, stand?: Cell, lift = 0, text = ''): void { this.explorationScene.preview(target, stand, lift, text) }
 
   private manualCamera = false
+  private deepCameraOwned = false
+  private focusLayer: StratumId | null = null
   /** 这一趟阿土是不是长距离 / 跨层走位：是就把镜头中心带过去，不是就只推回安全区。 */
   private atuFollowCenter = false
   /** 上一帧阿土是否在行动：从静止转入行动时，把镜头的跟随权拿回来。 */
@@ -988,6 +1012,7 @@ export class PixiWorldRenderer {
    * 玩家在同一趟行动里一拖一缩，就把镜头交还给他，直到这趟结束。
    */
   private followAtu(dt: number): void {
+    if (this.deepCameraOwned) return
     const acting = this.explorationScene.animating
     if (acting && !this.atuWasActing) this.manualCamera = false
     this.atuWasActing = acting
@@ -1429,6 +1454,7 @@ export class PixiWorldRenderer {
 
   /** 初始 / 回家视角：同时看见地表风雪、地下大厅和左侧能源石区。 */
   focusHome(): void {
+    this.focusLayer = null; this.deepCameraOwned = false
     this.overview = false
     this.cancelCameraTween()
     this.camera = this.homeCamera()
@@ -1444,6 +1470,8 @@ export class PixiWorldRenderer {
 
   /** 把某个世界坐标居中（"带我去看看"） */
   focusOn(worldX: number, worldY: number, context?: 'building'): void {
+    this.deepCameraOwned = false
+    this.focusLayer = null
     this.overview = false
     this.cancelCameraTween()
     this.camera = centerOn(worldX, worldY, this.viewport, Math.max(1, this.camera.zoom))
@@ -1458,12 +1486,14 @@ export class PixiWorldRenderer {
     if (this.overview) return
     this.cancelCameraTween()
     this.manualCamera = true
+    this.focusLayer = null
     this.camera = panCamera(this.camera, dxScreen, dyScreen, this.viewport)
     this.applyCamera()
   }
 
   zoomBy(deltaZoom: number, anchor?: { x: number; y: number }): void {
     this.manualCamera = true
+    this.focusLayer = null
     if (this.overview) {
       if (deltaZoom > 0) this.focusHome()
       return
@@ -1505,6 +1535,7 @@ export class PixiWorldRenderer {
   }
 
   focusWater(): void {
+    this.focusLayer = 'water'; this.deepCameraOwned = false
     this.glance = null
     this.overview = false
     this.cameraTween = { from: { ...this.camera }, to: centerOn(STRATA.water.focus.x * TILE_SIZE, STRATA.water.focus.y * TILE_SIZE, this.viewport, 1), elapsed: 0, duration: 0.8 }
@@ -1600,6 +1631,7 @@ export class PixiWorldRenderer {
     this.updateEffects(dt)
     this.explorationScene.update(dt)
     this.deepScene.update(this.world, this.elapsed, dt)
+    this.guideFocus.update(this.elapsed)
     this.gardenScene.update(this.world, this.elapsed)
     this.reservoirScene.update(this.world, dt)
     this.ventilationScene.update(this.world, dt)
@@ -1635,7 +1667,8 @@ export class PixiWorldRenderer {
     this.worldLayer.scale.set(this.camera.zoom)
     this.worldLayer.position.set(-this.camera.x * this.camera.zoom, -this.camera.y * this.camera.zoom)
     this.app.canvas.dataset && Object.assign(this.app.canvas.dataset, { cameraX: String(this.camera.x), cameraY: String(this.camera.y), zoom: String(this.camera.zoom) })
-    this.onViewChanged?.(lookDepth(this.camera, this.viewport, this.overview))
+    const view = lookDepth(this.camera, this.viewport, this.overview)
+    this.onViewChanged?.(this.focusLayer && !this.overview ? { ...view, displayLayer: this.focusLayer } : view)
   }
 
   private computeRepairShowcase(): Camera {

@@ -15,7 +15,7 @@ import { MURAL_SPOT, WARM_LIGHT_SPOT } from '../core/hallTopology'
 import type { HallFacilityKind } from '../core/world'
 import { gameAudio } from '../render/gameAudio'
 import { DeepChapter, type DeepUI } from './deepChapter'
-import { deepFacilityAt, type DeepAction } from '../core/deep'
+import { type DeepAction } from '../core/deep'
 import type { DeepFacilityKind } from '../core/world'
 import { CRYSTAL_SPOT, MOSS_SPOT, DRILL_SPOT } from '../core/deepTopology'
 import { playSoilDig, playBuildComplete, playPartnerFound, playCrystalCollected, playPowerConnected, playUndo, playUnavailable } from '../render/waterSound'
@@ -257,40 +257,48 @@ export interface GameSession {
   openFinale():void
   closeFinale():void
   finalePrimary():void
+  finaleScout():void
   finaleSelect(kind:FinaleFacilityKind):void
   finaleTheme(theme:FinaleTheme):void
   finalePanorama():void
   openRuins():void
   closeRuins():void
   ruinsPrimary():void
+  ruinsScout():void
   ruinsSelect(kind:RuinsFacilityKind):void
   ruinsMotif(motif:RuinsMotif):void
   ruinsEdition(edition:RuinsEdition):void
   openVentilation():void
   closeVentilation():void
   ventilationPrimary():void
+  ventilationScout():void
   ventilationSelect(kind:VentilationFacilityKind):void
   ventilationMode(mode:AirMode):void
   ventilationVariety():void
   openReservoir():void
   closeReservoir():void
   reservoirPrimary():void
+  reservoirScout():void
   reservoirSelect(kind:ReservoirFacilityKind):void
   reservoirRoute(route:WaterRoute):void
   openGarden(): void
   closeGarden(): void
   gardenPrimary(): void
+  gardenScout(): void
   gardenSelect(kind: GardenFacilityKind): void
   gardenAdd(kind: GardenFacilityKind): void
   gardenVariety(): void
   openHall(): void
   closeHall(): void
   hallPrimary(): void
+  hallScout(): void
   hallSelect(kind: HallFacilityKind): void
   hallAlbumPage(delta: number): void
   openDeep(): void
   closeDeep(): void
   deepPrimary(): void
+  deepDig(): void
+  deepScout(): void
   deepSelect(kind: DeepFacilityKind): void
   deepPlaceLamp(): void
   deepUpgrade(action: DeepAction, label: string): void
@@ -1557,6 +1565,21 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
   }
 
   let inputBlocked = false
+  /**
+   * 晶簇层完成后的主线移交：到站/成果卡的"下一步"指向全局主线真正的下一目标，
+   * 打开动作与小本子主按钮同一入口；未解析到章节或全景时回退到本章尾声卡。
+   */
+  const nextMainline = (): { label: string; open(): void } | null => {
+    const { id, label } = resolveGlobalGuide(world).action
+    const open = id === 'hall' ? () => navigateChapter('hall', () => hallChapter?.show(true))
+      : id === 'garden' ? () => navigateChapter('garden', () => gardenChapter?.show(true))
+      : id === 'reservoir' ? () => navigateChapter('reservoir', () => reservoirChapter?.show(true))
+      : id === 'ventilation' ? () => navigateChapter('ventilation', () => ventilationChapter?.show(true))
+      : id === 'ruins' ? () => navigateChapter('ruins', () => ruinsChapter?.show(true))
+      : id === 'finale' ? () => navigateChapter('finale', () => finaleChapter?.show(true))
+      : id === 'overview' ? openOverview : null
+    return open ? { label, open } : null
+  }
   deepChapter = new DeepChapter({
     world: () => world, view: renderer, emit: state => hooks.onDeep?.(state),
     prepare: () => {
@@ -1574,6 +1597,13 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     record: change => history.record({ kind: 'deep', change }),
     dig: (cell, tile) => { history.record({ kind: 'dig', ...cell, tile }); renderer.refreshTerrain([cell]); renderer.playDigEffect(cell) },
     notify, milestone: (title, detail) => hooks.onMilestone?.({ emoji: '💎', title, detail }),
+    visitHome: podId => {
+      const pod = world.pods.find(p => p.id === podId && isFirstFloorPod(p) && !p.warmLamp)
+      if (!pod) { pushProgress(); return }
+      renderer.focusOn((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, 'building')
+      showNestWelcome(pod, true)
+    },
+    nextMainline,
   })
   deepChapter.refresh()
   hallChapter = new HallChapter({
@@ -1772,9 +1802,11 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       }
       const cell = screen ? renderer.tileAtScreen(screen) : null
       if (lampMode) { renderer.setLampPreview(cell); renderer.setHoverCell(null); renderer.hoverPartner(null); renderer.setCursor('copy'); return }
-      // 晶簇层选址：指针换成"可放置"，点一下就把设施影子放到那处岩壁上。
-      const deepBuild = deepChapter?.placingKind ?? deepChapter?.nextBuild
-      if (cell && deepBuild && cell.y >= 30 && cell.y <= 34 && world.tiles[cell.y][cell.x] === TILE.EMPTY && !deepFacilityAt(world, cell)) {
+      // 各层选址：影子跟着指针走到吸附位；点到泥土仍可挖，光标不变。
+      const placingChapters = [finaleChapter, ruinsChapter, ventilationChapter, reservoirChapter, gardenChapter, hallChapter, deepChapter]
+      for (const ch of placingChapters) ch?.hover(cell)
+      const placingChapter = placingChapters.find(ch => ch?.placingKind)
+      if (cell && placingChapter?.placingCell(cell)) {
         renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('copy'); return
       }
       if (roomEditor?.active) { renderer.hoverPartner(null); renderer.setHoverCell(null); renderer.setCursor('copy'); return }
@@ -1848,6 +1880,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     dismissNestWelcome()
     const restored = history.undo(world)
     if (!restored) { playUnavailable(); notify('这里有伙伴、设施或回家的路，先留着这片空地。'); return }
+    deepChapter?.clearFeedback()
     playUndo()
     if (restored.kind === 'finale' || restored.kind === 'ruins' || restored.kind === 'ventilation' || restored.kind === 'deep' || restored.kind === 'hall' || restored.kind === 'garden' || restored.kind === 'reservoir') { renderer.refresh(); deepChapter?.refresh() }
     else if (restored.kind === 'pod') { resting = world.pods.length > 0; renderer.refresh() }
@@ -2200,6 +2233,22 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     notify('✦ 这段记忆放进家里啦，随时可以回来看看。')
   }
 
+  /** 家园全景与楼层导航同一入口：收起所有面板后回到连续剖面。 */
+  const openOverview = (): void => {
+    finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
+    siteEditor?.close()
+    roomEditor?.close()
+    facilityPanel?.close()
+    closeConversation()
+    lampMode = false; renderer.setLampPreview(null)
+    buildMode = 'none'
+    candidate = null
+    hoverBuild = null
+    pushBuild()
+    renderer.setHoverCell(null)
+    renderer.focusOverview()
+  }
+
   /** 导航只查看。专业工作期间不进入会取消工作的章节 prepare，也不更改角色站位。 */
   const navigateChapter = (layer: ChapterLayer, show: () => void): void => {
     const access = depthAccess(world, layer)
@@ -2244,7 +2293,10 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     // 界面上的心愿可能已经过时：只信当前世界状态重新算出来的目标。
     const target = homeWishTarget(world, id)
     if (!target) { stale(); return }
-    if (target.kind === 'pod') {
+    if (target.kind === 'point') {
+      renderer.focusOn((target.x + .5) * TILE_SIZE, (target.y - 1) * TILE_SIZE, 'building')
+      notify('侧洞里好像有谁在搬石头。点一点洞壁，去打个招呼吧。')
+    } else if (target.kind === 'pod') {
       const pod = world.pods.find(p => p.id === target.podId && isFirstFloorPod(p) && !p.warmLamp)
       if (!pod) { stale(); return }
       renderer.focusOn((pod.x + 1.5) * TILE_SIZE, (pod.y + 1) * TILE_SIZE, 'building')
@@ -2282,40 +2334,53 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
     openFinale:()=>navigateChapter('finale', () => finaleChapter?.show(true)),
     closeFinale:()=>finaleChapter?.close(),
     finalePrimary:()=>{if(!traveling)finaleChapter?.primary()},
+    finaleScout:()=>finaleChapter?.scout(),
     finaleSelect:kind=>finaleChapter?.select(kind),
     finaleTheme:theme=>finaleChapter?.chooseTheme(theme),
     finalePanorama:()=>finaleChapter?.panorama(),
     openRuins:()=>navigateChapter('ruins', () => ruinsChapter?.show(true)),
     closeRuins:()=>{finaleChapter?.close(); ruinsChapter?.close()},
     ruinsPrimary:()=>{if(!traveling)ruinsChapter?.primary()},
+    ruinsScout:()=>ruinsChapter?.scout(),
     ruinsSelect:kind=>ruinsChapter?.select(kind),
     ruinsMotif:motif=>ruinsChapter?.chooseMotif(motif),
     ruinsEdition:edition=>ruinsChapter?.chooseEdition(edition),
     openVentilation:()=>navigateChapter('ventilation', () => ventilationChapter?.show(true)),
     closeVentilation:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close()},
     ventilationPrimary:()=>{if(!traveling)ventilationChapter?.primary()},
+    ventilationScout:()=>ventilationChapter?.scout(),
     ventilationSelect:kind=>ventilationChapter?.select(kind),
     ventilationMode:mode=>ventilationChapter?.chooseMode(mode),
     ventilationVariety:()=>ventilationChapter?.changeVariety(),
     openReservoir:()=>navigateChapter('reservoir', () => reservoirChapter?.show(true)),
     closeReservoir:()=>{finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close()},
     reservoirPrimary:()=>{if(!traveling)reservoirChapter?.primary()},
+    reservoirScout:()=>reservoirChapter?.scout(),
     reservoirSelect:kind=>reservoirChapter?.select(kind),
     reservoirRoute:route=>reservoirChapter?.chooseRoute(route),
     openGarden: () => navigateChapter('garden', () => gardenChapter?.show(true)),
     closeGarden: () => {finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close();gardenChapter?.close()},
     gardenPrimary: () => { if (!traveling) gardenChapter?.primary() },
+    gardenScout: () => gardenChapter?.scout(),
     gardenSelect: kind => gardenChapter?.select(kind),
     gardenAdd: kind => gardenChapter?.select(kind, undefined, true),
     gardenVariety: () => gardenChapter?.changeVariety(),
     openHall: () => navigateChapter('hall', () => hallChapter?.show(true)),
     closeHall: () => { finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close() },
     hallPrimary: () => { if (!traveling) hallChapter?.primary() },
+    hallScout: () => hallChapter?.scout(),
     hallSelect: kind => hallChapter?.select(kind),
     hallAlbumPage: delta => hallChapter?.albumPage(delta),
     openDeep: () => navigateChapter('crystal', () => deepChapter?.show(true)),
     closeDeep: () => { if (deepChapter?.busy) deepChapter.cancel(); finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close() },
     deepPrimary: () => { if (!traveling) deepChapter?.primary(); else notify('等阿土走稳，再来做这件事。') },
+    deepDig: () => {
+      const target = deepChapter?.dig()
+      if (!target) return
+      renderer.setHoverCell(null)
+      renderer.focusDeepOn?.((target.x + .5) * TILE_SIZE, (target.y - 1) * TILE_SIZE)
+    },
+    deepScout: () => deepChapter?.scout(),
     deepSelect: kind => deepChapter?.select(kind),
     deepPlaceLamp: () => deepChapter?.select('lamp', true),
     deepUpgrade: (action, label) => deepChapter?.selectUpgrade(action, label),
@@ -2533,20 +2598,7 @@ export async function createGameSession(host: HTMLElement, hooks: SessionHooks, 
       renderer.setHoverCell(null)
       renderer.focusWater()
     },
-    showOverview: () => {
-      finaleChapter?.close(); ruinsChapter?.close(); ventilationChapter?.close(); reservoirChapter?.close(); gardenChapter?.close(); hallChapter?.close(); deepChapter?.close()
-      siteEditor?.close()
-      roomEditor?.close()
-      facilityPanel?.close()
-      closeConversation()
-      lampMode = false; renderer.setLampPreview(null)
-      buildMode = 'none'
-      candidate = null
-      hoverBuild = null
-      pushBuild()
-      renderer.setHoverCell(null)
-      renderer.focusOverview()
-    },
+    showOverview: openOverview,
     undo: () => {
       if(finaleChapter?.busy){finaleChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
     if(ruinsChapter?.busy){ruinsChapter.cancel();notify('先停下来啦，已完成的部分保留。');return}
